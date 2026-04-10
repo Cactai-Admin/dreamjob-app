@@ -36,9 +36,8 @@ export default function JobDetailPage({ params }: Props) {
       .then(r => r.json())
       .then((wf: Workflow) => {
         if (!wf?.id) { setLoading(false); return; }
-        // Only redirect to listing review if no application work has been started
-        const hasOutputs = wf.outputs && wf.outputs.length > 0;
-        if (wf.state === "listing_review" && !wf.is_active && !hasOutputs) {
+        // Listings still in review should go back to the listing review page
+        if (wf.state === "listing_review") {
           router.replace(`/listings/${id}`);
           return;
         }

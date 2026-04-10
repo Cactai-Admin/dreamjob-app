@@ -64,23 +64,31 @@ export async function PATCH(
   const { id } = await params
   const body = await request.json()
 
-  // If listing data is provided, update the listing separately
-  if (body.listing) {
+  // If listing or company data is provided, update those records separately
+  if (body.listing || body.company) {
     const { data: workflow } = await supabaseAdmin
       .from('workflows')
-      .select('listing_id')
+      .select('listing_id, company_id')
       .eq('id', id)
       .eq('account_id', accountId)
       .single()
 
-    if (workflow?.listing_id) {
+    if (body.listing && workflow?.listing_id) {
       await supabaseAdmin
         .from('job_listings')
         .update(body.listing)
         .eq('id', workflow.listing_id)
     }
 
+    if (body.company && workflow?.company_id) {
+      await supabaseAdmin
+        .from('companies')
+        .update(body.company)
+        .eq('id', workflow.company_id)
+    }
+
     delete body.listing
+    delete body.company
   }
 
   // Update workflow fields if any remain

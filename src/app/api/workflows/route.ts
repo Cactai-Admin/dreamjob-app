@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
     .select(`
       *,
       listing:job_listings(*),
-      company:companies(*)
+      company:companies(*),
+      outputs(*),
+      status_events(*)
     `)
     .eq('account_id', accountId)
     .order('created_at', { ascending: false })

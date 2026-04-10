@@ -51,6 +51,19 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Return cached output if it already exists — never regenerate
+  const { data: existing } = await supabaseAdmin
+    .from('outputs')
+    .select('*')
+    .eq('workflow_id', workflow_id)
+    .eq('type', output_type)
+    .eq('is_current', true)
+    .maybeSingle()
+
+  if (existing) {
+    return NextResponse.json(existing)
+  }
+
   // Get workflow with listing and QA answers
   const { data: workflow } = await supabaseAdmin
     .from('workflows')

@@ -217,7 +217,7 @@ export default function ListingReviewPage({ params }: Props) {
       body: JSON.stringify({ workflow_id: id, output_type: "resume", provider }),
     }); // intentionally fire-and-forget
 
-    router.push(`/jobs/${id}/resume`);
+    router.push(`/jobs/${id}`);
   };
 
   const deleteListing = async () => {
@@ -417,6 +417,20 @@ export default function ListingReviewPage({ params }: Props) {
         {/* ── Right: Analysis (2/5) ── */}
         <div className="lg:col-span-2 space-y-5">
 
+          {/* CTA card */}
+          <div className="card-base p-5 bg-slate-900 border-slate-900">
+            <h2 className="font-semibold text-white mb-1">Ready to apply?</h2>
+            <p className="text-slate-400 text-sm mb-4">We'll build a tailored resume and cover letter with AI assistance.</p>
+            <button
+              onClick={startApplication}
+              disabled={starting}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors disabled:opacity-50 text-sm"
+            >
+              {starting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {starting ? "Starting…" : "Start Application"}
+            </button>
+          </div>
+
           {/* Match Score */}
           <div className="card-base p-5">
             <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
@@ -556,20 +570,6 @@ export default function ListingReviewPage({ params }: Props) {
               </a>
             </div>
           )}
-
-          {/* CTA card */}
-          <div className="card-base p-5 bg-slate-900 border-slate-900">
-            <h2 className="font-semibold text-white mb-1">Ready to apply?</h2>
-            <p className="text-slate-400 text-sm mb-4">We'll build a tailored resume and cover letter with AI assistance.</p>
-            <button
-              onClick={startApplication}
-              disabled={starting}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors disabled:opacity-50 text-sm"
-            >
-              {starting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {starting ? "Starting…" : "Start Application"}
-            </button>
-          </div>
 
           {/* Delete card */}
           <div className="card-base p-5 border-red-100">

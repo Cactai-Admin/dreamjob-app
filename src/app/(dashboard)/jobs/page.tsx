@@ -130,8 +130,8 @@ export default function JobsPage() {
           <p className="text-slate-400 text-sm">
             {search ? `No results for "${search}"` : jobs.length === 0 ? "Start your first application from the home page." : "Try a different filter"}
           </p>
-          <Link href="/" className="inline-flex items-center gap-2 mt-4 text-sm text-slate-600 hover:text-slate-900 transition-colors">
-            Start a new application <ChevronRight className="w-4 h-4" />
+          <Link href={hasListings ? "/listings" : "/"} className="inline-flex items-center gap-2 mt-4 text-sm text-slate-600 hover:text-slate-900 transition-colors">
+            {hasListings ? "Pick a listing" : "Start a new application"} <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
       ) : (

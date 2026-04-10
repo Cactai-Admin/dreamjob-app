@@ -23,12 +23,14 @@ Return ONLY valid JSON in this format:
   "employment_type": "..." or null,
   "experience_level": "..." or null,
   "description": "...",
-  "requirements": "...",
+  "requirements": ["requirement 1", "requirement 2", ...],
   "responsibilities": "..." or null,
   "benefits": "..." or null,
   "company_website_url": "..." or null,
   "company_linkedin_url": "..." or null
 }
+
+requirements MUST be a JSON array of strings, one item per requirement. Never a plain string.
 
 If a field cannot be determined, set it to null. Be accurate — do not invent information.`
 

@@ -8,14 +8,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 )
 
-// Status dependency rules from spec
-const STATUS_DEPENDENCIES: Record<string, string[]> = {
-  interview: ['sent'],
-  negotiation: ['interview', 'offer'],
-  declined: ['offer'],
-  offer: ['received', 'interview'],
-  hired: ['offer', 'negotiation'],
-}
+// No enforced dependencies — UI handles progression order
 
 async function getAccountId() {
   const cookieStore = await cookies()
@@ -61,26 +54,6 @@ export async function POST(
   const { id } = await params
   const body = await request.json()
   const { event_type, notes } = body
-
-  // Check dependencies
-  const requiredStatuses = STATUS_DEPENDENCIES[event_type]
-  if (requiredStatuses) {
-    const { data: existing } = await supabaseAdmin
-      .from('status_events')
-      .select('event_type')
-      .eq('workflow_id', id)
-      .eq('is_current', true)
-
-    const currentTypes = new Set(existing?.map(e => e.event_type))
-    const missing = requiredStatuses.filter(s => !currentTypes.has(s))
-
-    if (missing.length > 0) {
-      return NextResponse.json(
-        { error: `Cannot set "${event_type}" without: ${missing.join(', ')}` },
-        { status: 400 }
-      )
-    }
-  }
 
   const { data, error } = await supabaseAdmin
     .from('status_events')

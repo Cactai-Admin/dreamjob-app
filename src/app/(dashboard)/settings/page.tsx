@@ -1,41 +1,144 @@
 "use client";
 
-// ── Settings — Theme, privacy, account preferences ────────
+// ── Settings — AI provider, LinkedIn, appearance, account preferences ──
 
 import { useState, useEffect } from "react";
 import {
-  Sun, Moon, Monitor, Bell, Shield, Trash2,
-  LogOut, ChevronRight, Eye, EyeOff, Check,
+  Sun, Moon, Monitor, Bell, Shield, Trash2, Zap, Link2,
+  LogOut, ChevronRight, Eye, EyeOff, Check, AlertCircle as AlertTriangle,
+  RefreshCw, WifiOff,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 
 type Theme = "light" | "dark" | "system";
+type ProviderName = "openai" | "anthropic";
+
+const PROVIDER_INFO: Record<ProviderName, { name: string; model: string; description: string }> = {
+  openai: {
+    name: "OpenAI (ChatGPT)",
+    model: "gpt-4o",
+    description: "Fast, widely-used, excellent for document writing.",
+  },
+  anthropic: {
+    name: "Anthropic (Claude)",
+    model: "claude-3-5-sonnet",
+    description: "Strong reasoning and long-context understanding.",
+  },
+};
+
+const LS_KEY = "dreamjob_settings";
+
+function loadSettings() {
+  if (typeof window === "undefined") return null;
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? "{}"); } catch { return {}; }
+}
+function saveSettings(patch: Record<string, unknown>) {
+  const current = loadSettings() ?? {};
+  localStorage.setItem(LS_KEY, JSON.stringify({ ...current, ...patch }));
+}
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; email?: string; avatar_url?: string }>({});
-  const [theme, setTheme] = useState<Theme>("system");
+  const [providers, setProviders] = useState<{ anthropic: boolean; openai: boolean; default: string } | null>(null);
+  const [linkedIn, setLinkedIn] = useState<{ isAuthenticated: boolean; session?: { last_verified_at?: string } } | null>(null);
+  const [linkedInLoading, setLinkedInLoading] = useState(false);
+  const [linkedInStep, setLinkedInStep] = useState<"idle" | "launching" | "verifying">("idle");
+  const [linkedInError, setLinkedInError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
-  }, []);
+  const [theme, setTheme] = useState<Theme>("system");
+  const [aiProvider, setAiProvider] = useState<ProviderName>("openai");
   const [notifications, setNotifications] = useState({
-    statusUpdates:    true,
+    statusUpdates: true,
     deadlineReminders: true,
-    weeklyDigest:     false,
-    aiSuggestions:    true,
+    weeklyDigest: false,
+    aiSuggestions: true,
   });
   const [privacy, setPrivacy] = useState({
-    profileVisible:    false,
-    shareApplications: false,
-    analyticsOptIn:    true,
+    analyticsOptIn: true,
   });
   const [showEmail, setShowEmail] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Load on mount
+  useEffect(() => {
+    fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
+    fetch("/api/settings/providers").then(r => r.json()).then(d => { if (!d.error) setProviders(d); }).catch(() => {});
+    fetch("/api/linkedin/session").then(r => r.json()).then(d => { if (!d.error) setLinkedIn(d); }).catch(() => {});
+
+    const stored = loadSettings();
+    if (stored.theme) setTheme(stored.theme);
+    if (stored.aiProvider) setAiProvider(stored.aiProvider);
+    if (stored.notifications) setNotifications(stored.notifications);
+    if (stored.privacy) setPrivacy(stored.privacy);
+  }, []);
+
   const handleSave = () => {
+    saveSettings({ theme, aiProvider, notifications, privacy });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const launchLinkedIn = async () => {
+    setLinkedInLoading(true);
+    setLinkedInError(null);
+    setLinkedInStep("launching");
+    try {
+      const res = await fetch("/api/linkedin/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "launch" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLinkedInStep("verifying");
+      } else {
+        setLinkedInStep("idle");
+        setLinkedInError(data.message ?? "Failed to launch browser");
+      }
+    } catch (e) {
+      setLinkedInStep("idle");
+      setLinkedInError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLinkedInLoading(false);
+    }
+  };
+
+  const verifyLinkedIn = async () => {
+    setLinkedInLoading(true);
+    setLinkedInError(null);
+    try {
+      const res = await fetch("/api/linkedin/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "verify" }),
+      });
+      const data = await res.json();
+      if (data.verified) {
+        setLinkedIn({ isAuthenticated: true, session: { last_verified_at: new Date().toISOString() } });
+        setLinkedInStep("idle");
+        setLinkedInError(null);
+      } else {
+        setLinkedInError(data.reason ?? "Not verified yet — complete sign-in in the LinkedIn browser window, then try again.");
+      }
+    } catch (e) {
+      setLinkedInError(e instanceof Error ? e.message : "Verification failed");
+    } finally {
+      setLinkedInLoading(false);
+    }
+  };
+
+  const disconnectLinkedIn = async () => {
+    setLinkedInLoading(true);
+    try {
+      await fetch("/api/linkedin/session", { method: "DELETE" });
+      setLinkedIn({ isAuthenticated: false });
+      setLinkedInStep("idle");
+    } catch {
+      /* ignore */
+    } finally {
+      setLinkedInLoading(false);
+    }
   };
 
   const ToggleRow = ({
@@ -95,9 +198,9 @@ export default function SettingsPage() {
           </div>
 
           {[
-            { label: "Change password", icon: Shield },
-            { label: "Update email", icon: Shield },
-            { label: "Export my data", icon: Shield },
+            { label: "Change password" },
+            { label: "Update email" },
+            { label: "Export my data" },
           ].map(({ label }) => (
             <button
               key={label}
@@ -110,7 +213,177 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Theme */}
+      {/* AI Provider */}
+      <section className="card-base p-5 mb-5">
+        <h2 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-sky-500" />
+          AI Provider
+        </h2>
+        <p className="text-xs text-slate-400 mb-4">Choose which AI model generates your documents and chat responses.</p>
+
+        {providers === null ? (
+          <div className="text-slate-400 text-sm">Checking configuration…</div>
+        ) : (
+          <div className="space-y-3">
+            {(["openai", "anthropic"] as ProviderName[]).map((key) => {
+              const info = PROVIDER_INFO[key];
+              const configured = providers[key];
+              const selected = aiProvider === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => configured && setAiProvider(key)}
+                  disabled={!configured}
+                  className={cn(
+                    "w-full text-left p-4 rounded-xl border-2 transition-all",
+                    selected && configured
+                      ? "border-sky-500 bg-sky-50"
+                      : configured
+                      ? "border-slate-200 hover:border-slate-300"
+                      : "border-slate-100 opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={cn(
+                          "text-sm font-semibold",
+                          selected && configured ? "text-sky-700" : "text-slate-800"
+                        )}>
+                          {info.name}
+                        </span>
+                        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-mono">
+                          {info.model}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">{info.description}</p>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                      {configured ? (
+                        <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                          Configured
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 flex items-center gap-1">
+                          <WifiOff className="w-3 h-3" />
+                          No API key
+                        </span>
+                      )}
+                      {selected && configured && (
+                        <Check className="w-4 h-4 text-sky-600" />
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            {!providers.anthropic && !providers.openai && (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>No API keys set. Add <code className="font-mono text-xs">ANTHROPIC_API_KEY</code> or <code className="font-mono text-xs">OPENAI_API_KEY</code> to your environment.</span>
+              </div>
+            )}
+            <p className="text-xs text-slate-400 mt-1">
+              {providers[aiProvider]
+                ? `${PROVIDER_INFO[aiProvider].name} will be used for all AI generation. Click Save Preferences to apply.`
+                : "Select a configured provider above, then Save."}
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* LinkedIn Session */}
+      <section className="card-base p-5 mb-5">
+        <h2 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-sky-500" />
+          LinkedIn Session
+        </h2>
+        <p className="text-xs text-slate-400 mb-4">
+          Connect your LinkedIn account to enable company research and connection insights.
+          Requires a local browser window to complete sign-in.
+        </p>
+
+        {linkedIn === null ? (
+          <div className="text-slate-400 text-sm">Checking status…</div>
+        ) : linkedIn.isAuthenticated ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+              <span className="text-sm text-emerald-700 font-medium">Connected</span>
+              {linkedIn.session?.last_verified_at && (
+                <span className="text-xs text-emerald-600 ml-auto">
+                  Last verified {new Date(linkedIn.session.last_verified_at).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={disconnectLinkedIn}
+              disabled={linkedInLoading}
+              className="text-sm text-red-500 hover:text-red-600 flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <WifiOff className="w-3.5 h-3.5" />
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-slate-300 flex-shrink-0" />
+              <span className="text-sm text-slate-500">Not connected</span>
+            </div>
+
+            {linkedInStep === "idle" && (
+              <button
+                onClick={launchLinkedIn}
+                disabled={linkedInLoading}
+                className="flex items-center gap-2 text-sm bg-sky-600 text-white px-4 py-2 rounded-xl hover:bg-sky-700 transition-colors disabled:opacity-50"
+              >
+                <Link2 className="w-4 h-4" />
+                Connect LinkedIn
+              </button>
+            )}
+
+            {linkedInStep === "launching" && (
+              <div className="text-sm text-slate-600 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-sky-500" />
+                Opening browser… sign in to LinkedIn, then click Verify below.
+              </div>
+            )}
+
+            {linkedInStep === "verifying" && (
+              <div className="space-y-2">
+                <p className="text-sm text-slate-600">Sign in to LinkedIn in the browser that opened, then click verify.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={verifyLinkedIn}
+                    disabled={linkedInLoading}
+                    className="flex items-center gap-2 text-sm bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    {linkedInLoading ? "Verifying…" : "I've signed in — verify"}
+                  </button>
+                  <button
+                    onClick={() => { setLinkedInStep("idle"); setLinkedInError(null); }}
+                    className="text-sm px-3 py-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {linkedInError && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{linkedInError}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Appearance */}
       <section className="card-base p-5 mb-5">
         <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <Sun className="w-4 h-4 text-sky-500" />
@@ -179,20 +452,8 @@ export default function SettingsPage() {
           Privacy
         </h2>
         <ToggleRow
-          label="Public profile"
-          description="Let others find your profile"
-          checked={privacy.profileVisible}
-          onChange={(v) => setPrivacy({ ...privacy, profileVisible: v })}
-        />
-        <ToggleRow
-          label="Share application stats"
-          description="Help improve our AI models"
-          checked={privacy.shareApplications}
-          onChange={(v) => setPrivacy({ ...privacy, shareApplications: v })}
-        />
-        <ToggleRow
           label="Analytics opt-in"
-          description="Anonymous usage data"
+          description="Anonymous usage data to improve the product"
           checked={privacy.analyticsOptIn}
           onChange={(v) => setPrivacy({ ...privacy, analyticsOptIn: v })}
         />

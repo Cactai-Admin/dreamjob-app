@@ -264,7 +264,7 @@ export default function AnalyzePage() {
               href={`/listings/${savedId}`}
               className="flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-slate-800 transition-colors"
             >
-              Review listing <ChevronRight className="w-4 h-4" />
+              View Listing <ChevronRight className="w-4 h-4" />
             </Link>
             <button
               onClick={() => { setStep("idle"); setSavedId(null); resetFields(); setUrl(""); }}

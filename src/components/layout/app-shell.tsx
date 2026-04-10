@@ -19,7 +19,7 @@ export function AppShell({ children }: Props) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="h-dvh bg-slate-50 flex flex-col overflow-hidden">
       {/* Top navigation — placeholder during SSR to prevent hydration mismatch */}
       {mounted ? (
         <TopNav />
@@ -27,8 +27,8 @@ export function AppShell({ children }: Props) {
         <div aria-hidden="true" className="top-nav-placeholder" />
       )}
 
-      {/* Page content — flex-col so children can fill remaining height with flex-1 */}
-      <main className="flex-1 min-w-0 flex flex-col">
+      {/* Page content — overflow-y-auto lets regular pages scroll; editor pages use overflow-hidden on their root to stay viewport-locked */}
+      <main className="flex-1 min-w-0 flex flex-col overflow-y-auto">
         {children}
       </main>
 

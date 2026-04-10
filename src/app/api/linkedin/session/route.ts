@@ -6,6 +6,7 @@ import {
   launchLinkedInBrowser,
   verifyLinkedInSession,
   closeLinkedInBrowser,
+  revokeLinkedInSession,
   isSessionActive,
 } from '@/lib/linkedin/browser'
 
@@ -28,27 +29,23 @@ async function getAccountId() {
   return account?.id ?? null
 }
 
-// GET - Check session status
+// GET — Check session status
 export async function GET() {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const active = isSessionActive(accountId)
 
-  // Also check DB record
   const { data: session } = await supabaseAdmin
     .from('linkedin_sessions')
     .select('*')
     .eq('account_id', accountId)
     .single()
 
-  return NextResponse.json({
-    isAuthenticated: active,
-    session,
-  })
+  return NextResponse.json({ isAuthenticated: active, session })
 }
 
-// POST - Launch browser or verify session
+// POST — Launch browser or verify session
 export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -59,43 +56,38 @@ export async function POST(request: NextRequest) {
     const result = await launchLinkedInBrowser(accountId)
 
     if (result.success) {
-      // Create/update DB record
       await supabaseAdmin
         .from('linkedin_sessions')
-        .upsert({
-          account_id: accountId,
-          is_authenticated: false,
-        }, { onConflict: 'account_id' })
+        .upsert({ account_id: accountId, is_authenticated: false }, { onConflict: 'account_id' })
     }
 
     return NextResponse.json(result)
   }
 
   if (action === 'verify') {
-    const verified = await verifyLinkedInSession(accountId)
+    const result = await verifyLinkedInSession(accountId)
 
-    if (verified) {
+    if (result.verified) {
       await supabaseAdmin
         .from('linkedin_sessions')
-        .upsert({
-          account_id: accountId,
-          is_authenticated: true,
-          last_verified_at: new Date().toISOString(),
-        }, { onConflict: 'account_id' })
+        .upsert(
+          { account_id: accountId, is_authenticated: true, last_verified_at: new Date().toISOString() },
+          { onConflict: 'account_id' }
+        )
     }
 
-    return NextResponse.json({ verified })
+    return NextResponse.json(result)
   }
 
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 }
 
-// DELETE - Close browser and revoke session
+// DELETE — Close browser and revoke session (deletes cookies too)
 export async function DELETE() {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  await closeLinkedInBrowser(accountId)
+  await revokeLinkedInSession(accountId)
 
   await supabaseAdmin
     .from('linkedin_sessions')
