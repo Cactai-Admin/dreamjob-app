@@ -45,6 +45,18 @@ interface Profile {
   portfolio_url?: string;
   github_url?: string;
   skills?: string[];
+  keywords?: string[];
+}
+
+interface Education {
+  id: string;
+  institution: string;
+  degree?: string;
+  field_of_study?: string;
+  start_date?: string;
+  end_date?: string;
+  gpa?: string;
+  description?: string;
 }
 
 interface Employment {
@@ -212,9 +224,19 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [profile, setProfile] = useState<Profile>({});
   const [employment, setEmployment] = useState<Employment[]>([]);
+  const [education, setEducation] = useState<Education[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
+
+  // Name editing
+  const [editingName, setEditingName] = useState(false);
+  const [nameForm, setNameForm] = useState({ first_name: "", last_name: "" });
+  const [savingName, setSavingName] = useState(false);
+
+  // Keyword management
+  const [newKeyword, setNewKeyword] = useState("");
+  const [savingKeywords, setSavingKeywords] = useState(false);
 
   // Headline
   const [editingHeadline, setEditingHeadline] = useState(false);
@@ -244,12 +266,14 @@ export default function ProfilePage() {
     Promise.all([
       fetch("/api/profile").then(r => r.json()),
       fetch("/api/profile/employment").then(r => r.json()),
+      fetch("/api/profile/education").then(r => r.json()),
       fetch("/api/workflows").then(r => r.json()),
-    ]).then(([prof, emp, workflows]) => {
+    ]).then(([prof, emp, edu, workflows]) => {
       if (prof && !prof.error) {
         setProfile(prof);
         setHeadline(prof.headline ?? "");
         setSummary(prof.summary ?? "");
+        setNameForm({ first_name: prof.first_name ?? "", last_name: prof.last_name ?? "" });
         setHeroForm({
           location: prof.location,
           phone: prof.phone,
@@ -259,6 +283,7 @@ export default function ProfilePage() {
         });
       }
       if (Array.isArray(emp)) setEmployment(emp);
+      if (Array.isArray(edu)) setEducation(edu);
       if (Array.isArray(workflows)) setJobs(workflows.map(workflowToJob));
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -311,6 +336,30 @@ export default function ProfilePage() {
     setSavingSkills(false);
   };
 
+  const saveName = async () => {
+    setSavingName(true);
+    await patchProfile({ first_name: nameForm.first_name, last_name: nameForm.last_name });
+    setSavingName(false);
+    setEditingName(false);
+  };
+
+  const addKeyword = async () => {
+    const kw = newKeyword.trim();
+    if (!kw) return;
+    const updated = [...(profile.keywords ?? []).filter(k => k !== kw), kw];
+    setSavingKeywords(true);
+    await patchProfile({ keywords: updated });
+    setNewKeyword("");
+    setSavingKeywords(false);
+  };
+
+  const removeKeyword = async (kw: string) => {
+    const updated = (profile.keywords ?? []).filter(k => k !== kw);
+    setSavingKeywords(true);
+    await patchProfile({ keywords: updated });
+    setSavingKeywords(false);
+  };
+
   const saveExp = async (data: Omit<Employment, "id">) => {
     setSavingExp(true);
     if (editingExpId === "new") {
@@ -344,6 +393,7 @@ export default function ProfilePage() {
   const firstName = profile.first_name ?? "";
   const lastName = profile.last_name ?? "";
   const skills = profile.skills ?? [];
+  const keywords = profile.keywords ?? [];
 
   // Stats
   const total = jobs.length;
@@ -403,9 +453,37 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold text-slate-900">
-              {firstName} {lastName}
-            </h2>
+            {editingName ? (
+              <div className="flex items-center gap-2 mb-1">
+                <input
+                  value={nameForm.first_name}
+                  onChange={e => setNameForm(f => ({ ...f, first_name: e.target.value }))}
+                  placeholder="First name"
+                  className="flex-1 text-sm border border-sky-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  autoFocus
+                />
+                <input
+                  value={nameForm.last_name}
+                  onChange={e => setNameForm(f => ({ ...f, last_name: e.target.value }))}
+                  placeholder="Last name"
+                  className="flex-1 text-sm border border-sky-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                />
+                <button onClick={saveName} disabled={savingName} className="text-xs bg-sky-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">
+                  {savingName ? "…" : "Save"}
+                </button>
+                <button onClick={() => setEditingName(false)} className="text-xs text-slate-500 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setNameForm({ first_name: firstName, last_name: lastName }); setEditingName(true); }}
+                className="text-xl font-bold text-slate-900 text-left hover:text-sky-600 group flex items-center gap-1.5 mb-0.5"
+              >
+                {firstName || lastName ? `${firstName} ${lastName}`.trim() : "Add your name"}
+                <Pencil className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+              </button>
+            )}
             {editingHeadline ? (
               <div className="flex items-center gap-2 mt-1">
                 <input
@@ -685,11 +763,34 @@ export default function ProfilePage() {
         {/* Education */}
         {activeTab === "education" && (
           <div className="space-y-4">
-            <div className="text-slate-400 text-sm text-center py-8 card-base">Education management coming soon.</div>
-            <button className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-sky-300 hover:text-sky-600 transition-colors text-sm">
-              <Plus className="w-4 h-4" />
-              Add Education
-            </button>
+            {education.length === 0 && (
+              <div className="text-slate-400 text-sm text-center py-8 card-base">No education history yet. Upload an artifact or add manually.</div>
+            )}
+            {education.map(edu => (
+              <div key={edu.id} className="card-base p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-slate-900">{edu.institution}</div>
+                    {(edu.degree || edu.field_of_study) && (
+                      <div className="text-sm text-slate-600 mt-0.5">
+                        {[edu.degree, edu.field_of_study].filter(Boolean).join(", ")}
+                      </div>
+                    )}
+                    {(edu.start_date || edu.end_date) && (
+                      <div className="text-xs text-slate-400 mt-1">
+                        {edu.start_date}{edu.end_date ? ` – ${edu.end_date}` : ""}
+                      </div>
+                    )}
+                    {edu.gpa && (
+                      <div className="text-xs text-slate-400 mt-0.5">GPA: {edu.gpa}</div>
+                    )}
+                    {edu.description && (
+                      <p className="text-sm text-slate-500 mt-2">{edu.description}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -697,7 +798,8 @@ export default function ProfilePage() {
         {activeTab === "skills" && (
           <div className="space-y-5">
             <div className="card-base p-5">
-              <h3 className="font-semibold text-slate-900 mb-3">Skills</h3>
+              <h3 className="font-semibold text-slate-900 mb-1">Skills</h3>
+              <p className="text-xs text-slate-400 mb-3">Concrete capabilities, tools, and technologies.</p>
               <div className="flex flex-wrap gap-2">
                 {skills.map((skill) => (
                   <span
@@ -737,6 +839,49 @@ export default function ProfilePage() {
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-3">Hover a skill to remove it.</p>
+            </div>
+
+            {/* Keywords */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Keywords</h3>
+              <p className="text-xs text-slate-400 mb-3">ATS buzzwords, industry terms, and soft skills from your resume.</p>
+              <div className="flex flex-wrap gap-2">
+                {keywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className="group flex items-center gap-1 text-sm bg-violet-50 text-violet-700 border border-violet-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {kw}
+                    <button
+                      onClick={() => removeKeyword(kw)}
+                      disabled={savingKeywords}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newKeyword}
+                    onChange={e => setNewKeyword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addKeyword()}
+                    placeholder="Add keyword…"
+                    className="text-sm bg-transparent outline-none w-28 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addKeyword}
+                    disabled={!newKeyword.trim() || savingKeywords}
+                    className="text-violet-600 hover:text-violet-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {keywords.length === 0 && !newKeyword && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a keyword above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a keyword to remove it.</p>
             </div>
           </div>
         )}
@@ -869,11 +1014,13 @@ export default function ProfilePage() {
             Promise.all([
               fetch("/api/profile").then(r => r.json()),
               fetch("/api/profile/employment").then(r => r.json()),
-            ]).then(([prof, emp]) => {
+              fetch("/api/profile/education").then(r => r.json()),
+            ]).then(([prof, emp, edu]) => {
               if (prof && !prof.error) {
                 setProfile(prof);
                 setHeadline(prof.headline ?? "");
                 setSummary(prof.summary ?? "");
+                setNameForm({ first_name: prof.first_name ?? "", last_name: prof.last_name ?? "" });
                 setHeroForm({
                   location: prof.location,
                   phone: prof.phone,
@@ -883,6 +1030,7 @@ export default function ProfilePage() {
                 });
               }
               if (Array.isArray(emp)) setEmployment(emp);
+              if (Array.isArray(edu)) setEducation(edu);
             }).catch(() => {});
           }}
         />

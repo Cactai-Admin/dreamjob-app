@@ -29,7 +29,8 @@ Return ONLY valid JSON in this exact shape:
     "linkedin_url": "..." or null,
     "github_url": "..." or null,
     "portfolio_url": "..." or null,
-    "skills": ["skill1", "skill2", ...]
+    "skills": ["skill1", "skill2", ...],
+    "keywords": ["keyword1", "keyword2", ...]
   },
   "employment": [
     {
@@ -58,7 +59,9 @@ Return ONLY valid JSON in this exact shape:
 
 Rules:
 - Only include fields that are clearly present in the document. Use null for anything not found.
-- skills must be a flat array of strings (no objects).
+- skills: concrete capabilities, tools, technologies (e.g. "React", "Python", "Project Management").
+- keywords: ATS/industry buzzwords, soft skills, domain terms that aren't concrete tools (e.g. "B2B SaaS", "cross-functional leadership", "agile methodology").
+- Both skills and keywords must be flat arrays of strings (no objects).
 - employment and education must be arrays (empty array if none found).
 - For cover letters, extract name/contact info/summary only — employment/education will usually be absent.
 - Do not invent or guess information.`

@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 interface ParsedProfile {
   first_name?: string | null;
   last_name?: string | null;
-  email?: string | null;
   phone?: string | null;
   location?: string | null;
   headline?: string | null;
@@ -19,6 +18,7 @@ interface ParsedProfile {
   github_url?: string | null;
   portfolio_url?: string | null;
   skills?: string[];
+  keywords?: string[];
 }
 
 interface ParsedEmployment {
@@ -57,10 +57,10 @@ type Step = "input" | "preview";
 type InputMode = "file" | "paste";
 
 const PROFILE_FIELD_LABELS: Record<string, string> = {
-  first_name: "First name", last_name: "Last name", email: "Email",
+  first_name: "First name", last_name: "Last name",
   phone: "Phone", location: "Location", headline: "Headline",
   summary: "Summary", linkedin_url: "LinkedIn URL", github_url: "GitHub URL",
-  portfolio_url: "Portfolio URL", skills: "Skills",
+  portfolio_url: "Portfolio URL", skills: "Skills", keywords: "Keywords",
 };
 
 export function UploadArtifactModal({ onClose, onApplied }: Props) {
@@ -150,14 +150,15 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
     if (includeProfile) {
       const profilePayload: Record<string, unknown> = {};
       const p = result.profile ?? {};
-      const fields: (keyof ParsedProfile)[] = [
-        "first_name", "last_name", "email", "phone", "location",
+        const fields: (keyof ParsedProfile)[] = [
+        "first_name", "last_name", "phone", "location",
         "headline", "summary", "linkedin_url", "github_url", "portfolio_url",
       ];
       for (const f of fields) {
         if (p[f] != null) profilePayload[f] = p[f];
       }
       if (p.skills && p.skills.length > 0) profilePayload.skills = p.skills;
+      if (p.keywords && p.keywords.length > 0) profilePayload.keywords = p.keywords;
       if (Object.keys(profilePayload).length > 0) {
         tasks.push(
           fetch("/api/profile", {
@@ -219,7 +220,7 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
   // Count non-null profile fields
   const profileFieldCount = result
     ? Object.entries(result.profile ?? {}).filter(([k, v]) =>
-        k === "skills" ? (v as string[])?.length > 0 : v != null
+        ["skills", "keywords"].includes(k) ? (v as string[])?.length > 0 : v != null
       ).length
     : 0;
 
@@ -348,14 +349,19 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
                   {profileOpen && (
                     <div className="px-4 pb-3 border-t border-slate-100 space-y-1.5 pt-2">
                       {Object.entries(result!.profile ?? {}).map(([k, v]) => {
-                        if (k === "skills") {
+                        if (["skills", "keywords"].includes(k)) {
                           if (!Array.isArray(v) || v.length === 0) return null;
                           return (
                             <div key={k} className="flex gap-2 text-xs">
                               <span className="text-slate-400 w-28 flex-shrink-0 pt-0.5">{PROFILE_FIELD_LABELS[k] ?? k}</span>
                               <div className="flex flex-wrap gap-1">
                                 {(v as string[]).map(s => (
-                                  <span key={s} className="bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded-full">{s}</span>
+                                  <span key={s} className={cn(
+                                    "px-1.5 py-0.5 rounded-full border",
+                                    k === "keywords"
+                                      ? "bg-violet-50 text-violet-700 border-violet-200"
+                                      : "bg-sky-50 text-sky-700 border-sky-200"
+                                  )}>{s}</span>
                                 ))}
                               </div>
                             </div>
