@@ -45,7 +45,7 @@ export default function ReadyDetailPage({ params }: { params: Promise<{ id: stri
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event_type: 'sent' }),
     })
-    router.push(`/dashboard/sent/${id}`)
+    router.push(`/sent/${id}`)
   }
 
   if (loading) return <Loading />
@@ -55,9 +55,9 @@ export default function ReadyDetailPage({ params }: { params: Promise<{ id: stri
   const coverLetter = outputs.find(o => o.type === 'cover_letter')
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap)' }}>
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="rounded-[8px] p-2 hover:bg-utility transition-colors">
+        <button onClick={() => router.back()} className="rounded-[var(--radius-sm)] p-2 hover:bg-utility transition-colors duration-[var(--duration-fast)]">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <PageHeader

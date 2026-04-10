@@ -6,11 +6,11 @@ import { Home, Briefcase, CheckCircle, Send, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { label: 'Home', href: '/dashboard', icon: Home },
-  { label: 'Jobs', href: '/dashboard/jobs', icon: Briefcase },
-  { label: 'Ready', href: '/dashboard/ready', icon: CheckCircle },
-  { label: 'Sent', href: '/dashboard/sent', icon: Send },
-  { label: 'Profile', href: '/dashboard/profile', icon: User },
+  { label: 'Home', href: '/', icon: Home },
+  { label: 'Jobs', href: '/jobs', icon: Briefcase },
+  { label: 'Ready', href: '/ready', icon: CheckCircle },
+  { label: 'Sent', href: '/sent', icon: Send },
+  { label: 'Profile', href: '/profile', icon: User },
 ]
 
 export function MobileNav() {
@@ -20,8 +20,8 @@ export function MobileNav() {
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-object md:hidden">
       <div className="flex items-center justify-around py-2">
         {NAV_ITEMS.map(item => {
-          const isActive = item.href === '/dashboard'
-            ? pathname === '/dashboard'
+          const isActive = item.href === '/'
+            ? pathname === '/'
             : pathname.startsWith(item.href)
 
           return (

@@ -8,7 +8,7 @@ import { Loading } from '@/components/shared/loading'
 function CallbackHandler() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/dashboard'
+  const redirect = searchParams.get('redirect') || '/'
 
   useEffect(() => {
     const handleCallback = async () => {

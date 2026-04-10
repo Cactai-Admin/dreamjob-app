@@ -28,7 +28,7 @@ export class AnthropicProvider implements AIProvider {
       }))
 
     const response = await this.client.messages.create({
-      model: model || 'claude-sonnet-4-20250514',
+      model: model || 'claude-haiku-4-5-20251001',
       max_tokens: maxTokens,
       temperature,
       system: systemMessage || undefined,

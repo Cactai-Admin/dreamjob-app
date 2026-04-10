@@ -41,12 +41,12 @@ export default function DeletedFilesPage() {
     fetchItems()
   }
 
-  if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-48" /></div>
+  if (loading) return <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}><Skeleton className="h-8 w-48" /><Skeleton className="h-48" /></div>
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="rounded-[8px] p-2 hover:bg-utility transition-colors">
+        <button onClick={() => router.back()} className="rounded-[var(--radius-sm)] p-2 hover:bg-utility transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <PageHeader title="Deleted Files" description="Items pending deletion. You have 30 days to recover them." />

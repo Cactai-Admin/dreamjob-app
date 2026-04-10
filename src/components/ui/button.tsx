@@ -43,10 +43,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     const sizeClasses = {
-      sm: "h-8 px-3 text-sm rounded-[12px] gap-1.5",
-      default: "h-10 px-4 text-sm rounded-sm gap-2",
-      lg: "h-12 px-6 text-base rounded-sm gap-2.5",
-      icon: "h-10 w-10 rounded-sm",
+      sm: "h-8 px-3 text-sm rounded-[var(--radius-sm)] gap-1.5",
+      default: "h-10 px-4 text-sm rounded-[var(--radius-md)] gap-2",
+      lg: "h-12 px-6 text-base rounded-[var(--radius-md)] gap-2.5",
+      icon: "h-10 w-10 rounded-[var(--radius-md)]",
     }
 
     return (

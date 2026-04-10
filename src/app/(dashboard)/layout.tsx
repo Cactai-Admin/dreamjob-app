@@ -18,11 +18,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main content */}
       <main
         className={cn(
-          'min-h-screen transition-all duration-standard pb-20 md:pb-0',
-          collapsed ? 'md:pl-16' : 'md:pl-60'
+          'min-h-screen pb-16 md:pb-0',
+          'transition-all duration-[var(--duration-standard)] ease-[var(--ease-standard)]',
         )}
+        style={{
+          paddingLeft: collapsed
+            ? `calc(var(--sidebar-collapsed-width) + var(--app-shell-padding))`
+            : `calc(var(--sidebar-width) + var(--app-shell-padding))`,
+          paddingRight: 'var(--app-shell-padding)',
+          paddingTop: 'var(--app-shell-padding)',
+        }}
       >
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1200px] px-4 py-5 sm:px-6">
           {children}
         </div>
       </main>

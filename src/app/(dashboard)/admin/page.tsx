@@ -26,11 +26,11 @@ export default function AdminPage() {
   }
 
   if (loading) {
-    return <div className="space-y-6"><Skeleton className="h-8 w-32" /><Skeleton className="h-64" /></div>
+    return <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}><Skeleton className="h-8 w-32" /><Skeleton className="h-64" /></div>
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
       <PageHeader
         title="Admin"
         description="Platform administration"

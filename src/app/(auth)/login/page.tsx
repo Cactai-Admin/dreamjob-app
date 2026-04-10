@@ -13,7 +13,7 @@ import { Loading } from '@/components/shared/loading'
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/dashboard'
+  const redirect = searchParams.get('redirect') || '/'
 
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
@@ -104,10 +104,6 @@ function LoginForm() {
                 </svg>
                 Sign in with Google
               </Button>
-              <p className="text-center text-xs text-foreground-subtle">
-                Google OAuth must be configured to use this sign-in method.
-                See docs/google-oauth-setup.md for instructions.
-              </p>
             </div>
           </TabsContent>
 

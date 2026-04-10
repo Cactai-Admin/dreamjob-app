@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
       email = account.email
     }
 
-    // Sign in with Supabase Auth
-    const response = NextResponse.json({ success: true })
+    // Collect cookies to set after sign-in
+    const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = []
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,10 +44,8 @@ export async function POST(request: NextRequest) {
           getAll() {
             return request.cookies.getAll()
           },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set(name, value, options)
-            })
+          setAll(cookies) {
+            cookiesToSet.push(...cookies)
           },
         },
       }
@@ -59,6 +57,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
+    // Build response and apply all auth cookies
+    const response = NextResponse.json({ success: true })
+    for (const { name, value, options } of cookiesToSet) {
+      response.cookies.set(name, value, options)
+    }
+
     return response
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest) {
 // Sign out
 export async function DELETE(request: NextRequest) {
   try {
-    const response = NextResponse.json({ success: true })
+    const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = []
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,16 +82,20 @@ export async function DELETE(request: NextRequest) {
           getAll() {
             return request.cookies.getAll()
           },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set(name, value, options)
-            })
+          setAll(cookies) {
+            cookiesToSet.push(...cookies)
           },
         },
       }
     )
 
     await supabase.auth.signOut()
+
+    const response = NextResponse.json({ success: true })
+    for (const { name, value, options } of cookiesToSet) {
+      response.cookies.set(name, value, options)
+    }
+
     return response
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -1,29 +1,75 @@
 @import "tailwindcss";
 
-/* ============================================================
-   DreamJob Design System - CSS Custom Properties
-   ============================================================ */
-
-:root {
-  /* Light Theme */
+@theme {
+  /* ============================================================
+     DreamJob Design System — Color Palette (Light Alt B)
+     ============================================================ */
   --color-background: #FCFCFC;
   --color-object: #F6F8F9;
   --color-utility: #EFF1F3;
   --color-utility-2: #E6EBEE;
   --color-border: #E4EAEE;
-
   --color-accent: #0E7490;
   --color-accent-dark: #176B74;
   --color-accent-darker: #155E63;
-
   --color-foreground: #0F172A;
   --color-foreground-muted: #475569;
   --color-foreground-subtle: #94A3B8;
-
   --color-destructive: #DC2626;
   --color-success: #059669;
   --color-warning: #D97706;
+
+  /* ============================================================
+     Typography
+     ============================================================ */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  /* ============================================================
+     Compact Spacing Scale (Segment 05)
+     ============================================================ */
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 20px;
+  --spacing-xl: 24px;
+
+  /* ============================================================
+     Corner Radius System (Segment 05)
+     16px small / 20px medium / 24px large
+     ============================================================ */
+  --radius-sm: 16px;
+  --radius-md: 20px;
+  --radius-lg: 24px;
+
+  /* ============================================================
+     Motion Tokens (Segment 05)
+     ============================================================ */
+  --duration-fast: 120ms;
+  --duration-standard: 180ms;
+  --duration-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ============================================================
+     Density Tokens (Segment 05 — Compact)
+     ============================================================ */
+  --sidebar-width: 200px;
+  --sidebar-collapsed-width: 56px;
+  --app-shell-padding: 16px;
+  --panel-padding: 20px;
+  --inner-content-padding: 16px;
+  --section-gap: 20px;
+  --header-gap: 20px;
+  --stats-card-height: 72px;
+  --stats-card-gap: 12px;
+  --list-item-height: 40px;
+  --chip-height: 22px;
 }
+
+/* ============================================================
+   Dark Theme Override (Dark Alt B)
+   ============================================================ */
 
 .dark {
   --color-background: #0D151A;
@@ -31,15 +77,12 @@
   --color-utility: #20303B;
   --color-utility-2: #273946;
   --color-border: #2B3E4B;
-
   --color-accent: #0E7490;
   --color-accent-dark: #176B74;
   --color-accent-darker: #155E63;
-
   --color-foreground: #F1F5F9;
   --color-foreground-muted: #94A3B8;
   --color-foreground-subtle: #64748B;
-
   --color-destructive: #EF4444;
   --color-success: #10B981;
   --color-warning: #F59E0B;
@@ -52,15 +95,8 @@
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-* {
-  transition-property: background-color, border-color, color;
-  transition-duration: 180ms;
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 *:focus-visible {
@@ -96,11 +132,11 @@ body {
 }
 
 /* ============================================================
-   Utility Classes
+   Animation Utilities
    ============================================================ */
 
 .animate-in {
-  animation: animate-in 180ms cubic-bezier(0, 0, 0.2, 1);
+  animation: animate-in var(--duration-standard) var(--ease-enter);
 }
 
 @keyframes animate-in {
@@ -115,7 +151,7 @@ body {
 }
 
 .animate-fade-in {
-  animation: fade-in 240ms cubic-bezier(0, 0, 0.2, 1);
+  animation: fade-in var(--duration-slow) var(--ease-enter);
 }
 
 @keyframes fade-in {

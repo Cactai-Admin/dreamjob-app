@@ -1,16 +1,17 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, useRef, use } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, FileText, MessageSquare, Sparkles,
-  CheckCircle, Send, ExternalLink,
+  CheckCircle, Send, ExternalLink, Save,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { PageHeader } from '@/components/shared/page-header'
 import { Loading } from '@/components/shared/loading'
@@ -22,9 +23,42 @@ interface ChatMessage {
   content: string
 }
 
+function renderMarkdown(text: string) {
+  // Simple markdown: **bold**, *italic*, line breaks, bullet lists
+  const lines = text.split('\n')
+  return lines.map((line, i) => {
+    // Bullet points
+    if (line.match(/^[\-\*]\s/)) {
+      const content = line.replace(/^[\-\*]\s/, '')
+      return <li key={i} className="ml-4 list-disc">{formatInline(content)}</li>
+    }
+    // Numbered lists
+    if (line.match(/^\d+\.\s/)) {
+      const content = line.replace(/^\d+\.\s/, '')
+      return <li key={i} className="ml-4 list-decimal">{formatInline(content)}</li>
+    }
+    // Empty line = paragraph break
+    if (line.trim() === '') return <br key={i} />
+    // Normal text
+    return <p key={i}>{formatInline(line)}</p>
+  })
+}
+
+function formatInline(text: string) {
+  // Bold
+  const parts = text.split(/(\*\*.*?\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>
+    }
+    return part
+  })
+}
+
 export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const chatEndRef = useRef<HTMLDivElement>(null)
   const [workflow, setWorkflow] = useState<WorkflowWithRelations | null>(null)
   const [outputs, setOutputs] = useState<Output[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,6 +66,13 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [generating, setGenerating] = useState<string | null>(null)
+  const [editingListing, setEditingListing] = useState(false)
+  const [listingForm, setListingForm] = useState({
+    title: '', company_name: '', location: '', salary_range: '',
+    employment_type: '', experience_level: '', description: '',
+    requirements: '', responsibilities: '', benefits: '',
+  })
+  const [savingListing, setSavingListing] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -40,9 +81,47 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
     ]).then(([wf, outs]) => {
       setWorkflow(wf)
       setOutputs(Array.isArray(outs) ? outs : [])
+      if (wf?.listing) {
+        setListingForm({
+          title: wf.listing.title || '',
+          company_name: wf.listing.company_name || '',
+          location: wf.listing.location || '',
+          salary_range: wf.listing.salary_range || '',
+          employment_type: wf.listing.employment_type || '',
+          experience_level: wf.listing.experience_level || '',
+          description: wf.listing.description || '',
+          requirements: wf.listing.requirements || '',
+          responsibilities: wf.listing.responsibilities || '',
+          benefits: wf.listing.benefits || '',
+        })
+        // Auto-enter edit mode if listing is mostly empty (manual entry flow)
+        const l = wf.listing
+        if (l && !l.description && !l.requirements && !l.location) {
+          setEditingListing(true)
+        }
+      }
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
+
+  const saveListing = async () => {
+    if (!workflow?.listing) return
+    setSavingListing(true)
+    await fetch(`/api/workflows/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ listing: listingForm }),
+    })
+    // Refresh workflow data
+    const wf = await fetch(`/api/workflows/${id}`).then(r => r.json())
+    setWorkflow(wf)
+    setSavingListing(false)
+    setEditingListing(false)
+  }
 
   const startChat = async () => {
     setChatLoading(true)
@@ -108,9 +187,9 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
   const listing = workflow.listing
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap)' }}>
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="rounded-[8px] p-2 hover:bg-utility transition-colors">
+        <button onClick={() => router.back()} className="rounded-[var(--radius-sm)] p-2 hover:bg-utility transition-colors duration-[var(--duration-fast)]">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <PageHeader
@@ -131,50 +210,68 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
         <TabsContent value="listing">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Job Listing
-                {listing?.source_url && (
-                  <a href={listing.source_url} target="_blank" rel="noopener noreferrer" className="text-accent">
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Job Listing
+                  {listing?.source_url && (
+                    <a href={listing.source_url} target="_blank" rel="noopener noreferrer" className="text-accent">
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  )}
+                </CardTitle>
+                <Button
+                  size="sm"
+                  variant={editingListing ? 'default' : 'outline'}
+                  onClick={() => editingListing ? saveListing() : setEditingListing(true)}
+                  disabled={savingListing}
+                >
+                  {editingListing ? (
+                    <><Save className="mr-1 h-3 w-3" /> {savingListing ? 'Saving...' : 'Save'}</>
+                  ) : 'Edit'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted">Company</p>
-                  <p className="text-sm">{listing?.company_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted">Title</p>
-                  <p className="text-sm">{listing?.title}</p>
-                </div>
-                {listing?.location && (
-                  <div>
-                    <p className="text-xs font-medium text-foreground-muted">Location</p>
-                    <p className="text-sm">{listing.location}</p>
+              {editingListing ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div><Label>Title</Label><Input value={listingForm.title} onChange={e => setListingForm(f => ({ ...f, title: e.target.value }))} /></div>
+                    <div><Label>Company</Label><Input value={listingForm.company_name} onChange={e => setListingForm(f => ({ ...f, company_name: e.target.value }))} /></div>
+                    <div><Label>Location</Label><Input value={listingForm.location} onChange={e => setListingForm(f => ({ ...f, location: e.target.value }))} /></div>
+                    <div><Label>Salary Range</Label><Input value={listingForm.salary_range} onChange={e => setListingForm(f => ({ ...f, salary_range: e.target.value }))} /></div>
+                    <div><Label>Employment Type</Label><Input value={listingForm.employment_type} onChange={e => setListingForm(f => ({ ...f, employment_type: e.target.value }))} placeholder="Full-time, Part-time, Contract..." /></div>
+                    <div><Label>Experience Level</Label><Input value={listingForm.experience_level} onChange={e => setListingForm(f => ({ ...f, experience_level: e.target.value }))} placeholder="Senior, Mid-level, Entry..." /></div>
                   </div>
-                )}
-                {listing?.salary_range && (
-                  <div>
-                    <p className="text-xs font-medium text-foreground-muted">Salary</p>
-                    <p className="text-sm">{listing.salary_range}</p>
+                  <div><Label>Description</Label><textarea value={listingForm.description} onChange={e => setListingForm(f => ({ ...f, description: e.target.value }))} className="w-full rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent" rows={4} /></div>
+                  <div><Label>Requirements</Label><textarea value={listingForm.requirements} onChange={e => setListingForm(f => ({ ...f, requirements: e.target.value }))} className="w-full rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent" rows={4} /></div>
+                  <div><Label>Responsibilities</Label><textarea value={listingForm.responsibilities} onChange={e => setListingForm(f => ({ ...f, responsibilities: e.target.value }))} className="w-full rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent" rows={3} /></div>
+                  <div><Label>Benefits</Label><textarea value={listingForm.benefits} onChange={e => setListingForm(f => ({ ...f, benefits: e.target.value }))} className="w-full rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent" rows={3} /></div>
+                  <Button variant="outline" size="sm" onClick={() => setEditingListing(false)}>Cancel</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><p className="text-xs font-medium text-foreground-muted">Company</p><p className="text-sm">{listing?.company_name || '—'}</p></div>
+                    <div><p className="text-xs font-medium text-foreground-muted">Title</p><p className="text-sm">{listing?.title || '—'}</p></div>
+                    <div><p className="text-xs font-medium text-foreground-muted">Location</p><p className="text-sm">{listing?.location || '—'}</p></div>
+                    <div><p className="text-xs font-medium text-foreground-muted">Salary</p><p className="text-sm">{listing?.salary_range || '—'}</p></div>
+                    <div><p className="text-xs font-medium text-foreground-muted">Type</p><p className="text-sm">{listing?.employment_type || '—'}</p></div>
+                    <div><p className="text-xs font-medium text-foreground-muted">Level</p><p className="text-sm">{listing?.experience_level || '—'}</p></div>
                   </div>
-                )}
-              </div>
-              {listing?.description && (
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted mb-1">Description</p>
-                  <p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.description}</p>
-                </div>
-              )}
-              {listing?.requirements && (
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted mb-1">Requirements</p>
-                  <p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.requirements}</p>
-                </div>
+                  {listing?.description && (
+                    <div><p className="text-xs font-medium text-foreground-muted mb-1">Description</p><p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.description}</p></div>
+                  )}
+                  {listing?.requirements && (
+                    <div><p className="text-xs font-medium text-foreground-muted mb-1">Requirements</p><p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.requirements}</p></div>
+                  )}
+                  {listing?.responsibilities && (
+                    <div><p className="text-xs font-medium text-foreground-muted mb-1">Responsibilities</p><p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.responsibilities}</p></div>
+                  )}
+                  {listing?.benefits && (
+                    <div><p className="text-xs font-medium text-foreground-muted mb-1">Benefits</p><p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.benefits}</p></div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -201,32 +298,40 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="max-h-96 space-y-3 overflow-y-auto pr-2">
+                <div className="flex flex-col" style={{ height: '60vh' }}>
+                  <div className="flex-1 space-y-3 overflow-y-auto pr-2 pb-4">
                     {chatMessages.map((msg, i) => (
                       <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-[12px] px-4 py-2.5 text-sm ${
+                        <div className={`max-w-[80%] rounded-[12px] px-4 py-3 text-sm leading-relaxed ${
                           msg.role === 'user'
                             ? 'bg-accent text-white'
                             : 'bg-utility text-foreground'
                         }`}>
-                          {msg.content}
+                          {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
                         </div>
                       </div>
                     ))}
-                    {chatLoading && <Skeleton className="h-16 w-3/4" />}
+                    {chatLoading && <Skeleton className="h-12 w-3/4" />}
+                    <div ref={chatEndRef} />
                   </div>
                   <Separator />
-                  <div className="flex gap-2">
-                    <Input
+                  <div className="flex gap-2 pt-3">
+                    <textarea
                       placeholder="Type your answer..."
                       value={chatInput}
                       onChange={e => setChatInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          sendMessage()
+                        }
+                      }}
                       disabled={chatLoading}
+                      rows={3}
+                      className="flex-1 rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                     />
-                    <Button onClick={sendMessage} disabled={chatLoading || !chatInput.trim()}>
-                      Send
+                    <Button onClick={sendMessage} disabled={chatLoading || !chatInput.trim()} className="self-end">
+                      <Send className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -267,8 +372,8 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                   </CardHeader>
                   {output && (
                     <CardContent>
-                      <div className="prose prose-sm max-w-none text-foreground-muted whitespace-pre-wrap">
-                        {output.content}
+                      <div className="text-sm text-foreground-muted leading-relaxed whitespace-pre-wrap">
+                        {renderMarkdown(output.content)}
                       </div>
                     </CardContent>
                   )}
@@ -312,7 +417,6 @@ export default function WorkflowDetailPage({ params }: { params: Promise<{ id: s
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ event_type: status }),
                         })
-                        // Refresh
                         const data = await fetch(`/api/workflows/${id}`).then(r => r.json())
                         setWorkflow(data)
                       }}

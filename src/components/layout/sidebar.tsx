@@ -21,10 +21,10 @@ import {
 import { getInitials } from '@/lib/utils'
 
 const NAV_ITEMS = [
-  { label: 'Home', href: '/dashboard', icon: Home },
-  { label: 'Jobs', href: '/dashboard/jobs', icon: Briefcase },
-  { label: 'Ready', href: '/dashboard/ready', icon: CheckCircle },
-  { label: 'Sent', href: '/dashboard/sent', icon: Send },
+  { label: 'Home', href: '/', icon: Home },
+  { label: 'Jobs', href: '/jobs', icon: Briefcase },
+  { label: 'Ready', href: '/ready', icon: CheckCircle },
+  { label: 'Sent', href: '/sent', icon: Send },
 ]
 
 interface SidebarProps {
@@ -45,20 +45,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-object transition-all duration-standard',
-        collapsed ? 'w-16' : 'w-60'
+        'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-object',
+        'transition-all duration-[var(--duration-standard)] ease-[var(--ease-standard)]',
       )}
+      style={{ width: collapsed ? 'var(--sidebar-collapsed-width)' : 'var(--sidebar-width)' }}
     >
       {/* Logo */}
-      <div className="flex h-14 items-center justify-between px-4">
+      <div className="flex h-12 items-center justify-between px-3">
         {!collapsed && (
-          <Link href="/dashboard" className="text-lg font-bold text-accent">
+          <Link href="/" className="text-base font-bold text-accent truncate">
             DreamJob
           </Link>
         )}
         <button
           onClick={onToggle}
-          className="rounded-[8px] p-1.5 text-foreground-muted hover:bg-utility hover:text-foreground transition-colors"
+          className="rounded-[var(--radius-sm)] p-1.5 text-foreground-muted hover:bg-utility hover:text-foreground transition-colors duration-[var(--duration-fast)]"
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
@@ -69,8 +70,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Main Nav */}
       <nav className="flex-1 space-y-1 p-2">
         {NAV_ITEMS.map(item => {
-          const isActive = item.href === '/dashboard'
-            ? pathname === '/dashboard'
+          const isActive = item.href === '/'
+            ? pathname === '/'
             : pathname.startsWith(item.href)
 
           const link = (
@@ -78,13 +79,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+                'flex items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium',
+                'transition-colors duration-[var(--duration-fast)]',
                 isActive
                   ? 'bg-accent/10 text-accent'
                   : 'text-foreground-muted hover:bg-utility hover:text-foreground'
               )}
             >
-              <item.icon className="h-5 w-5 shrink-0" />
+              <item.icon className="h-[18px] w-[18px] shrink-0" />
               {!collapsed && <span>{item.label}</span>}
             </Link>
           )
@@ -106,18 +108,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <>
             <Separator className="my-2" />
             {(() => {
-              const isActive = pathname.startsWith('/dashboard/admin')
+              const isActive = pathname.startsWith('/admin')
               const link = (
                 <Link
-                  href="/dashboard/admin"
+                  href="/admin"
                   className={cn(
-                    'flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+                    'flex items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium',
+                    'transition-colors duration-[var(--duration-fast)]',
                     isActive
                       ? 'bg-accent/10 text-accent'
                       : 'text-foreground-muted hover:bg-utility hover:text-foreground'
                   )}
                 >
-                  <Shield className="h-5 w-5 shrink-0" />
+                  <Shield className="h-[18px] w-[18px] shrink-0" />
                   {!collapsed && <span>Admin</span>}
                 </Link>
               )
@@ -139,18 +142,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="space-y-1 p-2">
         {/* Profile Link */}
         {(() => {
-          const isActive = pathname.startsWith('/dashboard/profile')
+          const isActive = pathname.startsWith('/profile')
           const link = (
             <Link
-              href="/dashboard/profile"
+              href="/profile"
               className={cn(
-                'flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+                'flex items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium',
+                'transition-colors duration-[var(--duration-fast)]',
                 isActive
                   ? 'bg-accent/10 text-accent'
                   : 'text-foreground-muted hover:bg-utility hover:text-foreground'
               )}
             >
-              <User className="h-5 w-5 shrink-0" />
+              <User className="h-[18px] w-[18px] shrink-0" />
               {!collapsed && <span>Profile</span>}
             </Link>
           )
@@ -170,7 +174,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm transition-colors hover:bg-utility">
+            <button className="flex w-full items-center gap-2.5 rounded-[var(--radius-sm)] px-3 py-2 text-sm transition-colors hover:bg-utility">
               <Avatar size="sm">
                 <AvatarImage src={user?.account.avatar_url ?? undefined} />
                 <AvatarFallback>
@@ -178,7 +182,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
-                <div className="flex-1 text-left">
+                <div className="flex-1 text-left min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
                     {user?.account.display_name ?? 'User'}
                   </p>
@@ -189,7 +193,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="start" className="w-56">
+          <DropdownMenuContent side="top" align="start" className="w-48">
             <DropdownMenuLabel>
               {user?.account.display_name}
               <span className="block text-xs font-normal text-foreground-muted">
@@ -198,18 +202,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={toggleTheme}>
-              {resolvedTheme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+              {resolvedTheme === 'dark' ? <Sun className="mr-2 h-3.5 w-3.5" /> : <Moon className="mr-2 h-3.5 w-3.5" />}
               {resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'}
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/dashboard/profile/settings">
-                <Settings className="mr-2 h-4 w-4" />
+              <Link href="/profile/settings">
+                <Settings className="mr-2 h-3.5 w-3.5" />
                 Settings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-              <LogOut className="mr-2 h-4 w-4" />
+              <LogOut className="mr-2 h-3.5 w-3.5" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>

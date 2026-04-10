@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await provider.generate({
       messages: aiMessages,
-      maxTokens: 1024,
+      maxTokens: 300,
       temperature: 0.7,
     })
 

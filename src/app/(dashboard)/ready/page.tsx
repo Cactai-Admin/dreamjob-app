@@ -30,7 +30,7 @@ export default function ReadyPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
         <Skeleton className="h-8 w-32" />
         {[1, 2].map(i => <Skeleton key={i} className="h-24" />)}
       </div>
@@ -38,7 +38,7 @@ export default function ReadyPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
       <PageHeader title="Ready" description="Applications ready to send" />
 
       {workflows.length === 0 ? (
@@ -50,7 +50,7 @@ export default function ReadyPage() {
       ) : (
         <div className="space-y-3">
           {workflows.map(w => (
-            <Link key={w.id} href={`/dashboard/ready/${w.id}`}>
+            <Link key={w.id} href={`/ready/${w.id}`}>
               <Card className="transition-all duration-fast hover:border-accent/30 cursor-pointer">
                 <CardContent className="flex items-center justify-between p-4">
                   <div>

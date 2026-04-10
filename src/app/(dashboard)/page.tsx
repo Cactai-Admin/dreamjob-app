@@ -37,19 +37,19 @@ export default function DashboardHome() {
   const sentCount = workflows.filter(w => w.state === 'sent' || w.state === 'completed').length
 
   const stats = [
-    { label: 'Active Jobs', value: jobsCount, icon: Briefcase, href: '/dashboard/jobs' },
-    { label: 'Ready to Send', value: readyCount, icon: CheckCircle, href: '/dashboard/ready' },
-    { label: 'Sent', value: sentCount, icon: Send, href: '/dashboard/sent' },
+    { label: 'Active Jobs', value: jobsCount, icon: Briefcase, href: '/jobs' },
+    { label: 'Ready to Send', value: readyCount, icon: CheckCircle, href: '/ready' },
+    { label: 'Sent', value: sentCount, icon: Send, href: '/sent' },
   ]
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap)' }}>
         <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+        <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 'var(--stats-card-gap)' }}>
+          {[1, 2, 3].map(i => <Skeleton key={i} style={{ height: 'var(--stats-card-height)' }} />)}
         </div>
-        <Skeleton className="h-48" />
+        <Skeleton className="h-36" />
       </div>
     )
   }
@@ -57,14 +57,14 @@ export default function DashboardHome() {
   const hasData = workflows.length > 0
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap)' }}>
       <PageHeader
         title={`Welcome back${user?.account.display_name ? `, ${user.account.display_name.split(' ')[0]}` : ''}`}
         description="Your journey to a DreamJob starts here."
         actions={
-          <Link href="/dashboard/jobs">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
+          <Link href="/jobs">
+            <Button size="sm">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Application
             </Button>
           </Link>
@@ -75,24 +75,24 @@ export default function DashboardHome() {
         <EmptyState
           icon={TrendingUp}
           title="It's a Ghost Town Around Here..."
-          description="Start your first job application to see your dashboard come to life."
+          description="Paste a job listing URL to start your first application."
           actionLabel="Add a Job Listing"
-          onAction={() => window.location.href = '/dashboard/jobs'}
+          onAction={() => window.location.href = '/jobs'}
         />
       ) : (
         <>
-          {/* Stats */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {/* Stats — compact per spec: 58px height, 6px gap */}
+          <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 'var(--stats-card-gap)' }}>
             {stats.map(stat => (
               <Link key={stat.label} href={stat.href}>
-                <Card className="transition-all duration-fast hover:border-accent/30 cursor-pointer">
-                  <CardContent className="flex items-center gap-4 p-4">
-                    <div className="rounded-full bg-accent/10 p-3">
+                <Card className="cursor-pointer hover:border-accent/30 transition-colors duration-[var(--duration-fast)]">
+                  <CardContent className="flex items-center gap-4" style={{ height: 'var(--stats-card-height)', padding: 'var(--panel-padding)' }}>
+                    <div className="rounded-full bg-accent/10 p-2.5">
                       <stat.icon className="h-5 w-5 text-accent" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                      <p className="text-sm text-foreground-muted">{stat.label}</p>
+                      <p className="text-2xl font-bold text-foreground leading-none">{stat.value}</p>
+                      <p className="text-sm text-foreground-muted mt-1">{stat.label}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -110,13 +110,13 @@ export default function DashboardHome() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-foreground">{activeWorkflow.title}</p>
-                    <p className="text-sm text-foreground-muted">
+                    <p className="text-sm text-foreground-muted mt-1">
                       {activeWorkflow.state.replace(/_/g, ' ')} · Updated {formatRelativeTime(activeWorkflow.updated_at)}
                     </p>
                   </div>
-                  <Link href={`/dashboard/jobs/${activeWorkflow.id}`}>
+                  <Link href={`/jobs/${activeWorkflow.id}`}>
                     <Button variant="ghost" size="sm">
-                      Continue <ArrowRight className="ml-1 h-4 w-4" />
+                      Continue <ArrowRight className="ml-1 h-3.5 w-3.5" />
                     </Button>
                   </Link>
                 </div>
@@ -130,20 +130,20 @@ export default function DashboardHome() {
               <CardTitle className="text-base">Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="flex flex-col">
                 {workflows.slice(0, 5).map(w => (
                   <Link
                     key={w.id}
-                    href={`/dashboard/jobs/${w.id}`}
-                    className="flex items-center justify-between rounded-[8px] px-3 py-2 transition-colors hover:bg-utility"
+                    href={`/jobs/${w.id}`}
+                    className="flex items-center justify-between rounded-[var(--radius-sm)] px-3 py-2 transition-colors hover:bg-utility"
                   >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{w.title}</p>
-                      <p className="text-xs text-foreground-subtle">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{w.title}</p>
+                      <span className="text-xs text-foreground-subtle shrink-0">
                         {w.state.replace(/_/g, ' ')}
-                      </p>
+                      </span>
                     </div>
-                    <span className="text-xs text-foreground-subtle">
+                    <span className="text-xs text-foreground-subtle shrink-0 ml-2">
                       {formatRelativeTime(w.updated_at)}
                     </span>
                   </Link>

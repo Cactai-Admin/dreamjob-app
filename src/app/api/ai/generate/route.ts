@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
       ],
       maxTokens: 4096,
       temperature: 0.7,
+      model: 'claude-sonnet-4-20250514',
     })
 
     // Save as output

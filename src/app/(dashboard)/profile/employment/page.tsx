@@ -51,12 +51,12 @@ export default function EmploymentPage() {
     fetchEmployment()
   }
 
-  if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>
+  if (loading) return <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="rounded-[8px] p-2 hover:bg-utility transition-colors">
+        <button onClick={() => router.back()} className="rounded-[var(--radius-sm)] p-2 hover:bg-utility transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <PageHeader
@@ -80,7 +80,7 @@ export default function EmploymentPage() {
                     <Checkbox checked={form.is_current} onCheckedChange={(v) => setForm(f => ({ ...f, is_current: !!v }))} />
                     <Label>Current position</Label>
                   </div>
-                  <div><Label>Description</Label><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full rounded-[12px] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent" rows={3} /></div>
+                  <div><Label>Description</Label><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent" rows={3} /></div>
                   <Button onClick={handleAdd} className="w-full">Add Employment</Button>
                 </div>
               </DialogContent>

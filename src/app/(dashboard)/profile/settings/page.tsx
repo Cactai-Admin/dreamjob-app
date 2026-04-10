@@ -24,9 +24,9 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
       <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="rounded-[8px] p-2 hover:bg-utility transition-colors">
+        <button onClick={() => router.back()} className="rounded-[var(--radius-sm)] p-2 hover:bg-utility transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <PageHeader title="Settings" />
@@ -44,7 +44,7 @@ export default function SettingsPage() {
                 key={t.value}
                 onClick={() => setTheme(t.value)}
                 className={cn(
-                  'flex flex-col items-center gap-2 rounded-[12px] border-2 px-6 py-4 transition-all',
+                  'flex flex-col items-center gap-2 rounded-[var(--radius-md)] border-2 px-6 py-4 transition-all',
                   theme === t.value ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/30'
                 )}
               >

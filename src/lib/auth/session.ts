@@ -84,7 +84,7 @@ export async function requireRole(role: UserRole): Promise<SessionUser> {
 
   const hasRole = sessionUser.roles.some((r) => r.role === role)
   if (!hasRole) {
-    redirect('/dashboard')
+    redirect('/')
   }
 
   return { ...sessionUser, activeRole: role }

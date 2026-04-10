@@ -56,7 +56,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-64" />
       </div>
@@ -64,24 +64,24 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 'var(--section-gap)' }}>
       <PageHeader title="Profile" description="Your personal and career information" />
 
       {/* Quick links */}
       <div className="flex flex-wrap gap-3">
-        <Link href="/dashboard/profile/employment">
+        <Link href="/profile/employment">
           <Button variant="outline" size="sm">
-            <Briefcase className="mr-2 h-4 w-4" /> Employment History
+            <Briefcase className="mr-1.5 h-3.5 w-3.5" /> Employment History
           </Button>
         </Link>
-        <Link href="/dashboard/profile/deleted-files">
+        <Link href="/profile/deleted-files">
           <Button variant="outline" size="sm">
-            <Trash2 className="mr-2 h-4 w-4" /> Deleted Files
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Deleted Files
           </Button>
         </Link>
-        <Link href="/dashboard/profile/settings">
+        <Link href="/profile/settings">
           <Button variant="outline" size="sm">
-            <FileText className="mr-2 h-4 w-4" /> Settings
+            <FileText className="mr-1.5 h-3.5 w-3.5" /> Settings
           </Button>
         </Link>
       </div>
@@ -120,7 +120,7 @@ export default function ProfilePage() {
               <textarea
                 value={form.summary}
                 onChange={e => setForm(f => ({ ...f, summary: e.target.value }))}
-                className="w-full rounded-[12px] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full rounded-[var(--radius-md)] border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
                 rows={4}
               />
             </div>

@@ -111,3 +111,29 @@ export async function POST(
 
   return NextResponse.json(data, { status: 201 })
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const accountId = await getAccountId()
+  if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const { searchParams } = new URL(request.url)
+  const eventType = searchParams.get('event_type')
+
+  if (!eventType) {
+    return NextResponse.json({ error: 'event_type is required' }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin
+    .from('status_events')
+    .delete()
+    .eq('workflow_id', id)
+    .eq('account_id', accountId)
+    .eq('event_type', eventType)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

@@ -64,12 +64,42 @@ export async function PATCH(
   const { id } = await params
   const body = await request.json()
 
+  // If listing data is provided, update the listing separately
+  if (body.listing) {
+    const { data: workflow } = await supabaseAdmin
+      .from('workflows')
+      .select('listing_id')
+      .eq('id', id)
+      .eq('account_id', accountId)
+      .single()
+
+    if (workflow?.listing_id) {
+      await supabaseAdmin
+        .from('job_listings')
+        .update(body.listing)
+        .eq('id', workflow.listing_id)
+    }
+
+    delete body.listing
+  }
+
+  // Update workflow fields if any remain
+  if (Object.keys(body).length > 0) {
+    const { error } = await supabaseAdmin
+      .from('workflows')
+      .update(body)
+      .eq('id', id)
+      .eq('account_id', accountId)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  }
+
+  // Return updated workflow with joins
   const { data, error } = await supabaseAdmin
     .from('workflows')
-    .update(body)
+    .select('*, listing:job_listings(*), company:companies(*), outputs(*), status_events(*), qa_answers(*)')
     .eq('id', id)
     .eq('account_id', accountId)
-    .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
