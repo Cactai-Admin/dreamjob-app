@@ -27,11 +27,14 @@ async function getAccountId() {
   return account?.id ?? null
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabaseAdmin
+  const { searchParams } = new URL(request.url)
+  const stateFilter = searchParams.get('state')
+
+  let query = supabaseAdmin
     .from('workflows')
     .select(`
       *,
@@ -41,6 +44,17 @@ export async function GET() {
     .eq('account_id', accountId)
     .order('created_at', { ascending: false })
 
+  if (stateFilter) {
+    // e.g. ?state=listing_review  or  ?state=!listing_review  (exclude)
+    if (stateFilter.startsWith('!')) {
+      query = query.neq('state', stateFilter.slice(1))
+    } else {
+      query = query.eq('state', stateFilter)
+    }
+  }
+
+  const { data, error } = await query
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -49,23 +63,45 @@ export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Check one-active-workflow rule
+  // One active application at a time — listing_review doesn't count (pre-application)
   const { data: existing } = await supabaseAdmin
     .from('workflows')
     .select('id')
     .eq('account_id', accountId)
     .eq('is_active', true)
-    .not('state', 'in', '("sent","completed","archived")')
+    .not('state', 'in', '("sent","completed","archived","listing_review")')
 
   if (existing && existing.length > 0) {
     return NextResponse.json(
-      { error: 'You already have an active workflow. Complete or archive it before starting a new one.' },
+      { error: 'You already have an active application in progress. Complete or archive it before starting a new one.' },
       { status: 409 }
     )
   }
 
   const body = await request.json()
-  const { listing_url, company_name, title, description, requirements } = body
+  const {
+    listing_url,
+    company_name,
+    title,
+    description,
+    requirements: rawRequirements,
+    location,
+    salary_range,
+    employment_type,
+    experience_level,
+    responsibilities,
+    benefits,
+    company_website_url,
+    company_linkedin_url,
+  } = body
+
+  // Normalize requirements: accept string or array
+  let requirements: string[] | null = null
+  if (Array.isArray(rawRequirements)) {
+    requirements = rawRequirements.filter(Boolean)
+  } else if (typeof rawRequirements === 'string' && rawRequirements.trim()) {
+    requirements = rawRequirements.split(/\n|;/).map((s: string) => s.trim()).filter(Boolean)
+  }
 
   // Create or find company
   let companyId: string | null = null
@@ -78,10 +114,22 @@ export async function POST(request: NextRequest) {
 
     if (existingCompany) {
       companyId = existingCompany.id
+      // Update website/linkedin if we have new info
+      if (company_website_url || company_linkedin_url) {
+        await supabaseAdmin.from('companies').update({
+          ...(company_website_url ? { website_url: company_website_url } : {}),
+          ...(company_linkedin_url ? { linkedin_url: company_linkedin_url } : {}),
+        }).eq('id', companyId)
+      }
     } else {
       const { data: newCompany } = await supabaseAdmin
         .from('companies')
-        .insert({ name: company_name, created_by: accountId })
+        .insert({
+          name: company_name,
+          created_by: accountId,
+          ...(company_website_url ? { website_url: company_website_url } : {}),
+          ...(company_linkedin_url ? { linkedin_url: company_linkedin_url } : {}),
+        })
         .select()
         .single()
       companyId = newCompany?.id ?? null
@@ -97,14 +145,22 @@ export async function POST(request: NextRequest) {
       company_name: company_name || 'Unknown Company',
       company_id: companyId,
       description: description || null,
-      requirements: requirements || null,
+      requirements: requirements && requirements.length > 0 ? JSON.stringify(requirements) : null,
+      location: location || null,
+      salary_range: salary_range || null,
+      employment_type: employment_type || null,
+      experience_level: experience_level || null,
+      responsibilities: responsibilities || null,
+      benefits: benefits || null,
+      company_website_url: company_website_url || null,
       created_by: accountId,
     })
     .select()
     .single()
 
   if (listingError || !listing) {
-    return NextResponse.json({ error: 'Failed to create listing' }, { status: 500 })
+    console.error('[POST /api/workflows] listing insert error:', listingError)
+    return NextResponse.json({ error: listingError?.message ?? 'Failed to create listing' }, { status: 500 })
   }
 
   // Create workflow

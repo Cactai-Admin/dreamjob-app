@@ -9,7 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Briefcase,
-  ChartBar as BarChart2,
+  Layers,
   User,
   Settings,
   LogOut,
@@ -22,14 +22,16 @@ import { cn } from "@/lib/utils";
 
 /* Desktop nav — all items */
 const NAV_ITEMS = [
-  { href: "/",        label: "Analyze",      icon: Zap },
-  { href: "/jobs",    label: "Applications", icon: Briefcase },
+  { href: "/",          label: "Analyze",      icon: Zap },
+  { href: "/listings",  label: "Jobs",         icon: Layers },
+  { href: "/jobs",      label: "Applications", icon: Briefcase },
 ];
 
 /* Mobile bottom tab bar — only the most-used items */
 const MOBILE_NAV_ITEMS = [
-  { href: "/",     label: "Analyze",      icon: Zap },
-  { href: "/jobs", label: "Applications", icon: Briefcase },
+  { href: "/",         label: "Analyze",      icon: Zap },
+  { href: "/listings", label: "Jobs",         icon: Layers },
+  { href: "/jobs",     label: "Applications", icon: Briefcase },
 ];
 
 const USER_MENU_ITEMS = [
@@ -50,6 +52,8 @@ export function TopNav() {
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
+    // /jobs should NOT match /listings paths
+    if (href === "/jobs") return pathname === "/jobs" || (pathname.startsWith("/jobs") && !pathname.startsWith("/listings"));
     return pathname.startsWith(href);
   };
 
@@ -187,10 +191,10 @@ export function TopNav() {
 
       {/* ── Mobile bottom tab bar (Analyze + Applications only) ── */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200"
+        className="mobile-bottom-nav flex md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        <div className="flex items-stretch">
+        <div className="flex items-stretch w-full">
           {MOBILE_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
@@ -220,8 +224,6 @@ export function TopNav() {
         </div>
       </nav>
 
-      {/* Spacer so content doesn't hide behind the mobile bottom nav */}
-      <div className="md:hidden" style={{ height: 6 }} aria-hidden="true" />
     </>
   );
 }

@@ -27,10 +27,13 @@ export function AppShell({ children }: Props) {
         <div aria-hidden="true" className="top-nav-placeholder" />
       )}
 
-      {/* Page content */}
-      <main className="flex-1 overflow-y-auto">
+      {/* Page content — flex-col so children can fill remaining height with flex-1 */}
+      <main className="flex-1 min-w-0 flex flex-col">
         {children}
       </main>
+
+      {/* Spacer pushes content above the fixed mobile bottom nav — desktop: hidden */}
+      <div className="block md:hidden flex-shrink-0" style={{ height: 56 }} aria-hidden="true" />
     </div>
   );
 }

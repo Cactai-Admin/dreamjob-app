@@ -20,15 +20,17 @@ export default function JobsPage() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ApplicationStatus | "all">("all");
   const [sortBy, setSortBy] = useState<"recent" | "status">("recent");
+  const [hasListings, setHasListings] = useState(false);
 
   useEffect(() => {
-    fetch("/api/workflows")
-      .then(r => r.json())
-      .then((workflows: Workflow[]) => {
-        if (Array.isArray(workflows)) setJobs(workflows.map(workflowToJob));
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch("/api/workflows?state=!listing_review").then(r => r.json()),
+      fetch("/api/workflows?state=listing_review").then(r => r.json()),
+    ]).then(([active, listings]) => {
+      if (Array.isArray(active)) setJobs(active.map(workflowToJob));
+      if (Array.isArray(listings)) setHasListings(listings.length > 0);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   const filtered = jobs
@@ -53,7 +55,7 @@ export default function JobsPage() {
           <p className="text-slate-400 text-sm mt-0.5">{loading ? "Loading…" : `${jobs.length} total`}</p>
         </div>
         <Link
-          href="/"
+          href={hasListings ? "/listings" : "/"}
           className="flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
         >
           <span>+ New</span>

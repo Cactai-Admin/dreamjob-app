@@ -24,6 +24,28 @@ export function deriveDocumentStatus(outputs: Output[] = [], type: string): Docu
   return 'draft'
 }
 
+function toArray(val: unknown): string[] {
+  if (!val) return []
+  if (Array.isArray(val)) return val as string[]
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    // JSON array string: ["req1","req2"]
+    if (trimmed.startsWith('[')) {
+      try { return JSON.parse(trimmed) } catch { /* fall through */ }
+    }
+    // Postgres array string: {req1,req2}
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      return trimmed.slice(1, -1).split(',').map(s => s.trim()).filter(Boolean)
+    }
+    // Newline-separated
+    if (trimmed.includes('\n')) {
+      return trimmed.split('\n').map(s => s.trim()).filter(Boolean)
+    }
+    return trimmed ? [trimmed] : []
+  }
+  return []
+}
+
 export function workflowToJob(w: Workflow): Job {
   return {
     id: w.id,
@@ -35,12 +57,14 @@ export function workflowToJob(w: Workflow): Job {
     type: 'full-time',
     salary: w.listing?.salary_range,
     description: w.listing?.description ?? '',
-    requirements: w.listing?.requirements ?? [],
+    requirements: toArray(w.listing?.requirements),
     benefits: [],
     url: w.listing?.source_url ?? undefined,
     status: deriveApplicationStatus(w.state, w.status_events),
     resumeStatus: deriveDocumentStatus(w.outputs, 'resume'),
     coverLetterStatus: deriveDocumentStatus(w.outputs, 'cover_letter'),
+    interviewGuideStatus: deriveDocumentStatus(w.outputs, 'interview_guide'),
+    negotiationGuideStatus: deriveDocumentStatus(w.outputs, 'negotiation_guide'),
     connections: [],
     tags: [],
     createdAt: w.created_at,

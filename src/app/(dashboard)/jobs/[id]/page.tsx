@@ -5,7 +5,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect, use } from "react";
-import { MapPin, DollarSign, ExternalLink, FileText, Mail, Download, ChevronRight, StickyNote, Building2, Users, Calendar, CircleCheck as CheckCircle2, CircleAlert as AlertCircle } from "lucide-react";
+import { MapPin, DollarSign, ExternalLink, FileText, Mail, Download, ChevronRight, StickyNote, Building2, Users, Calendar, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Trash2, MessageSquare, TrendingUp } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { DocStatusPill } from "@/components/jobs/doc-status-pill";
 import { PageHeader } from "@/components/layout/page-header";
@@ -23,15 +24,24 @@ interface Props {
 
 export default function JobDetailPage({ params }: Props) {
   const { id } = use(params);
+  const router = useRouter();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const loadWorkflow = () => {
     fetch(`/api/workflows/${id}`)
       .then(r => r.json())
       .then((wf: Workflow) => {
         if (!wf?.id) { setLoading(false); return; }
+        // Only redirect to listing review if no application work has been started
+        const hasOutputs = wf.outputs && wf.outputs.length > 0;
+        if (wf.state === "listing_review" && !wf.is_active && !hasOutputs) {
+          router.replace(`/listings/${id}`);
+          return;
+        }
         setWorkflow(wf);
         setJob(workflowToJob(wf));
         setLoading(false);
@@ -41,26 +51,37 @@ export default function JobDetailPage({ params }: Props) {
 
   useEffect(() => { loadWorkflow(); }, [id]);
 
+  const EVENT_MAP: Record<string, string> = {
+    applied: "submitted",
+    interviewing: "interview_scheduled",
+    offer: "offer_received",
+    hired: "hired",
+    rejected: "rejected",
+    withdrawn: "withdrawn",
+  };
+
   const updateStatus = async (newStatus: ApplicationStatus) => {
     if (!job) return;
-    // Map UI status to event_type
-    const eventMap: Record<string, string> = {
-      applied: "submitted",
-      interviewing: "interview_scheduled",
-      offer: "offer_received",
-      hired: "hired",
-      rejected: "rejected",
-      withdrawn: "withdrawn",
-    };
-    const eventType = eventMap[newStatus];
+    const eventType = EVENT_MAP[newStatus];
     if (!eventType) return;
 
-    await fetch(`/api/workflows/${id}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_type: eventType }),
-    });
+    if (job.status === newStatus) {
+      // Toggle off — delete that event type
+      await fetch(`/api/workflows/${id}/status?event_type=${eventType}`, { method: "DELETE" });
+    } else {
+      await fetch(`/api/workflows/${id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_type: eventType }),
+      });
+    }
     loadWorkflow();
+  };
+
+  const deleteWorkflow = async () => {
+    setDeleting(true);
+    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+    router.push("/jobs");
   };
 
   if (loading) {
@@ -167,7 +188,7 @@ export default function JobDetailPage({ params }: Props) {
           </div>
 
           {/* Description */}
-          {(job.description || job.requirements.length > 0) && (
+          {(job.description || (job.requirements ?? []).length > 0) && (
             <div className="card-base p-5">
               <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-sky-500" />
@@ -176,11 +197,11 @@ export default function JobDetailPage({ params }: Props) {
               {job.description && (
                 <p className="text-slate-600 text-sm leading-relaxed">{job.description}</p>
               )}
-              {job.requirements.length > 0 && (
+              {(job.requirements ?? []).length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Requirements</h4>
                   <ul className="space-y-2">
-                    {job.requirements.map((req, i) => (
+                    {(job.requirements ?? []).map((req, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
                         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 mt-2 flex-shrink-0" />
                         {req}
@@ -239,6 +260,34 @@ export default function JobDetailPage({ params }: Props) {
               </Link>
 
               <Link
+                href={`/jobs/${job.id}/interview-guide`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                  <MessageSquare className="w-4 h-4 text-violet-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 text-sm">Interview Guide</div>
+                  <DocStatusPill status={job.interviewGuideStatus} label="" />
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
+              </Link>
+
+              <Link
+                href={`/jobs/${job.id}/negotiation-guide`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 text-sm">Negotiation Guide</div>
+                  <DocStatusPill status={job.negotiationGuideStatus} label="" />
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
+              </Link>
+
+              <Link
                 href={`/jobs/${job.id}/export`}
                 className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 transition-colors"
               >
@@ -272,7 +321,10 @@ export default function JobDetailPage({ params }: Props) {
 
           {/* Update Status */}
           <div className="card-base p-5">
-            <h3 className="font-semibold text-slate-900 mb-3">Update Status</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Update Status</h3>
+              <span className="text-xs text-slate-400">Click active to remove</span>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {(["applied", "interviewing", "offer", "hired", "rejected", "withdrawn"] as ApplicationStatus[]).map((s) => (
                 <button
@@ -281,7 +333,7 @@ export default function JobDetailPage({ params }: Props) {
                   className={cn(
                     "text-xs font-medium py-2 px-3 rounded-lg border transition-all capitalize",
                     job.status === s
-                      ? "border-sky-500 bg-sky-50 text-sky-700"
+                      ? "border-sky-500 bg-sky-50 text-sky-700 ring-1 ring-sky-400"
                       : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                   )}
                 >
@@ -289,6 +341,40 @@ export default function JobDetailPage({ params }: Props) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Delete */}
+          <div className="card-base p-5 border-red-100">
+            {confirmDelete ? (
+              <div className="space-y-3">
+                <p className="text-sm text-red-700 font-medium">Move to trash?</p>
+                <p className="text-xs text-slate-500">You can restore it within 30 days from Trash.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={deleteWorkflow}
+                    disabled={deleting}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-sm py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {deleting ? "Deleting…" : "Yes, delete"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 text-sm py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 transition-colors w-full"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete application
+              </button>
+            )}
           </div>
         </div>
       </div>

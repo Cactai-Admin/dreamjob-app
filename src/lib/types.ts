@@ -41,6 +41,8 @@ export interface Job {
   notes?: string;
   resumeStatus: DocumentStatus;
   coverLetterStatus: DocumentStatus;
+  interviewGuideStatus: DocumentStatus;
+  negotiationGuideStatus: DocumentStatus;
   connections: LinkedInConnection[];
   tags: string[];
   hiringManager?: string;
@@ -188,12 +190,19 @@ export interface JobListing {
   requirements: string[] | null;
   location?: string;
   salary_range?: string;
+  employment_type?: string;
+  experience_level?: string;
+  responsibilities?: string;
+  benefits?: string;
+  company_website_url?: string | null;
 }
 
 export interface Company {
   id: string;
   name: string;
   logo_url?: string;
+  linkedin_url?: string;
+  website_url?: string;
 }
 
 export interface Output {
