@@ -23,6 +23,43 @@ async function getAccountId() {
   return account?.id ?? null
 }
 
+export async function GET(request: NextRequest) {
+  const accountId = await getAccountId()
+  if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(request.url)
+  const listingId = searchParams.get('listing_id')
+  if (!listingId) return NextResponse.json({ error: 'listing_id required' }, { status: 400 })
+
+  const { data, error } = await supabaseAdmin
+    .from('linkedin_connections')
+    .select('name, profile_url, degree')
+    .eq('listing_id', listingId)
+    .eq('account_id', accountId)
+    .order('degree', { ascending: true })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data || data.length === 0) return NextResponse.json({ connections: null })
+
+  const first  = data.filter(c => c.degree === 1).map(c => ({ name: c.name, profileUrl: c.profile_url }))
+  const second = data.filter(c => c.degree === 2).map(c => ({ name: c.name, profileUrl: c.profile_url }))
+  const third  = data.filter(c => c.degree === 3).map(c => ({ name: c.name, profileUrl: c.profile_url }))
+
+  return NextResponse.json({
+    connections: {
+      first,
+      second,
+      third,
+      counts: {
+        first: first.length,
+        second: second.length,
+        third: third.length,
+        total: data.length,
+      },
+    },
+  })
+}
+
 export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

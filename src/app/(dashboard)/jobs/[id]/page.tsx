@@ -86,34 +86,43 @@ export default function JobDetailPage({ params }: Props) {
   const [modalDegree, setModalDegree] = useState<"first" | "second" | "third" | null>(null);
 
   const loadWorkflow = () => {
-    Promise.all([
-      fetch(`/api/workflows/${id}`).then(r => r.json()),
-      fetch("/api/linkedin/session").then(r => r.json()),
-    ]).then(([wf, li]) => {
-      if (!wf?.id) { setLoading(false); return; }
-      if (wf.state === "listing_review") {
-        router.replace(`/listings/${id}`);
-        return;
-      }
-      setWorkflow(wf);
-      setJob(workflowToJob(wf));
-      // Populate edit fields
-      const l = wf.listing ?? {};
-      setEditTitle(l.title ?? wf.title ?? "");
-      setEditCompany(l.company_name ?? wf.company?.name ?? "");
-      setEditLocation(l.location ?? "");
-      setEditSalary(l.salary_range ?? "");
-      setEditEmpType(l.employment_type ?? "");
-      setEditExpLevel(l.experience_level ?? "");
-      setEditWebsite(l.company_website_url ?? wf.company?.website_url ?? "");
-      setEditLinkedIn(wf.company?.linkedin_url ?? "");
-      setEditDescription(l.description ?? "");
-      setEditReqs(parseReqs(l.requirements));
-      setEditAdditional(l.responsibilities ?? "");
-      setNotes(wf.notes ?? "");
-      if (li && !li.error) setLinkedInActive(li.isAuthenticated);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    fetch(`/api/workflows/${id}`)
+      .then(r => r.json())
+      .then(async (wf) => {
+        if (!wf?.id) { setLoading(false); return; }
+        if (wf.state === "listing_review") {
+          router.replace(`/listings/${id}`);
+          return;
+        }
+        setWorkflow(wf);
+        setJob(workflowToJob(wf));
+        // Populate edit fields
+        const l = wf.listing ?? {};
+        setEditTitle(l.title ?? wf.title ?? "");
+        setEditCompany(l.company_name ?? wf.company?.name ?? "");
+        setEditLocation(l.location ?? "");
+        setEditSalary(l.salary_range ?? "");
+        setEditEmpType(l.employment_type ?? "");
+        setEditExpLevel(l.experience_level ?? "");
+        setEditWebsite(l.company_website_url ?? wf.company?.website_url ?? "");
+        setEditLinkedIn(wf.company?.linkedin_url ?? "");
+        setEditDescription(l.description ?? "");
+        setEditReqs(parseReqs(l.requirements));
+        setEditAdditional(l.responsibilities ?? "");
+        setNotes(wf.notes ?? "");
+
+        // Load stored connections + LinkedIn session in parallel
+        const [liRes, connRes] = await Promise.all([
+          fetch("/api/linkedin/session").then(r => r.json()).catch(() => ({})),
+          wf.listing_id
+            ? fetch(`/api/linkedin/company?listing_id=${wf.listing_id}`).then(r => r.json()).catch(() => ({}))
+            : Promise.resolve({}),
+        ]);
+        if (liRes && !liRes.error) setLinkedInActive(liRes.isAuthenticated);
+        if (connRes?.connections) setConnections(connRes.connections);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   };
 
   useEffect(() => { loadWorkflow(); }, [id]);
