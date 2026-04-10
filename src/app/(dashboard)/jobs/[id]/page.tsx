@@ -4,7 +4,7 @@
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import {
   MapPin, DollarSign, ExternalLink, FileText, Mail, Download,
   ChevronRight, StickyNote, Building2, Users, Calendar,
@@ -66,6 +66,11 @@ export default function JobDetailPage({ params }: Props) {
   const [newReq, setNewReq] = useState("");
   const [editAdditional, setEditAdditional] = useState("");
 
+  // Notes
+  const [notes, setNotes] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // LinkedIn connections
   const [linkedInActive, setLinkedInActive] = useState(false);
   const [fetchingConns, setFetchingConns] = useState(false);
@@ -105,6 +110,7 @@ export default function JobDetailPage({ params }: Props) {
       setEditDescription(l.description ?? "");
       setEditReqs(parseReqs(l.requirements));
       setEditAdditional(l.responsibilities ?? "");
+      setNotes(wf.notes ?? "");
       if (li && !li.error) setLinkedInActive(li.isAuthenticated);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -165,6 +171,16 @@ export default function JobDetailPage({ params }: Props) {
     setSavingListing(false);
     setEditingListing(false);
     loadWorkflow();
+  };
+
+  const saveNotes = async (value: string) => {
+    await fetch(`/api/workflows/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: value }),
+    });
+    setNotesSaved(true);
+    setTimeout(() => setNotesSaved(false), 2000);
   };
 
   const fetchConnections = async () => {
@@ -521,13 +537,30 @@ export default function JobDetailPage({ params }: Props) {
 
               {/* Notes */}
               <div className="card-base p-5">
-                <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <StickyNote className="w-4 h-4 text-sky-500" />
-                  Notes
-                </h3>
-                <div className="text-slate-400 text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
-                  Notes coming soon…
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <StickyNote className="w-4 h-4 text-sky-500" />
+                    Notes
+                  </h3>
+                  {notesSaved && (
+                    <span className="text-xs text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Saved
+                    </span>
+                  )}
                 </div>
+                <textarea
+                  value={notes}
+                  onChange={e => {
+                    setNotes(e.target.value);
+                    setNotesSaved(false);
+                    if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current);
+                    notesSaveTimer.current = setTimeout(() => saveNotes(e.target.value), 1000);
+                  }}
+                  onBlur={e => saveNotes(e.target.value)}
+                  placeholder="Add notes, reminders, or anything relevant to this application…"
+                  rows={4}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none leading-relaxed text-slate-700 placeholder:text-slate-400"
+                />
               </div>
             </>
           )}

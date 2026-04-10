@@ -232,6 +232,7 @@ export interface Workflow {
   title: string;
   state: string;
   is_active: boolean;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
   listing: JobListing;
