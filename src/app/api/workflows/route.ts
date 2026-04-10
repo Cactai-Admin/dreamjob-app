@@ -65,21 +65,6 @@ export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // One active application at a time — listing_review doesn't count (pre-application)
-  const { data: existing } = await supabaseAdmin
-    .from('workflows')
-    .select('id')
-    .eq('account_id', accountId)
-    .eq('is_active', true)
-    .not('state', 'in', '("sent","completed","archived","listing_review")')
-
-  if (existing && existing.length > 0) {
-    return NextResponse.json(
-      { error: 'You already have an active application in progress. Complete or archive it before starting a new one.' },
-      { status: 409 }
-    )
-  }
-
   const body = await request.json()
   const {
     listing_url,
