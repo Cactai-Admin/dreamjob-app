@@ -55,7 +55,7 @@ export default function JobsPage() {
           <p className="text-slate-400 text-sm mt-0.5">{loading ? "Loading…" : `${jobs.length} total`}</p>
         </div>
         <Link
-          href={hasListings ? "/listings" : "/"}
+          href="/"
           className="flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
         >
           <span>+ New</span>
@@ -128,10 +128,10 @@ export default function JobsPage() {
           </div>
           <h3 className="font-semibold text-slate-700 mb-1">No applications found</h3>
           <p className="text-slate-400 text-sm">
-            {search ? `No results for "${search}"` : jobs.length === 0 ? "Start your first application from the home page." : "Try a different filter"}
+            {search ? `No results for "${search}"` : jobs.length === 0 ? "Add a listing from the Dashboard to get started." : "Try a different filter"}
           </p>
           <Link href={hasListings ? "/listings" : "/"} className="inline-flex items-center gap-2 mt-4 text-sm text-slate-600 hover:text-slate-900 transition-colors">
-            {hasListings ? "Pick a listing" : "Start a new application"} <ChevronRight className="w-4 h-4" />
+            {hasListings ? "Review a listing" : "Go to Dashboard"} <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
       ) : (

@@ -17,21 +17,22 @@ import {
   Zap,
   Shield,
   Trash2,
+  LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* Desktop nav — all items */
 const NAV_ITEMS = [
-  { href: "/",          label: "Analyze",      icon: Zap },
-  { href: "/listings",  label: "Jobs",         icon: Layers },
+  { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/listings",  label: "Analyze",      icon: Zap },
   { href: "/jobs",      label: "Applications", icon: Briefcase },
 ];
 
 /* Mobile bottom tab bar — only the most-used items */
 const MOBILE_NAV_ITEMS = [
-  { href: "/",         label: "Analyze",      icon: Zap },
-  { href: "/listings", label: "Jobs",         icon: Layers },
-  { href: "/jobs",     label: "Applications", icon: Briefcase },
+  { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/listings",  label: "Analyze",      icon: Zap },
+  { href: "/jobs",      label: "Applications", icon: Briefcase },
 ];
 
 const USER_MENU_ITEMS = [
@@ -52,8 +53,8 @@ export function TopNav() {
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
-    // /jobs should NOT match /listings paths
-    if (href === "/jobs") return pathname === "/jobs" || (pathname.startsWith("/jobs") && !pathname.startsWith("/listings"));
+    if (href === "/jobs") return pathname === "/jobs" || (pathname.startsWith("/jobs/") && !pathname.startsWith("/listings"));
+    if (href === "/listings") return pathname.startsWith("/listings");
     return pathname.startsWith(href);
   };
 
