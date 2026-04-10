@@ -144,21 +144,50 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
   const apply = async () => {
     if (!result) return;
     setApplying(true);
+
+    // Normalise for fuzzy matching (lower-case, alphanumeric only)
+    const norm = (s: string | null | undefined) =>
+      (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // Fetch existing data to deduplicate against
+    const [existingEmp, existingEdu, existingProf] = await Promise.all([
+      fetch("/api/profile/employment").then(r => r.json()).catch(() => []),
+      fetch("/api/profile/education").then(r => r.json()).catch(() => []),
+      fetch("/api/profile").then(r => r.json()).catch(() => ({})),
+    ]);
+
     const tasks: Promise<unknown>[] = [];
 
-    // Profile fields
+    // ── Profile fields ────────────────────────────────────────────────────────
     if (includeProfile) {
       const profilePayload: Record<string, unknown> = {};
       const p = result.profile ?? {};
-        const fields: (keyof ParsedProfile)[] = [
+      const fields: (keyof ParsedProfile)[] = [
         "first_name", "last_name", "phone", "location",
         "headline", "summary", "linkedin_url", "github_url", "portfolio_url",
       ];
+      // Only fill fields that are currently empty in the existing profile
       for (const f of fields) {
-        if (p[f] != null) profilePayload[f] = p[f];
+        if (p[f] != null && !existingProf[f]) profilePayload[f] = p[f];
       }
-      if (p.skills && p.skills.length > 0) profilePayload.skills = p.skills;
-      if (p.keywords && p.keywords.length > 0) profilePayload.keywords = p.keywords;
+      // Merge skills — union, no duplicates
+      if (p.skills?.length) {
+        const have = new Set((existingProf.skills ?? []).map(norm));
+        const merged = [
+          ...(existingProf.skills ?? []),
+          ...p.skills.filter((s: string) => !have.has(norm(s))),
+        ];
+        if (merged.length > (existingProf.skills ?? []).length) profilePayload.skills = merged;
+      }
+      // Merge keywords — union, no duplicates
+      if (p.keywords?.length) {
+        const have = new Set((existingProf.keywords ?? []).map(norm));
+        const merged = [
+          ...(existingProf.keywords ?? []),
+          ...p.keywords.filter((k: string) => !have.has(norm(k))),
+        ];
+        if (merged.length > (existingProf.keywords ?? []).length) profilePayload.keywords = merged;
+      }
       if (Object.keys(profilePayload).length > 0) {
         tasks.push(
           fetch("/api/profile", {
@@ -170,46 +199,102 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
       }
     }
 
-    // Employment entries
-    (result.employment ?? []).forEach((emp, i) => {
-      if (!includeEmployment[i]) return;
-      tasks.push(
-        fetch("/api/profile/employment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            company_name: emp.company_name,
-            title: emp.title,
-            location: emp.location ?? null,
-            start_date: emp.start_date ?? "Present",
-            end_date: emp.is_current ? null : (emp.end_date ?? null),
-            is_current: emp.is_current ?? false,
-            description: emp.description ?? null,
-            technologies: emp.technologies ?? [],
-          }),
-        })
-      );
-    });
+    // ── Employment ────────────────────────────────────────────────────────────
+    for (let i = 0; i < (result.employment ?? []).length; i++) {
+      if (!includeEmployment[i]) continue;
+      const emp = result.employment[i];
 
-    // Education entries
-    (result.education ?? []).forEach((edu, i) => {
-      if (!includeEducation[i]) return;
-      tasks.push(
-        fetch("/api/profile/education", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            institution: edu.institution,
-            degree: edu.degree ?? null,
-            field_of_study: edu.field_of_study ?? null,
-            start_date: edu.start_date ?? null,
-            end_date: edu.end_date ?? null,
-            gpa: edu.gpa ?? null,
-            description: edu.description ?? null,
-          }),
-        })
+      // Match on normalised company + title
+      const match = (existingEmp as Record<string, unknown>[]).find(e =>
+        norm(e.company_name as string) === norm(emp.company_name) &&
+        norm(e.title as string) === norm(emp.title)
       );
-    });
+
+      if (match) {
+        // Patch only fields the existing entry is missing
+        const patch: Record<string, unknown> = {};
+        if (!match.location && emp.location) patch.location = emp.location;
+        if (!match.description && emp.description) patch.description = emp.description;
+        if (!(match.technologies as string[])?.length && emp.technologies?.length)
+          patch.technologies = emp.technologies;
+        if (!match.start_date && emp.start_date) patch.start_date = emp.start_date;
+        if (!match.end_date && !emp.is_current && emp.end_date) patch.end_date = emp.end_date;
+        if (Object.keys(patch).length > 0) {
+          tasks.push(
+            fetch(`/api/profile/employment/${match.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(patch),
+            })
+          );
+        }
+        // else exact duplicate — skip
+      } else {
+        tasks.push(
+          fetch("/api/profile/employment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              company_name: emp.company_name,
+              title: emp.title,
+              location: emp.location ?? null,
+              start_date: emp.start_date ?? "Present",
+              end_date: emp.is_current ? null : (emp.end_date ?? null),
+              is_current: emp.is_current ?? false,
+              description: emp.description ?? null,
+              technologies: emp.technologies ?? [],
+            }),
+          })
+        );
+      }
+    }
+
+    // ── Education ─────────────────────────────────────────────────────────────
+    for (let i = 0; i < (result.education ?? []).length; i++) {
+      if (!includeEducation[i]) continue;
+      const edu = result.education[i];
+
+      // Match on normalised institution name
+      const match = (existingEdu as Record<string, unknown>[]).find(e =>
+        norm(e.institution as string) === norm(edu.institution)
+      );
+
+      if (match) {
+        const patch: Record<string, unknown> = {};
+        if (!match.degree && edu.degree) patch.degree = edu.degree;
+        if (!match.field_of_study && edu.field_of_study) patch.field_of_study = edu.field_of_study;
+        if (!match.start_date && edu.start_date) patch.start_date = edu.start_date;
+        if (!match.end_date && edu.end_date) patch.end_date = edu.end_date;
+        if (!match.gpa && edu.gpa) patch.gpa = edu.gpa;
+        if (!match.description && edu.description) patch.description = edu.description;
+        if (Object.keys(patch).length > 0) {
+          tasks.push(
+            fetch(`/api/profile/education/${match.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(patch),
+            })
+          );
+        }
+        // else exact duplicate — skip
+      } else {
+        tasks.push(
+          fetch("/api/profile/education", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              institution: edu.institution,
+              degree: edu.degree ?? null,
+              field_of_study: edu.field_of_study ?? null,
+              start_date: edu.start_date ?? null,
+              end_date: edu.end_date ?? null,
+              gpa: edu.gpa ?? null,
+              description: edu.description ?? null,
+            }),
+          })
+        );
+      }
+    }
 
     await Promise.all(tasks);
     setApplying(false);
