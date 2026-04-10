@@ -4,12 +4,13 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { User, Briefcase, GraduationCap, Star, Award, Globe, Plus, Pencil, Save, CreditCard as Edit2, MapPin, Phone, Mail, ExternalLink, ChartBar as BarChart2, ArrowRight, Calendar, Target, Trophy, TrendingUp, Trash2, X, Check } from "lucide-react";
+import { User, Briefcase, GraduationCap, Star, Award, Globe, Plus, Pencil, Save, CreditCard as Edit2, MapPin, Phone, Mail, ExternalLink, ChartBar as BarChart2, ArrowRight, Calendar, Target, Trophy, TrendingUp, Trash2, X, Check, Upload } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import { cn } from "@/lib/utils";
 import type { ApplicationStatus, Workflow, Job } from "@/lib/types";
+import { UploadArtifactModal } from "@/components/profile/upload-artifact-modal";
 
 type Tab = "overview" | "experience" | "education" | "skills" | "achievements" | "stats";
 
@@ -213,6 +214,7 @@ export default function ProfilePage() {
   const [employment, setEmployment] = useState<Employment[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Headline
   const [editingHeadline, setEditingHeadline] = useState(false);
@@ -377,6 +379,15 @@ export default function ProfilePage() {
       <PageHeader
         title="My Profile"
         subtitle="Keep this updated for best AI results"
+        actions={
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Upload Artifact</span>
+          </button>
+        }
       />
 
       {/* Profile hero */}
@@ -850,6 +861,32 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {showUploadModal && (
+        <UploadArtifactModal
+          onClose={() => setShowUploadModal(false)}
+          onApplied={() => {
+            Promise.all([
+              fetch("/api/profile").then(r => r.json()),
+              fetch("/api/profile/employment").then(r => r.json()),
+            ]).then(([prof, emp]) => {
+              if (prof && !prof.error) {
+                setProfile(prof);
+                setHeadline(prof.headline ?? "");
+                setSummary(prof.summary ?? "");
+                setHeroForm({
+                  location: prof.location,
+                  phone: prof.phone,
+                  linkedin_url: prof.linkedin_url,
+                  portfolio_url: prof.portfolio_url,
+                  github_url: prof.github_url,
+                });
+              }
+              if (Array.isArray(emp)) setEmployment(emp);
+            }).catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }
