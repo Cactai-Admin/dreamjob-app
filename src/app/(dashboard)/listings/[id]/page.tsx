@@ -240,7 +240,7 @@ export default function ListingReviewPage({ params }: Props) {
 
   return (
     <>
-    <div className="page-wrapper">
+    <div className="page-wrapper max-w-1000px">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
