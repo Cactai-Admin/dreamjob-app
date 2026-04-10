@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
-import { getConfiguredProvider } from '@/lib/ai/provider'
+import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import {
   RESUME_SYSTEM_PROMPT,
   COVER_LETTER_SYSTEM_PROMPT,
@@ -33,13 +33,17 @@ export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { workflow_id, output_type } = await request.json()
+  const { workflow_id, output_type, provider: providerName } = await request.json() as {
+    workflow_id: string
+    output_type: string
+    provider?: ProviderName
+  }
 
   if (!workflow_id || !output_type) {
     return NextResponse.json({ error: 'workflow_id and output_type are required' }, { status: 400 })
   }
 
-  const provider = getConfiguredProvider()
+  const provider = getProvider(providerName)
   if (!provider.isConfigured()) {
     return NextResponse.json(
       { error: 'No AI provider configured. See docs/ai-providers-setup.md' },
@@ -118,7 +122,6 @@ export async function POST(request: NextRequest) {
       ],
       maxTokens: 4096,
       temperature: 0.7,
-      model: 'claude-sonnet-4-20250514',
     })
 
     // Save as output

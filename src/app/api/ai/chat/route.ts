@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
-import { getConfiguredProvider } from '@/lib/ai/provider'
+import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { QA_SYSTEM_PROMPT, buildQAUserMessage } from '@/lib/ai/prompts/qa-guidance'
 
 const supabaseAdmin = createClient(
@@ -28,13 +28,18 @@ export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { workflow_id, message, surface = 'qa' } = await request.json()
+  const { workflow_id, message, surface = 'qa', provider: providerName } = await request.json() as {
+    workflow_id: string
+    message?: string
+    surface?: string
+    provider?: ProviderName
+  }
 
   if (!workflow_id) {
     return NextResponse.json({ error: 'workflow_id is required' }, { status: 400 })
   }
 
-  const provider = getConfiguredProvider()
+  const provider = getProvider(providerName)
   if (!provider.isConfigured()) {
     return NextResponse.json(
       { error: 'No AI provider configured. See docs/ai-providers-setup.md' },
