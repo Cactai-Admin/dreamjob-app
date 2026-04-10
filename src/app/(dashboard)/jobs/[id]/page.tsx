@@ -1,331 +1,383 @@
-'use client'
+"use client";
 
-import { useEffect, useState, use } from 'react'
-import { useRouter } from 'next/navigation'
-import {
-  ArrowLeft, FileText, MessageSquare, Sparkles,
-  CheckCircle, Send, ExternalLink,
-} from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
-import { PageHeader } from '@/components/shared/page-header'
-import { Loading } from '@/components/shared/loading'
-import { Skeleton } from '@/components/ui/skeleton'
-import type { WorkflowWithRelations, Output } from '@/types/database'
+// ── Job Detail — Full view of a job application with all actions ──
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { useState, useEffect, use } from "react";
+import { MapPin, DollarSign, ExternalLink, FileText, Mail, Download, ChevronRight, StickyNote, Building2, Users, Calendar, CircleCheck as CheckCircle2, CircleAlert as AlertCircle, Trash2, MessageSquare, TrendingUp } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { StatusBadge } from "@/components/jobs/status-badge";
+import { DocStatusPill } from "@/components/jobs/doc-status-pill";
+import { PageHeader } from "@/components/layout/page-header";
+import { workflowToJob, deriveApplicationStatus } from "@/lib/workflow-adapter";
+import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const STATUS_FLOW: ApplicationStatus[] = [
+  "saved", "applied", "interviewing", "offer", "hired",
+];
+
+interface Props {
+  params: Promise<{ id: string }>;
 }
 
-export default function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const router = useRouter()
-  const [workflow, setWorkflow] = useState<WorkflowWithRelations | null>(null)
-  const [outputs, setOutputs] = useState<Output[]>([])
-  const [loading, setLoading] = useState(true)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [chatInput, setChatInput] = useState('')
-  const [chatLoading, setChatLoading] = useState(false)
-  const [generating, setGenerating] = useState<string | null>(null)
+export default function JobDetailPage({ params }: Props) {
+  const { id } = use(params);
+  const router = useRouter();
+  const [workflow, setWorkflow] = useState<Workflow | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      fetch(`/api/workflows/${id}`).then(r => r.json()),
-      fetch(`/api/workflows/${id}/outputs`).then(r => r.json()),
-    ]).then(([wf, outs]) => {
-      setWorkflow(wf)
-      setOutputs(Array.isArray(outs) ? outs : [])
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [id])
-
-  const startChat = async () => {
-    setChatLoading(true)
-    try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow_id: id }),
+  const loadWorkflow = () => {
+    fetch(`/api/workflows/${id}`)
+      .then(r => r.json())
+      .then((wf: Workflow) => {
+        if (!wf?.id) { setLoading(false); return; }
+        // Only redirect to listing review if no application work has been started
+        const hasOutputs = wf.outputs && wf.outputs.length > 0;
+        if (wf.state === "listing_review" && !wf.is_active && !hasOutputs) {
+          router.replace(`/listings/${id}`);
+          return;
+        }
+        setWorkflow(wf);
+        setJob(workflowToJob(wf));
+        setLoading(false);
       })
-      const data = await res.json()
-      if (data.message) {
-        setChatMessages([{ role: 'assistant', content: data.message }])
-      }
-    } catch { /* AI may not be configured */ }
-    setChatLoading(false)
-  }
+      .catch(() => setLoading(false));
+  };
 
-  const sendMessage = async () => {
-    if (!chatInput.trim()) return
-    const msg = chatInput.trim()
-    setChatInput('')
-    setChatMessages(prev => [...prev, { role: 'user', content: msg }])
-    setChatLoading(true)
+  useEffect(() => { loadWorkflow(); }, [id]);
 
-    try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow_id: id, message: msg }),
-      })
-      const data = await res.json()
-      if (data.message) {
-        setChatMessages(prev => [...prev, { role: 'assistant', content: data.message }])
-      }
-      if (data.isComplete) {
-        setWorkflow(prev => prev ? { ...prev, state: 'review' } : null)
-      }
-    } catch {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }])
+  const EVENT_MAP: Record<string, string> = {
+    applied: "submitted",
+    interviewing: "interview_scheduled",
+    offer: "offer_received",
+    hired: "hired",
+    rejected: "rejected",
+    withdrawn: "withdrawn",
+  };
+
+  const updateStatus = async (newStatus: ApplicationStatus) => {
+    if (!job) return;
+    const eventType = EVENT_MAP[newStatus];
+    if (!eventType) return;
+
+    if (job.status === newStatus) {
+      // Toggle off — delete that event type
+      await fetch(`/api/workflows/${id}/status?event_type=${eventType}`, { method: "DELETE" });
+    } else {
+      await fetch(`/api/workflows/${id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_type: eventType }),
+      });
     }
-    setChatLoading(false)
+    loadWorkflow();
+  };
+
+  const deleteWorkflow = async () => {
+    setDeleting(true);
+    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+    router.push("/jobs");
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-900 rounded-full animate-spin" />
+      </div>
+    );
   }
 
-  const generateOutput = async (type: string) => {
-    setGenerating(type)
-    try {
-      const res = await fetch('/api/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow_id: id, output_type: type }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setOutputs(prev => [...prev.filter(o => o.type !== type), data])
-      }
-    } catch { /* */ }
-    setGenerating(null)
-  }
+  if (!job || !workflow) return notFound();
 
-  if (loading) return <Loading />
-  if (!workflow) return <div className="text-center py-12 text-foreground-muted">Workflow not found</div>
-
-  const listing = workflow.listing
+  const currentStepIdx = STATUS_FLOW.indexOf(job.status);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.back()} className="rounded-[8px] p-2 hover:bg-utility transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <PageHeader
-          title={workflow.title}
-          description={`Status: ${workflow.state.replace(/_/g, ' ')}`}
-        />
-      </div>
+    <div className="page-wrapper max-w-4xl">
+      <PageHeader
+        title={job.title}
+        subtitle={job.company}
+        backHref="/jobs"
+        actions={<StatusBadge status={job.status} />}
+      />
 
-      <Tabs defaultValue={workflow.state === 'qa_intake' || workflow.state === 'listing_review' ? 'qa' : 'outputs'}>
-        <TabsList>
-          <TabsTrigger value="listing">Listing</TabsTrigger>
-          <TabsTrigger value="qa">Q&A</TabsTrigger>
-          <TabsTrigger value="outputs">Outputs</TabsTrigger>
-          <TabsTrigger value="status">Status</TabsTrigger>
-        </TabsList>
-
-        {/* Listing Tab */}
-        <TabsContent value="listing">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Job Listing
-                {listing?.source_url && (
-                  <a href={listing.source_url} target="_blank" rel="noopener noreferrer" className="text-accent">
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted">Company</p>
-                  <p className="text-sm">{listing?.company_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted">Title</p>
-                  <p className="text-sm">{listing?.title}</p>
-                </div>
-                {listing?.location && (
-                  <div>
-                    <p className="text-xs font-medium text-foreground-muted">Location</p>
-                    <p className="text-sm">{listing.location}</p>
-                  </div>
-                )}
-                {listing?.salary_range && (
-                  <div>
-                    <p className="text-xs font-medium text-foreground-muted">Salary</p>
-                    <p className="text-sm">{listing.salary_range}</p>
-                  </div>
-                )}
-              </div>
-              {listing?.description && (
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted mb-1">Description</p>
-                  <p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.description}</p>
-                </div>
-              )}
-              {listing?.requirements && (
-                <div>
-                  <p className="text-xs font-medium text-foreground-muted mb-1">Requirements</p>
-                  <p className="text-sm text-foreground-muted whitespace-pre-wrap">{listing.requirements}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Q&A Tab */}
-        <TabsContent value="qa">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                Guided Q&A
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chatMessages.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-foreground-muted mb-4">
-                    Start the guided intake to build your application materials.
-                  </p>
-                  <Button onClick={startChat} disabled={chatLoading}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    {chatLoading ? 'Starting...' : 'Begin Q&A'}
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="max-h-96 space-y-3 overflow-y-auto pr-2">
-                    {chatMessages.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-[12px] px-4 py-2.5 text-sm ${
-                          msg.role === 'user'
-                            ? 'bg-accent text-white'
-                            : 'bg-utility text-foreground'
-                        }`}>
-                          {msg.content}
-                        </div>
-                      </div>
-                    ))}
-                    {chatLoading && <Skeleton className="h-16 w-3/4" />}
-                  </div>
-                  <Separator />
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Type your answer..."
-                      value={chatInput}
-                      onChange={e => setChatInput(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                      disabled={chatLoading}
-                    />
-                    <Button onClick={sendMessage} disabled={chatLoading || !chatInput.trim()}>
-                      Send
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Outputs Tab */}
-        <TabsContent value="outputs">
-          <div className="space-y-4">
-            {['resume', 'cover_letter', 'interview_guide', 'negotiation_guide'].map(type => {
-              const output = outputs.find(o => o.type === type)
-              const label = type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-
+      {/* Progress timeline */}
+      {currentStepIdx >= 0 && (
+        <div className="card-base p-4 mb-5 hidden sm:block">
+          <div className="flex items-center">
+            {STATUS_FLOW.map((s, idx) => {
+              const isCompleted = idx < currentStepIdx;
+              const isCurrent   = idx === currentStepIdx;
               return (
-                <Card key={type}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{label}</CardTitle>
-                      <div className="flex items-center gap-2">
-                        {output && (
-                          <Badge variant={output.state === 'ready' ? 'success' : 'secondary'}>
-                            {output.state} · v{output.version}
-                          </Badge>
-                        )}
-                        <Button
-                          size="sm"
-                          variant={output ? 'outline' : 'default'}
-                          onClick={() => generateOutput(type)}
-                          disabled={generating === type}
-                        >
-                          <Sparkles className="mr-1 h-3 w-3" />
-                          {generating === type ? 'Generating...' : output ? 'Regenerate' : 'Generate'}
-                        </Button>
-                      </div>
+                <div key={s} className="flex-1 flex items-center">
+                  <div className="flex flex-col items-center">
+                    <div className={cn(
+                      "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all",
+                      isCompleted ? "bg-emerald-500 border-emerald-500 text-white" :
+                      isCurrent   ? "bg-sky-600 border-sky-600 text-white" :
+                                    "bg-white border-slate-200 text-slate-400"
+                    )}>
+                      {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : idx + 1}
                     </div>
-                  </CardHeader>
-                  {output && (
-                    <CardContent>
-                      <div className="prose prose-sm max-w-none text-foreground-muted whitespace-pre-wrap">
-                        {output.content}
-                      </div>
-                    </CardContent>
+                    <span className={cn(
+                      "text-[10px] font-medium mt-1 capitalize",
+                      isCurrent ? "text-sky-700" : isCompleted ? "text-emerald-600" : "text-slate-400"
+                    )}>
+                      {s}
+                    </span>
+                  </div>
+                  {idx < STATUS_FLOW.length - 1 && (
+                    <div className={cn("flex-1 h-0.5 mx-2", isCompleted ? "bg-emerald-400" : "bg-slate-200")} />
                   )}
-                </Card>
-              )
+                </div>
+              );
             })}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Status Tab */}
-        <TabsContent value="status">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Application Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {workflow.status_events && workflow.status_events.length > 0 ? (
-                  workflow.status_events.map(event => (
-                    <div key={event.id} className="flex items-center gap-3">
-                      <CheckCircle className="h-4 w-4 text-success" />
-                      <div>
-                        <p className="text-sm font-medium">{event.event_type.replace(/_/g, ' ')}</p>
-                        <p className="text-xs text-foreground-subtle">{new Date(event.occurred_at).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                  ))
+      <div className="grid lg:grid-cols-3 gap-5">
+        {/* Main column */}
+        <div className="lg:col-span-2 space-y-5">
+          {/* Company + Role info */}
+          <div className="card-base p-5">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-14 h-14 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
+                {job.companyLogo ? (
+                  <img src={job.companyLogo} alt={job.company} className="w-full h-full object-cover" />
                 ) : (
-                  <p className="text-sm text-foreground-muted">No status events yet.</p>
+                  <div className="w-full h-full flex items-center justify-center text-slate-500 font-bold text-2xl">
+                    {job.company[0]}
+                  </div>
                 )}
-                <Separator />
-                <div className="flex flex-wrap gap-2">
-                  {['sent', 'interview', 'offer', 'hired', 'rejected', 'declined'].map(status => (
-                    <Button
-                      key={status}
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        await fetch(`/api/workflows/${id}/status`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ event_type: status }),
-                        })
-                        // Refresh
-                        const data = await fetch(`/api/workflows/${id}`).then(r => r.json())
-                        setWorkflow(data)
-                      }}
-                    >
-                      {status.replace(/_/g, ' ')}
-                    </Button>
-                  ))}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-bold text-slate-900 text-lg leading-tight">{job.title}</h2>
+                <p className="text-slate-600 font-medium">{job.company}</p>
+                <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate-500">
+                  {job.location && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" />
+                      {job.location}
+                    </span>
+                  )}
+                  {job.salary && (
+                    <span className="flex items-center gap-1.5">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      {job.salary}
+                    </span>
+                  )}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              {job.url && (
+                <a
+                  href={job.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-shrink-0 flex items-center gap-1.5 text-xs text-sky-600 border border-sky-200 bg-sky-50 px-3 py-1.5 rounded-lg hover:bg-sky-100 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          {(job.description || (job.requirements ?? []).length > 0) && (
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-sky-500" />
+                About the role
+              </h3>
+              {job.description && (
+                <p className="text-slate-600 text-sm leading-relaxed">{job.description}</p>
+              )}
+              {(job.requirements ?? []).length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Requirements</h4>
+                  <ul className="space-y-2">
+                    {(job.requirements ?? []).map((req, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 mt-2 flex-shrink-0" />
+                        {req}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Notes */}
+          <div className="card-base p-5">
+            <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+              <StickyNote className="w-4 h-4 text-sky-500" />
+              Notes
+            </h3>
+            <div className="text-slate-400 text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
+              Notes coming soon…
+            </div>
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-4">
+          {/* Application Packet */}
+          <div className="card-base p-5">
+            <h3 className="font-semibold text-slate-900 mb-3">Application Packet</h3>
+            <div className="space-y-3">
+              <Link
+                href={`/jobs/${job.id}/resume`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-sky-100 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-4 h-4 text-sky-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 text-sm">Resume</div>
+                  <DocStatusPill status={job.resumeStatus} label="" />
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
+              </Link>
+
+              <Link
+                href={`/jobs/${job.id}/cover-letter`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <Mail className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 text-sm">Cover Letter</div>
+                  <DocStatusPill status={job.coverLetterStatus} label="" />
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
+              </Link>
+
+              <Link
+                href={`/jobs/${job.id}/interview-guide`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
+                  <MessageSquare className="w-4 h-4 text-violet-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 text-sm">Interview Guide</div>
+                  <DocStatusPill status={job.interviewGuideStatus} label="" />
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
+              </Link>
+
+              <Link
+                href={`/jobs/${job.id}/negotiation-guide`}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-slate-900 text-sm">Negotiation Guide</div>
+                  <DocStatusPill status={job.negotiationGuideStatus} label="" />
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
+              </Link>
+
+              <Link
+                href={`/jobs/${job.id}/export`}
+                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Export Packet
+              </Link>
+            </div>
+          </div>
+
+          {/* Key dates */}
+          <div className="card-base p-5">
+            <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-sky-500" />
+              Dates
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Created</span>
+                <span className="font-medium text-slate-800">
+                  {new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Last updated</span>
+                <span className="font-medium text-slate-800">
+                  {new Date(job.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Update Status */}
+          <div className="card-base p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Update Status</h3>
+              <span className="text-xs text-slate-400">Click active to remove</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(["applied", "interviewing", "offer", "hired", "rejected", "withdrawn"] as ApplicationStatus[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updateStatus(s)}
+                  className={cn(
+                    "text-xs font-medium py-2 px-3 rounded-lg border transition-all capitalize",
+                    job.status === s
+                      ? "border-sky-500 bg-sky-50 text-sky-700 ring-1 ring-sky-400"
+                      : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                  )}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Delete */}
+          <div className="card-base p-5 border-red-100">
+            {confirmDelete ? (
+              <div className="space-y-3">
+                <p className="text-sm text-red-700 font-medium">Move to trash?</p>
+                <p className="text-xs text-slate-500">You can restore it within 30 days from Trash.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={deleteWorkflow}
+                    disabled={deleting}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-sm py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {deleting ? "Deleting…" : "Yes, delete"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="flex-1 text-sm py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 transition-colors w-full"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete application
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

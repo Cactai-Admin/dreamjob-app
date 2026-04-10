@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { getConfiguredProvider } from '@/lib/ai/provider'
+import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { LISTING_PARSE_SYSTEM, LISTING_URL_ANALYSIS } from '@/lib/ai/prompts/listing-parse'
 
 export async function POST(request: NextRequest) {
@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL or manual data required' }, { status: 400 })
     }
 
-    const provider = getConfiguredProvider()
+    const providerName = body.provider as ProviderName | undefined
+    const provider = getProvider(providerName)
     if (!provider.isConfigured()) {
       return NextResponse.json(
         { error: 'No AI provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.' },

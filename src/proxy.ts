@@ -3,42 +3,37 @@ import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 const PUBLIC_PATHS = ['/login', '/callback', '/api/auth']
-const PROTECTED_PREFIXES = ['/dashboard', '/api/profile', '/api/workflows', '/api/listings', '/api/ai', '/api/linkedin', '/api/deleted-items', '/api/admin']
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Allow public paths
+  // Allow public paths through without auth check
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
-    // If authenticated user hits /login, redirect to dashboard
+    // If authenticated user hits /login, redirect to home
     if (pathname.startsWith('/login')) {
       const response = NextResponse.next()
       const supabase = createSupabaseClient(request, response)
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        return NextResponse.redirect(new URL('/dashboard', request.url))
+        return NextResponse.redirect(new URL('/', request.url))
       }
       return response
     }
     return NextResponse.next()
   }
 
-  // Check auth for protected paths
-  if (PROTECTED_PREFIXES.some(p => pathname.startsWith(p))) {
-    const response = NextResponse.next()
-    const supabase = createSupabaseClient(request, response)
-    const { data: { user } } = await supabase.auth.getUser()
+  // Everything else requires auth
+  const response = NextResponse.next()
+  const supabase = createSupabaseClient(request, response)
+  const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user) {
-      const loginUrl = new URL('/login', request.url)
-      loginUrl.searchParams.set('redirect', pathname)
-      return NextResponse.redirect(loginUrl)
-    }
-
-    return response
+  if (!user) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
-  return NextResponse.next()
+  return response
 }
 
 function createSupabaseClient(request: NextRequest, response: NextResponse) {

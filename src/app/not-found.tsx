@@ -9,7 +9,7 @@ export default function NotFound() {
           This page doesn&apos;t exist.
         </p>
         <Link
-          href="/dashboard"
+          href="/"
           className="mt-6 inline-block rounded-sm bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-dark"
         >
           Back to DreamJob

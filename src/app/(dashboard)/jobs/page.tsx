@@ -1,237 +1,148 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Briefcase, Plus, Link as LinkIcon, ArrowRight } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { PageHeader } from '@/components/shared/page-header'
-import { EmptyState } from '@/components/shared/empty-state'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { formatRelativeTime, isValidUrl } from '@/lib/utils'
-import type { WorkflowWithRelations } from '@/types/database'
+// ── Applications — All job applications with search and filter ──
 
-const STATE_COLORS: Record<string, string> = {
-  listing_review: 'secondary',
-  qa_intake: 'default',
-  generating: 'default',
-  review: 'warning',
-  ready: 'success',
-  active: 'default',
-  ready_to_send: 'success',
-}
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Search, X, SlidersHorizontal, ChevronRight } from "lucide-react";
+import { JobCard } from "@/components/jobs/job-card";
+import { StatusBadge } from "@/components/jobs/status-badge";
+import { workflowToJob } from "@/lib/workflow-adapter";
+import type { ApplicationStatus, Workflow, Job } from "@/lib/types";
+
+const ALL_STATUSES: ApplicationStatus[] = [
+  "draft", "saved", "applied", "interviewing", "offer", "hired", "rejected",
+];
 
 export default function JobsPage() {
-  const router = useRouter()
-  const [workflows, setWorkflows] = useState<WorkflowWithRelations[]>([])
-  const [loading, setLoading] = useState(true)
-  const [listingUrl, setListingUrl] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState('')
-  const [showManual, setShowManual] = useState(false)
-  const [manualData, setManualData] = useState({ company_name: '', title: '', description: '', requirements: '' })
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<ApplicationStatus | "all">("all");
+  const [sortBy, setSortBy] = useState<"recent" | "status">("recent");
+  const [hasListings, setHasListings] = useState(false);
 
   useEffect(() => {
-    fetch('/api/workflows')
-      .then(r => r.json())
-      .then(data => {
-        const active = (Array.isArray(data) ? data : []).filter(
-          (w: WorkflowWithRelations) => !['sent', 'completed', 'archived'].includes(w.state)
-        )
-        setWorkflows(active)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
+    Promise.all([
+      fetch("/api/workflows?state=!listing_review").then(r => r.json()),
+      fetch("/api/workflows?state=listing_review").then(r => r.json()),
+    ]).then(([active, listings]) => {
+      if (Array.isArray(active)) setJobs(active.map(workflowToJob));
+      if (Array.isArray(listings)) setHasListings(listings.length > 0);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
-  const handleCreateFromUrl = async () => {
-    if (!listingUrl) return
-    if (!isValidUrl(listingUrl)) {
-      setError('Please enter a valid URL')
-      return
-    }
-
-    setCreating(true)
-    setError('')
-
-    try {
-      // Try to parse the listing via AI
-      const parseRes = await fetch('/api/listings/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: listingUrl }),
-      })
-
-      let listingData: Record<string, string> = {}
-      if (parseRes.ok) {
-        listingData = await parseRes.json()
-      }
-
-      const res = await fetch('/api/workflows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          listing_url: listingUrl,
-          company_name: listingData.company_name || 'Unknown Company',
-          title: listingData.title || 'Untitled Position',
-          description: listingData.description,
-          requirements: listingData.requirements,
-        }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error)
-        return
-      }
-
-      router.push(`/dashboard/jobs/${data.id}`)
-    } catch {
-      setError('Failed to create workflow')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const handleCreateManual = async () => {
-    if (!manualData.company_name || !manualData.title) {
-      setError('Company name and job title are required')
-      return
-    }
-
-    setCreating(true)
-    setError('')
-
-    try {
-      const res = await fetch('/api/workflows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(manualData),
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error)
-        return
-      }
-
-      router.push(`/dashboard/jobs/${data.id}`)
-    } catch {
-      setError('Failed to create workflow')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-12 w-full" />
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-20" />)}
-        </div>
-      </div>
-    )
-  }
+  const filtered = jobs
+    .filter((job) => {
+      const matchesSearch =
+        job.title.toLowerCase().includes(search.toLowerCase()) ||
+        job.company.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = activeFilter === "all" || job.status === activeFilter;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (sortBy === "status") return ALL_STATUSES.indexOf(a.status) - ALL_STATUSES.indexOf(b.status);
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Jobs" description="Track your job applications" />
+    <div className="page-wrapper max-w-1000px">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 mb-7">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Applications</h1>
+          <p className="text-slate-400 text-sm mt-0.5">{loading ? "Loading…" : `${jobs.length} total`}</p>
+        </div>
+        <Link
+          href={hasListings ? "/listings" : "/"}
+          className="flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
+        >
+          <span>+ New</span>
+        </Link>
+      </div>
 
-      {/* URL Input */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground-subtle" />
-              <Input
-                placeholder="Paste a job listing URL..."
-                value={listingUrl}
-                onChange={e => { setListingUrl(e.target.value); setError('') }}
-                className="pl-10"
-                onKeyDown={e => e.key === 'Enter' && handleCreateFromUrl()}
-              />
-            </div>
-            <Button onClick={handleCreateFromUrl} disabled={creating || !listingUrl}>
-              {creating ? 'Creating...' : 'Go'}
-            </Button>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline">Manual</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Job Manually</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <Input
-                    placeholder="Company name *"
-                    value={manualData.company_name}
-                    onChange={e => setManualData(d => ({ ...d, company_name: e.target.value }))}
-                  />
-                  <Input
-                    placeholder="Job title *"
-                    value={manualData.title}
-                    onChange={e => setManualData(d => ({ ...d, title: e.target.value }))}
-                  />
-                  <Input
-                    placeholder="Description"
-                    value={manualData.description}
-                    onChange={e => setManualData(d => ({ ...d, description: e.target.value }))}
-                  />
-                  <Input
-                    placeholder="Requirements"
-                    value={manualData.requirements}
-                    onChange={e => setManualData(d => ({ ...d, requirements: e.target.value }))}
-                  />
-                  <Button onClick={handleCreateManual} disabled={creating} className="w-full">
-                    {creating ? 'Creating...' : 'Create Application'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+      {/* Search + Sort */}
+      <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by title or company…"
+            className="form-input pl-9"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="w-4 h-4 text-slate-400 flex-shrink-0" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="form-input w-auto bg-white"
+          >
+            <option value="recent">Most recent</option>
+            <option value="status">By status</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Status filter chips */}
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-5">
+        <button
+          onClick={() => setActiveFilter("all")}
+          className={`flex-shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-all ${
+            activeFilter === "all"
+              ? "bg-slate-900 text-white border-slate-900"
+              : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+          }`}
+        >
+          All ({jobs.length})
+        </button>
+        {ALL_STATUSES.map((status) => {
+          const count = jobs.filter((j) => j.status === status).length;
+          if (count === 0) return null;
+          return (
+            <button key={status} onClick={() => setActiveFilter(status === activeFilter ? "all" : status)} className="flex-shrink-0">
+              <StatusBadge status={status} size="sm" />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Results */}
+      {loading ? (
+        <div className="space-y-2.5">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-24 bg-white border border-slate-200 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+            <Search className="w-5 h-5 text-slate-400" />
           </div>
-          {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-        </CardContent>
-      </Card>
-
-      {/* Job list */}
-      {workflows.length === 0 ? (
-        <EmptyState
-          icon={Briefcase}
-          title="It's a Ghost Town Around Here..."
-          description="Paste a job listing URL above to start your first application."
-        />
+          <h3 className="font-semibold text-slate-700 mb-1">No applications found</h3>
+          <p className="text-slate-400 text-sm">
+            {search ? `No results for "${search}"` : jobs.length === 0 ? "Start your first application from the home page." : "Try a different filter"}
+          </p>
+          <Link href="/" className="inline-flex items-center gap-2 mt-4 text-sm text-slate-600 hover:text-slate-900 transition-colors">
+            Start a new application <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {workflows.map(w => (
-            <Link key={w.id} href={`/dashboard/jobs/${w.id}`}>
-              <Card className="transition-all duration-fast hover:border-accent/30 cursor-pointer">
-                <CardContent className="flex items-center justify-between p-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-foreground">{w.title}</p>
-                      <Badge variant={STATE_COLORS[w.state] as 'default' | 'secondary' | 'success' | 'warning' || 'secondary'}>
-                        {w.state.replace(/_/g, ' ')}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-foreground-muted">
-                      {w.listing?.location && `${w.listing.location} · `}
-                      Updated {formatRelativeTime(w.updated_at)}
-                    </p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-foreground-subtle" />
-                </CardContent>
-              </Card>
-            </Link>
+        <div className="space-y-2.5">
+          {filtered.map((job) => (
+            <div key={job.id}>
+              <JobCard job={job} />
+            </div>
           ))}
         </div>
       )}
     </div>
-  )
+  );
 }
