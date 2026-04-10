@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+)
+
+// Status dependency rules from spec
+const STATUS_DEPENDENCIES: Record<string, string[]> = {
+  interview: ['sent'],
+  negotiation: ['interview', 'offer'],
+  declined: ['offer'],
+  offer: ['received', 'interview'],
+  hired: ['offer', 'negotiation'],
+}
+
+async function getAccountId() {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+  )
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data: account } = await supabaseAdmin
+    .from('accounts').select('id').eq('supabase_auth_id', user.id).single()
+  return account?.id ?? null
+}
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const accountId = await getAccountId()
+  if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+
+  const { data, error } = await supabaseAdmin
+    .from('status_events')
+    .select('*')
+    .eq('workflow_id', id)
+    .eq('account_id', accountId)
+    .order('occurred_at', { ascending: false })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const accountId = await getAccountId()
+  if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const body = await request.json()
+  const { event_type, notes } = body
+
+  // Check dependencies
+  const requiredStatuses = STATUS_DEPENDENCIES[event_type]
+  if (requiredStatuses) {
+    const { data: existing } = await supabaseAdmin
+      .from('status_events')
+      .select('event_type')
+      .eq('workflow_id', id)
+      .eq('is_current', true)
+
+    const currentTypes = new Set(existing?.map(e => e.event_type))
+    const missing = requiredStatuses.filter(s => !currentTypes.has(s))
+
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Cannot set "${event_type}" without: ${missing.join(', ')}` },
+        { status: 400 }
+      )
+    }
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('status_events')
+    .insert({
+      workflow_id: id,
+      account_id: accountId,
+      event_type,
+      notes,
+      is_current: true,
+    })
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // Update workflow state if needed
+  if (event_type === 'sent') {
+    await supabaseAdmin
+      .from('workflows')
+      .update({ state: 'sent', sent_at: new Date().toISOString() })
+      .eq('id', id)
+  } else if (event_type === 'hired') {
+    await supabaseAdmin
+      .from('workflows')
+      .update({ state: 'completed' })
+      .eq('id', id)
+  }
+
+  return NextResponse.json(data, { status: 201 })
+}

@@ -1,0 +1,220 @@
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import {
+  Home, Briefcase, CheckCircle, Send, User,
+  ChevronLeft, ChevronRight, Moon, Sun, LogOut,
+  Settings, Shield,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useTheme } from '@/app/providers'
+import { useSession } from '@/hooks/use-session'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu'
+import { getInitials } from '@/lib/utils'
+
+const NAV_ITEMS = [
+  { label: 'Home', href: '/dashboard', icon: Home },
+  { label: 'Jobs', href: '/dashboard/jobs', icon: Briefcase },
+  { label: 'Ready', href: '/dashboard/ready', icon: CheckCircle },
+  { label: 'Sent', href: '/dashboard/sent', icon: Send },
+]
+
+interface SidebarProps {
+  collapsed: boolean
+  onToggle: () => void
+}
+
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const pathname = usePathname()
+  const { resolvedTheme, toggleTheme } = useTheme()
+  const { user } = useSession()
+
+  const handleSignOut = async () => {
+    await fetch('/api/auth/login', { method: 'DELETE' })
+    window.location.href = '/login'
+  }
+
+  return (
+    <aside
+      className={cn(
+        'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-object transition-all duration-standard',
+        collapsed ? 'w-16' : 'w-60'
+      )}
+    >
+      {/* Logo */}
+      <div className="flex h-14 items-center justify-between px-4">
+        {!collapsed && (
+          <Link href="/dashboard" className="text-lg font-bold text-accent">
+            DreamJob
+          </Link>
+        )}
+        <button
+          onClick={onToggle}
+          className="rounded-[8px] p-1.5 text-foreground-muted hover:bg-utility hover:text-foreground transition-colors"
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <Separator />
+
+      {/* Main Nav */}
+      <nav className="flex-1 space-y-1 p-2">
+        {NAV_ITEMS.map(item => {
+          const isActive = item.href === '/dashboard'
+            ? pathname === '/dashboard'
+            : pathname.startsWith(item.href)
+
+          const link = (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+                isActive
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-foreground-muted hover:bg-utility hover:text-foreground'
+              )}
+            >
+              <item.icon className="h-5 w-5 shrink-0" />
+              {!collapsed && <span>{item.label}</span>}
+            </Link>
+          )
+
+          if (collapsed) {
+            return (
+              <Tooltip key={item.href}>
+                <TooltipTrigger asChild>{link}</TooltipTrigger>
+                <TooltipContent side="right">{item.label}</TooltipContent>
+              </Tooltip>
+            )
+          }
+
+          return link
+        })}
+
+        {/* Admin link for internal roles */}
+        {user && ['super_admin', 'admin'].includes(user.activeRole) && (
+          <>
+            <Separator className="my-2" />
+            {(() => {
+              const isActive = pathname.startsWith('/dashboard/admin')
+              const link = (
+                <Link
+                  href="/dashboard/admin"
+                  className={cn(
+                    'flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+                    isActive
+                      ? 'bg-accent/10 text-accent'
+                      : 'text-foreground-muted hover:bg-utility hover:text-foreground'
+                  )}
+                >
+                  <Shield className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span>Admin</span>}
+                </Link>
+              )
+              if (collapsed) {
+                return (
+                  <Tooltip>
+                    <TooltipTrigger asChild>{link}</TooltipTrigger>
+                    <TooltipContent side="right">Admin</TooltipContent>
+                  </Tooltip>
+                )
+              }
+              return link
+            })()}
+          </>
+        )}
+      </nav>
+
+      {/* Bottom section */}
+      <div className="space-y-1 p-2">
+        {/* Profile Link */}
+        {(() => {
+          const isActive = pathname.startsWith('/dashboard/profile')
+          const link = (
+            <Link
+              href="/dashboard/profile"
+              className={cn(
+                'flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm font-medium transition-colors duration-fast',
+                isActive
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-foreground-muted hover:bg-utility hover:text-foreground'
+              )}
+            >
+              <User className="h-5 w-5 shrink-0" />
+              {!collapsed && <span>Profile</span>}
+            </Link>
+          )
+          if (collapsed) {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>{link}</TooltipTrigger>
+                <TooltipContent side="right">Profile</TooltipContent>
+              </Tooltip>
+            )
+          }
+          return link
+        })()}
+
+        <Separator className="my-2" />
+
+        {/* User Menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-sm transition-colors hover:bg-utility">
+              <Avatar size="sm">
+                <AvatarImage src={user?.account.avatar_url ?? undefined} />
+                <AvatarFallback>
+                  {getInitials(user?.account.display_name ?? 'U')}
+                </AvatarFallback>
+              </Avatar>
+              {!collapsed && (
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {user?.account.display_name ?? 'User'}
+                  </p>
+                  <p className="text-xs text-foreground-subtle truncate">
+                    {user?.activeRole.replace('_', ' ')}
+                  </p>
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-56">
+            <DropdownMenuLabel>
+              {user?.account.display_name}
+              <span className="block text-xs font-normal text-foreground-muted">
+                {user?.account.email}
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={toggleTheme}>
+              {resolvedTheme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+              {resolvedTheme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/profile/settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </aside>
+  )
+}

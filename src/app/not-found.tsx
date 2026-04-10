@@ -1,0 +1,20 @@
+import Link from 'next/link'
+
+export default function NotFound() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="text-center">
+        <h1 className="text-6xl font-bold text-foreground-subtle">404</h1>
+        <p className="mt-4 text-lg text-foreground-muted">
+          This page doesn&apos;t exist.
+        </p>
+        <Link
+          href="/dashboard"
+          className="mt-6 inline-block rounded-sm bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-dark"
+        >
+          Back to DreamJob
+        </Link>
+      </div>
+    </div>
+  )
+}
