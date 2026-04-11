@@ -51,8 +51,8 @@ function LoginForm() {
       {/* Card */}
       <div className="login-card">
         <div className="login-card-header">
-          <h1 className="login-title">Welcome back</h1>
-          <p className="login-subtitle">Sign in to continue to your account</p>
+          <h1 className="login-title">Begin Your Pursuit</h1>
+          <p className="login-subtitle">Find Your Dream Job</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form" noValidate>
@@ -116,7 +116,7 @@ function LoginForm() {
 
       {/* Footer */}
       <p className="login-footer">
-        AI-assisted job applications · DreamJob
+        AI-assisted Job Application Materials · DreamJob
       </p>
     </>
   )

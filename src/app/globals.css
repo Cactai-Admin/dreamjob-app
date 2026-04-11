@@ -277,14 +277,14 @@
     max-width: 400px;
     padding: 24px 16px;
     gap: 20px;
-    isolation: isolate;
-    transform: translateZ(0);
+    background: green !important;
   }
 
   .login-brand {
     display: flex;
     align-items: center;
     gap: 10px;
+    background: blue !important;
   }
 
   .login-brand-icon {
@@ -316,11 +316,13 @@
     width: 100%;
     border-radius: 20px;
     padding: 32px;
-    background: rgba(20, 20, 20, 0.75);
+    background: red !important;
+    
     border: 1px solid rgba(255,255,255,0.12);
     will-change: transform;
     transform: translateZ(0);
   }
+##background: ##rgba(20, 20, 20, 0.75);
 
   .login-card-header {
     margin-bottom: 24px;
