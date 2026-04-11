@@ -14,8 +14,8 @@ import { useEffect, useRef } from 'react'
 const TOTAL   = 200
 const MAX_DEG = 8    // max tilt degrees
 const FOV     = 200  // perspective distance for dot projection (px)
-const Z_MIN   = -1400
-const Z_NEAR  = FOV - 2  // clip just before the eye
+const Z_MIN   = -1000
+const Z_NEAR  = FOV - 5  // clip just before the eye
 
 function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -52,7 +52,7 @@ export function LoginBg() {
         y:      rand(0, h),
         z:      zStart + range * (i / TOTAL),
         zStart,
-        size:   rand(1, 8),
+        size:   rand(2, 20),
         hue:    i * 1.8,
       }
     })
@@ -64,7 +64,7 @@ export function LoginBg() {
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
-        dot.z += 3
+        dot.z += 8
 
         if (dot.z >= Z_NEAR) {
           dot.z = dot.zStart
@@ -81,7 +81,7 @@ export function LoginBg() {
         // Cull dots that project off-screen (enormous near the eye)
         if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
 
-        const r = Math.max(0.3, dot.size * scale * 0.06)
+        const r = Math.max(0.5, dot.size * scale * 0.4)
 
         // Fade in from back; fully opaque in the front half of the z range
         const progress = (dot.z - dot.zStart) / (Z_NEAR - dot.zStart)
