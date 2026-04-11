@@ -248,14 +248,13 @@
     animation: fadeIn 180ms ease forwards;
   }
 
-  /* ── Login page (starfield background, glassmorphism card) ── */
+  /* ── Login page ── */
   .login-root {
     position: relative;
     min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
     background: #000;
   }
 
@@ -306,15 +305,8 @@
     width: 100%;
     border-radius: 20px;
     padding: 32px;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.14);
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.04),
-      0 8px 40px rgba(0,0,0,0.6),
-      0 2px 12px rgba(0,0,0,0.3);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    isolation: isolate;
+    background: rgba(20, 20, 20, 0.75);
+    border: 1px solid rgba(255,255,255,0.12);
   }
 
   .login-card-header {
@@ -358,24 +350,18 @@
     padding: 10px 14px;
     border-radius: 12px;
     font-size: 14px;
-    background: rgba(255,255,255,0.10);
-    color: rgba(255,255,255,0.9);
-    border: 1px solid rgba(255,255,255,0.18);
-    transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
     outline: none;
   }
 
   .login-input::placeholder {
-    color: rgba(255,255,255,0.35);
+    color: rgba(255,255,255,0.3);
   }
 
   .login-input:disabled {
     opacity: 0.5;
-  }
-
-  .login-input:focus {
-    border-color: rgba(14, 165, 233, 0.7);
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
   }
 
   .login-error {
@@ -408,7 +394,6 @@
     font-size: 14px;
     font-weight: 600;
     letter-spacing: 0.01em;
-    transition: all 150ms ease;
     margin-top: 4px;
     cursor: pointer;
     border: none;
@@ -417,17 +402,6 @@
   .login-submit-ready {
     background: #fff;
     color: #0f172a;
-  }
-
-  .login-submit-ready:hover {
-    opacity: 0.92;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 20px rgba(255,255,255,0.15);
-  }
-
-  .login-submit-ready:active {
-    transform: translateY(0);
-    box-shadow: none;
   }
 
   .login-submit-disabled {
