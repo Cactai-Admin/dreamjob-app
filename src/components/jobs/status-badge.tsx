@@ -11,6 +11,7 @@ interface Props {
 }
 
 const statusConfig: Record<ApplicationStatus, { label: string; className: string; dot: string }> = {
+  draft:        { label: "Draft",        className: "bg-slate-100 text-slate-500 border-slate-200",   dot: "bg-slate-400" },
   ready:        { label: "Ready",        className: "bg-blue-50 text-blue-600 border-blue-200",       dot: "bg-blue-500" },
   applied:      { label: "Applied",      className: "bg-sky-50 text-sky-700 border-sky-200",           dot: "bg-sky-500" },
   received:     { label: "Received",     className: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },

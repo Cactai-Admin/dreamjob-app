@@ -21,13 +21,13 @@ const STATUS_LABELS: Record<ApplicationStatus, string> = {
 };
 
 const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  ready: "bg-blue-400", applied: "bg-sky-500", received: "bg-violet-500",
+  draft: "bg-slate-300", ready: "bg-blue-400", applied: "bg-sky-500", received: "bg-violet-500",
   interviewing: "bg-amber-400", offer: "bg-emerald-500", negotiating: "bg-teal-500",
   hired: "bg-green-600", declined: "bg-orange-400", ghosted: "bg-slate-300", rejected: "bg-red-400",
 };
 
 const STATUS_TEXT: Record<ApplicationStatus, string> = {
-  ready: "text-blue-700", applied: "text-sky-700", received: "text-violet-700",
+  draft: "text-slate-500", ready: "text-blue-700", applied: "text-sky-700", received: "text-violet-700",
   interviewing: "text-amber-700", offer: "text-emerald-700", negotiating: "text-teal-700",
   hired: "text-green-700", declined: "text-orange-700", ghosted: "text-slate-500", rejected: "text-red-700",
 };
