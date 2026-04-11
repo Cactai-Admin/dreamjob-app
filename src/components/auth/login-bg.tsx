@@ -2,20 +2,22 @@
 
 import { useEffect, useRef } from 'react'
 
-// ── Canvas starfield with streak rendering ────────────────────────────────────
-// Each dot draws a line from its previous projected position to its current
-// one, giving the classic 3-D warp-tunnel look. One canvas = one GPU layer,
-// so the login column never flashes.
+// ── Canvas port of the original TweenMax starfield ────────────────────────────
+// Matches the original exactly:
+//   - 200 dots, hsla(i*1.8, 50%, 50%) colors, size 2–30 px
+//   - box-shadow glow via ctx.shadowBlur
+//   - z: random(-1000,-200) → 500 over 3 s (8.33 units/frame at 60 fps)
+//   - opacity 0→1 as z travels from start to 500
+//   - perspectiveOrigin parallax = vanishing-point shift in projection math
 //
-// Mouse/tilt moves the vanishing point — dots radiate toward the cursor.
+// Canvas keeps it all in one GPU texture so the login column never flashes.
 
-const TOTAL   = 200
-const FOV     = 260  // perspective (higher = less extreme zoom)
-const Z_MIN   = -1200
-const Z_NEAR  = FOV - 4
-const SPEED   = 2    // z units per frame — slow and cinematic
+const TOTAL = 200
+const FOV   = 200                     // perspective: 200px
+const SPEED = 1500 / (3 * 60)        // 1500 z-units / 3 s / 60 fps ≈ 8.33
+const Z_END = 500                     // same end point as original
 
-const PARALLAX_STRENGTH = 0.3
+const PARALLAX_STRENGTH = 0.35
 
 function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -43,87 +45,82 @@ export function LoginBg() {
     canvas.width  = w
     canvas.height = h
 
-    // Vanishing point (smoothed)
+    // Vanishing point — starts at center, eases toward cursor
     let vx = cx, vy = cy
     let tvx = cx, tvy = cy
 
-    // Stagger initial z across full depth so all layers populate on frame 1
+    // Build dots and stagger their initial z so all depths are full on frame 1
     const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
-      const zStart = rand(Z_MIN, -80)
-      const range  = Z_NEAR - zStart
+      const zStart = rand(-1000, -200)
+      const range  = Z_END - zStart
       return {
         x:      rand(0, w),
         y:      rand(0, h),
-        z:      zStart + range * (i / TOTAL),
+        z:      zStart + range * (i / TOTAL),   // staggered like delay: i * -.015
         zStart,
-        size:   rand(1, 6),
+        size:   rand(2, 30),
         hue:    i * 1.8,
       }
     })
 
     let animId = 0
 
-    function project(dot: Dot, z: number, vpx: number, vpy: number) {
-      const scale = FOV / (FOV - z)
-      return {
-        px: (dot.x - vpx) * scale + vpx,
-        py: (dot.y - vpy) * scale + vpy,
-        scale,
-      }
-    }
-
     function draw() {
       // Ease vanishing point toward target
-      vx += (tvx - vx) * 0.05
-      vy += (tvy - vy) * 0.05
+      vx += (tvx - vx) * 0.06
+      vy += (tvy - vy) * 0.06
 
-      // Fade trail — semi-transparent black fill instead of clearRect
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.18)'
+      ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
-        const prevZ = dot.z
         dot.z += SPEED
 
-        if (dot.z >= Z_NEAR) {
+        // Reset — same as TweenMax repeat: -1
+        if (dot.z >= Z_END) {
           dot.z = dot.zStart
           dot.x = rand(0, w)
           dot.y = rand(0, h)
           continue
         }
 
-        const cur  = project(dot, dot.z, vx, vy)
-        const prev = project(dot, prevZ,  vx, vy)
+        // Skip dots past the eye (would produce negative/infinite scale)
+        if (dot.z >= FOV) continue
 
-        if (cur.scale <= 0) continue
-        if (cur.px < -w || cur.px > 2 * w || cur.py < -h || cur.py > 2 * h) continue
+        const scale = FOV / (FOV - dot.z)
 
-        const progress = (dot.z - dot.zStart) / (Z_NEAR - dot.zStart)
-        const alpha    = Math.min(1, progress * 1.8)
-        const width    = Math.max(0.3, dot.size * cur.scale * 0.07)
+        // Project from vanishing point (perspectiveOrigin equivalent)
+        const px = (dot.x - vx) * scale + vx
+        const py = (dot.y - vy) * scale + vy
 
-        // Draw streak from previous projected position to current
+        // Cull off-screen
+        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
+
+        // Opacity 0→1 over the journey, matching TweenMax fromTo opacity
+        const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
+
+        const r     = Math.max(0.3, (dot.size / 2) * scale)
+        const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
+
+        // Glow — matches box-shadow: 0 0 ${size}px ${color}
+        ctx.shadowBlur  = dot.size * scale
+        ctx.shadowColor = color
+
         ctx.beginPath()
-        ctx.moveTo(prev.px, prev.py)
-        ctx.lineTo(cur.px,  cur.py)
-        ctx.strokeStyle = `hsla(${dot.hue}, 70%, 65%, ${alpha})`
-        ctx.lineWidth   = width
-        ctx.lineCap     = 'round'
-        ctx.stroke()
-
-        // Bright point at the leading tip
-        ctx.beginPath()
-        ctx.arc(cur.px, cur.py, width * 0.8, 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(${dot.hue}, 80%, 80%, ${alpha})`
+        ctx.arc(px, py, r, 0, Math.PI * 2)
+        ctx.fillStyle = color
         ctx.fill()
       }
+
+      // Reset shadow so it doesn't bleed into the next fillRect
+      ctx.shadowBlur = 0
 
       animId = requestAnimationFrame(draw)
     }
 
     draw()
 
-    // ── Vanishing-point input handlers ────────────────────────────────────────
+    // ── Mouse / touch — moves the vanishing point (perspectiveOrigin equiv) ──
     function setVanish(x: number, y: number) {
       tvx = cx + (x - cx) * PARALLAX_STRENGTH
       tvy = cy + (y - cy) * PARALLAX_STRENGTH
@@ -132,8 +129,7 @@ export function LoginBg() {
     function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
 
     let orientationActive = false
-    const GAMMA_RANGE = 35
-    const BETA_RANGE  = 35
+    const GAMMA_RANGE = 35, BETA_RANGE = 35
 
     function handleOrientation(e: DeviceOrientationEvent) {
       const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
