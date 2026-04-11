@@ -2,144 +2,128 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Zap, AlertCircle, Loader2 } from 'lucide-react'
+import { Zap, AlertCircle, ArrowRight, Loader2 } from 'lucide-react'
 
 function LoginForm() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/jobs'
+  const router      = useRouter()
+  const params      = useSearchParams()
+  const redirectTo  = params.get('redirect') || '/jobs'
 
   const [identifier, setIdentifier] = useState('')
-  const [password, setPassword]     = useState('')
-  const [error, setError]           = useState('')
-  const [loading, setLoading]       = useState(false)
+  const [password,   setPassword]   = useState('')
+  const [error,      setError]      = useState('')
+  const [loading,    setLoading]    = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
+      const res  = await fetch('/api/auth/login', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        body:    JSON.stringify({ identifier, password }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Invalid credentials'); return }
       router.push(redirectTo)
       router.refresh()
     } catch {
-      setError('An unexpected error occurred. Please try again.')
+      setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
+  const ready = identifier.trim() && password && !loading
+
   return (
-    <div
-      className="min-h-dvh flex flex-col items-center justify-center px-4"
-      style={{ background: 'var(--color-bg)' }}
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-2.5 mb-8">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center"
-          style={{ background: 'var(--color-text)' }}
-        >
-          <Zap className="w-5 h-5" style={{ color: 'var(--color-bg)' }} />
+    <div className="login-root">
+      {/* ── Animated background (populated via login-bg class) ── */}
+      <div className="login-bg" aria-hidden="true" />
+
+      {/* ── Centered column ─────────────────────────────────── */}
+      <div className="login-column">
+
+        {/* Brand */}
+        <div className="login-brand">
+          <div className="login-brand-icon">
+            <Zap className="login-brand-zap" />
+          </div>
+          <span className="login-brand-name">DreamJob</span>
         </div>
-        <span
-          className="text-xl font-bold tracking-tight"
-          style={{ color: 'var(--color-text)' }}
-        >
-          DreamJob
-        </span>
-      </div>
 
-      {/* Card */}
-      <div
-        className="w-full max-w-sm rounded-2xl p-8"
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-raw)',
-        }}
-      >
-        <h1
-          className="text-lg font-semibold mb-1"
-          style={{ color: 'var(--color-text)' }}
-        >
-          Sign in
-        </h1>
-        <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>
-          Enter your credentials to continue
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="form-label">Username</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="Super Admin"
-              value={identifier}
-              onChange={e => { setIdentifier(e.target.value); setError('') }}
-              autoComplete="username"
-              autoFocus
-              disabled={loading}
-              required
-            />
-          </div>
-          <div>
-            <label className="form-label">Password</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => { setPassword(e.target.value); setError('') }}
-              autoComplete="current-password"
-              disabled={loading}
-              required
-            />
+        {/* Card */}
+        <div className="login-card">
+          <div className="login-card-header">
+            <h1 className="login-title">Welcome back</h1>
+            <p className="login-subtitle">Sign in to continue to your account</p>
           </div>
 
-          {error && (
-            <div
-              className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-sm"
-              style={{
-                background: 'rgba(224,46,42,0.08)',
-                border: '1px solid rgba(224,46,42,0.2)',
-                color: 'var(--color-error)',
-              }}
-            >
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              {error}
+          <form onSubmit={handleSubmit} className="login-form" noValidate>
+            <div className="login-field">
+              <label htmlFor="identifier" className="login-label">Username</label>
+              <input
+                id="identifier"
+                type="text"
+                className="login-input"
+                placeholder="Enter your username"
+                value={identifier}
+                onChange={e => { setIdentifier(e.target.value); setError('') }}
+                autoComplete="username"
+                autoFocus
+                disabled={loading}
+                required
+              />
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={loading || !identifier || !password}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2"
-            style={{
-              background: loading || !identifier || !password
-                ? 'var(--color-surface-secondary)'
-                : 'var(--color-text)',
-              color: loading || !identifier || !password
-                ? 'var(--color-text-muted)'
-                : 'var(--color-bg)',
-              cursor: loading || !identifier || !password ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+            <div className="login-field">
+              <label htmlFor="password" className="login-label">Password</label>
+              <input
+                id="password"
+                type="password"
+                className="login-input"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError('') }}
+                autoComplete="current-password"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="login-error" role="alert">
+                <AlertCircle className="login-error-icon" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={!ready}
+              className={`login-submit ${ready ? 'login-submit-ready' : 'login-submit-disabled'}`}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="login-submit-icon animate-spin" />
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="login-submit-icon" />
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <p className="login-footer">
+          AI-assisted job applications · DreamJob
+        </p>
       </div>
-
-      <p className="mt-6 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        DreamJob · AI-assisted job application support
-      </p>
     </div>
   )
 }
@@ -147,8 +131,11 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-dvh flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+      <div className="login-root">
+        <div className="login-bg" aria-hidden="true" />
+        <div className="login-column">
+          <Loader2 className="animate-spin" style={{ color: 'var(--color-text-muted)', width: 20, height: 20 }} />
+        </div>
       </div>
     }>
       <LoginForm />

@@ -282,6 +282,217 @@
     border-radius: 8px;
   }
 
+  /* ── Login page ────────────────────────────────────────── */
+  .login-root {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--color-bg);
+  }
+
+  /* Placeholder layer — replaced by animated background CSS */
+  .login-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: var(--color-bg);
+    /* animated background will be added here */
+  }
+
+  .login-column {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
+    padding: 24px 16px;
+    gap: 20px;
+  }
+
+  .login-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .login-brand-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .login-brand-zap {
+    width: 18px;
+    height: 18px;
+    color: var(--color-bg);
+  }
+
+  .login-brand-name {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+  }
+
+  .login-card {
+    width: 100%;
+    border-radius: 20px;
+    padding: 32px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-raw);
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.03),
+      0 8px 32px rgba(0,0,0,0.08),
+      0 2px 8px rgba(0,0,0,0.04);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .dark .login-card {
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 8px 32px rgba(0,0,0,0.4),
+      0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  .login-card-header {
+    margin-bottom: 24px;
+  }
+
+  .login-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    margin-bottom: 4px;
+  }
+
+  .login-subtitle {
+    font-size: 14px;
+    color: var(--color-text-muted);
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .login-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.01em;
+  }
+
+  .login-input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-raw);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    outline: none;
+  }
+
+  .login-input::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  .login-input:focus {
+    border-color: var(--color-accent-raw);
+    box-shadow: 0 0 0 3px rgba(2, 133, 255, 0.15);
+  }
+
+  .login-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    background: rgba(255, 133, 131, 0.1);
+    border: 1px solid rgba(255, 133, 131, 0.25);
+    color: var(--color-error);
+  }
+
+  .login-error-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .login-submit {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all 150ms ease;
+    margin-top: 4px;
+    cursor: pointer;
+    border: none;
+  }
+
+  .login-submit-ready {
+    background: var(--color-text);
+    color: var(--color-bg);
+  }
+
+  .login-submit-ready:hover {
+    opacity: 0.88;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  }
+
+  .login-submit-ready:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+
+  .login-submit-disabled {
+    background: var(--color-surface-secondary);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+  }
+
+  .login-submit-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+  }
+
+  .login-footer {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    text-align: center;
+    opacity: 0.7;
+  }
+
   .workflow-stage {
     @apply min-h-[calc(100vh-52px)] flex items-center justify-center px-4;
   }
