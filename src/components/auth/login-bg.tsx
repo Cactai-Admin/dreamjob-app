@@ -45,78 +45,80 @@ export function LoginBg() {
           { opacity: 1, transform: `translate3d(${x}px, ${y}px, 500px)` },
         ],
         {
-          duration: 3000,
+          duration:   3000,
           iterations: Infinity,
-          delay: i * -15,
-          easing: 'linear',
+          delay:      i * -15,
+          easing:     'linear',
         }
       )
       anims.push(anim)
     }
 
-    // ── Mouse / touch parallax ─────────────────────────────────────────────
+    // ── Shared perspective setter ───────────────────────────────────────────
     function setPerspective(x: number, y: number) {
       if (wrap) wrap.style.perspectiveOrigin = `${x}px ${y}px`
     }
 
+    // ── Desktop: mouse → perspective ────────────────────────────────────────
     function handleMouse(e: MouseEvent) {
       setPerspective(e.clientX, e.clientY)
     }
 
-    function handleTouch(e: TouchEvent) {
-      setPerspective(e.touches[0].clientX, e.touches[0].clientY)
-    }
-
-    // ── Device orientation parallax (mobile tilt) ──────────────────────────
+    // ── Mobile: device orientation (tilt) → perspective ─────────────────────
+    // This is the primary parallax on mobile. Touch-position fallback is only
+    // used when no gyroscope / orientation API is available.
     let orientationActive = false
 
     function handleOrientation(e: DeviceOrientationEvent) {
-      if (!orientationActive) return
-      // gamma: left-right tilt (-90…90), beta: front-back tilt (-180…180)
+      // gamma: left-right tilt  (-90 … 90)
+      // beta:  front-back tilt  (-180 … 180, clamped to -90 … 90)
       const gamma = e.gamma ?? 0
       const beta  = Math.min(Math.max(e.beta ?? 0, -90), 90)
       const x = ((gamma + 90) / 180) * window.innerWidth
       const y = ((beta  + 90) / 180) * window.innerHeight
       setPerspective(x, y)
+      orientationActive = true
     }
 
-    async function requestOrientationPermission() {
-      // iOS 13+ requires explicit permission
-      const DOE = DeviceOrientationEvent as unknown as {
-        requestPermission?: () => Promise<'granted' | 'denied'>
-      }
+    // Touch fallback — only used when orientation hasn't fired yet
+    function handleTouch(e: TouchEvent) {
+      if (orientationActive) return   // tilt is in control — ignore touch position
+      setPerspective(e.touches[0].clientX, e.touches[0].clientY)
+    }
+
+    function attachOrientation() {
+      window.addEventListener('deviceorientation', handleOrientation)
+    }
+
+    // Attach orientation listener —————————————————————————————————————————
+    const DOE = DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<'granted' | 'denied'>
+    }
+
+    if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
-        try {
-          const result = await DOE.requestPermission()
-          if (result === 'granted') {
-            orientationActive = true
-            window.addEventListener('deviceorientation', handleOrientation)
-          }
-        } catch { /* permission denied or not available */ }
-      } else if (typeof DeviceOrientationEvent !== 'undefined') {
-        // Android / non-gated browsers — just attach
-        orientationActive = true
-        window.addEventListener('deviceorientation', handleOrientation)
+        // iOS 13+: must be called from a user-gesture handler
+        const requestOnTouch = async () => {
+          try {
+            const result = await DOE.requestPermission!()
+            if (result === 'granted') attachOrientation()
+          } catch { /* denied or unavailable */ }
+        }
+        window.addEventListener('touchstart', requestOnTouch, { once: true, passive: true })
+      } else {
+        // Android and other non-gated browsers: attach immediately
+        attachOrientation()
       }
-    }
-
-    // Request on first touch (user gesture required for iOS)
-    let orientationRequested = false
-    function onFirstTouch() {
-      if (orientationRequested) return
-      orientationRequested = true
-      requestOrientationPermission()
     }
 
     window.addEventListener('mousemove',  handleMouse)
-    window.addEventListener('touchstart', handleTouch,   { passive: true })
-    window.addEventListener('touchmove',  handleTouch,   { passive: true })
-    window.addEventListener('touchstart', onFirstTouch,  { passive: true, once: true })
+    window.addEventListener('touchstart', handleTouch, { passive: true })
+    window.addEventListener('touchmove',  handleTouch, { passive: true })
 
     return () => {
-      window.removeEventListener('mousemove',       handleMouse)
-      window.removeEventListener('touchstart',      handleTouch)
-      window.removeEventListener('touchmove',       handleTouch)
+      window.removeEventListener('mousemove',        handleMouse)
+      window.removeEventListener('touchstart',       handleTouch)
+      window.removeEventListener('touchmove',        handleTouch)
       window.removeEventListener('deviceorientation', handleOrientation)
       anims.forEach(a => a.cancel())
       dots.forEach(d => d.remove())
@@ -128,14 +130,14 @@ export function LoginBg() {
       ref={wrapRef}
       aria-hidden="true"
       style={{
-        position:        'fixed',
-        inset:           0,
-        background:      '#000',
-        overflow:        'hidden',
-        perspective:     '200px',
-        transformStyle:  'preserve-3d',
-        zIndex:          0,
-        pointerEvents:   'none', // excluded from hit-testing — prevents hover repaint flash
+        position:       'fixed',
+        inset:          0,
+        background:     '#000',
+        overflow:       'hidden',
+        perspective:    '200px',
+        transformStyle: 'preserve-3d',
+        zIndex:         0,
+        pointerEvents:  'none',
       }}
     />
   )
