@@ -318,6 +318,8 @@
     padding: 32px;
     background: rgba(20, 20, 20, 0.75);
     border: 1px solid rgba(255,255,255,0.12);
+    will-change: transform;
+    transform: translateZ(0);
   }
 
   .login-card-header {
