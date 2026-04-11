@@ -367,6 +367,8 @@
     color: #fff;
     border: 1px solid rgba(255,255,255,0.15);
     outline: none;
+    will-change: transform;
+    transform: translateZ(0);
   }
 
   .login-input:focus {
