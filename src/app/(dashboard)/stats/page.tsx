@@ -10,12 +10,12 @@ import { workflowToJob } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Workflow, Job } from "@/lib/types";
 
 const STATUS_ORDER: ApplicationStatus[] = [
-  "ready", "applied", "received", "interviewing", "offer", "negotiating",
+  "draft", "ready", "applied", "received", "interviewing", "offer", "negotiating",
   "hired", "declined", "ghosted", "rejected",
 ];
 
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  ready: "Ready", applied: "Applied", received: "Received",
+  draft: "Draft", ready: "Ready", applied: "Applied", received: "Received",
   interviewing: "Interviewing", offer: "Offer", negotiating: "Negotiating",
   hired: "Hired", declined: "Declined", ghosted: "Ghosted", rejected: "Rejected",
 };

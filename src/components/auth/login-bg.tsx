@@ -2,21 +2,20 @@
 
 import { useEffect, useRef } from 'react'
 
-// ── Canvas-based starfield ────────────────────────────────────────────────────
-// Single <canvas> = one GPU layer, no compositor conflicts with login column.
+// ── Canvas starfield with streak rendering ────────────────────────────────────
+// Each dot draws a line from its previous projected position to its current
+// one, giving the classic 3-D warp-tunnel look. One canvas = one GPU layer,
+// so the login column never flashes.
 //
-// Mouse/tilt parallax: the vanishing point (vx, vy) tracks the cursor.
-// Dots radiate outward from that point — moving the mouse shifts the flow
-// direction, giving the same "camera panning" feel as the original DOM version.
+// Mouse/tilt moves the vanishing point — dots radiate toward the cursor.
 
-const TOTAL  = 200
-const FOV    = 200   // perspective distance (px)
-const Z_MIN  = -1000
-const Z_NEAR = FOV - 5
-const SPEED  = 4     // z units per frame (~3s to traverse full depth at 60fps)
+const TOTAL   = 200
+const FOV     = 260  // perspective (higher = less extreme zoom)
+const Z_MIN   = -1200
+const Z_NEAR  = FOV - 4
+const SPEED   = 2    // z units per frame — slow and cinematic
 
-// How far the vanishing point drifts toward the cursor (0 = fixed center, 1 = full cursor)
-const PARALLAX_STRENGTH = 0.35
+const PARALLAX_STRENGTH = 0.3
 
 function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -44,63 +43,78 @@ export function LoginBg() {
     canvas.width  = w
     canvas.height = h
 
-    // Vanishing point — starts at center, drifts toward cursor/tilt
-    let vx = cx
-    let vy = cy
-    // Smoothed target vanishing point
-    let tvx = cx
-    let tvy = cy
+    // Vanishing point (smoothed)
+    let vx = cx, vy = cy
+    let tvx = cx, tvy = cy
 
-    // Stagger initial z so all depth layers are populated immediately
+    // Stagger initial z across full depth so all layers populate on frame 1
     const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
-      const zStart = rand(Z_MIN, -100)
+      const zStart = rand(Z_MIN, -80)
       const range  = Z_NEAR - zStart
       return {
         x:      rand(0, w),
         y:      rand(0, h),
         z:      zStart + range * (i / TOTAL),
         zStart,
-        size:   rand(2, 18),
+        size:   rand(1, 6),
         hue:    i * 1.8,
       }
     })
 
     let animId = 0
 
-    function draw() {
-      // Smoothly interpolate vanishing point toward target (ease = 0.06)
-      vx += (tvx - vx) * 0.06
-      vy += (tvy - vy) * 0.06
+    function project(dot: Dot, z: number, vpx: number, vpy: number) {
+      const scale = FOV / (FOV - z)
+      return {
+        px: (dot.x - vpx) * scale + vpx,
+        py: (dot.y - vpy) * scale + vpy,
+        scale,
+      }
+    }
 
-      ctx.fillStyle = '#000'
+    function draw() {
+      // Ease vanishing point toward target
+      vx += (tvx - vx) * 0.05
+      vy += (tvy - vy) * 0.05
+
+      // Fade trail — semi-transparent black fill instead of clearRect
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.18)'
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
+        const prevZ = dot.z
         dot.z += SPEED
 
         if (dot.z >= Z_NEAR) {
           dot.z = dot.zStart
           dot.x = rand(0, w)
           dot.y = rand(0, h)
+          continue
         }
 
-        const scale = FOV / (FOV - dot.z)
-        if (scale <= 0) continue
+        const cur  = project(dot, dot.z, vx, vy)
+        const prev = project(dot, prevZ,  vx, vy)
 
-        // Project from vanishing point
-        const px = (dot.x - vx) * scale + vx
-        const py = (dot.y - vy) * scale + vy
-
-        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
-
-        const r = Math.max(0.5, dot.size * scale * 0.35)
+        if (cur.scale <= 0) continue
+        if (cur.px < -w || cur.px > 2 * w || cur.py < -h || cur.py > 2 * h) continue
 
         const progress = (dot.z - dot.zStart) / (Z_NEAR - dot.zStart)
-        const alpha    = Math.min(1, progress * 2)
+        const alpha    = Math.min(1, progress * 1.8)
+        const width    = Math.max(0.3, dot.size * cur.scale * 0.07)
 
+        // Draw streak from previous projected position to current
         ctx.beginPath()
-        ctx.arc(px, py, r, 0, Math.PI * 2)
-        ctx.fillStyle = `hsla(${dot.hue}, 50%, 60%, ${alpha})`
+        ctx.moveTo(prev.px, prev.py)
+        ctx.lineTo(cur.px,  cur.py)
+        ctx.strokeStyle = `hsla(${dot.hue}, 70%, 65%, ${alpha})`
+        ctx.lineWidth   = width
+        ctx.lineCap     = 'round'
+        ctx.stroke()
+
+        // Bright point at the leading tip
+        ctx.beginPath()
+        ctx.arc(cur.px, cur.py, width * 0.8, 0, Math.PI * 2)
+        ctx.fillStyle = `hsla(${dot.hue}, 80%, 80%, ${alpha})`
         ctx.fill()
       }
 
@@ -109,16 +123,14 @@ export function LoginBg() {
 
     draw()
 
-    // ── Input handlers — update vanishing point target ────────────────────────
+    // ── Vanishing-point input handlers ────────────────────────────────────────
     function setVanish(x: number, y: number) {
-      // Blend between screen center and cursor position
       tvx = cx + (x - cx) * PARALLAX_STRENGTH
       tvy = cy + (y - cy) * PARALLAX_STRENGTH
     }
 
     function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
 
-    // ── Mobile: device orientation ────────────────────────────────────────────
     let orientationActive = false
     const GAMMA_RANGE = 35
     const BETA_RANGE  = 35
@@ -126,9 +138,10 @@ export function LoginBg() {
     function handleOrientation(e: DeviceOrientationEvent) {
       const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
       const beta  = Math.min(Math.max(e.beta  ?? 0, -BETA_RANGE),  BETA_RANGE)
-      const x = ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w
-      const y = ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h
-      setVanish(x, y)
+      setVanish(
+        ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w,
+        ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h,
+      )
       orientationActive = true
     }
 

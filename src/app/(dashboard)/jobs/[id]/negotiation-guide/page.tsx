@@ -224,7 +224,7 @@ export default function NegotiationGuidePage({ params }: Props) {
 
       <button
         onClick={() => setChatOpen(!chatOpen)}
-        className="md:hidden fixed z-30 w-10 h-10 rounded-full bg-ocean-300 text-white shadow-lg flex items-center justify-center"
+        className="md:hidden fixed z-30 btn-ocean w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center"
         style={{ top: "72px", right: "1rem" }}
       >
         <Sparkles className="w-4 h-4" />
