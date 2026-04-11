@@ -13,7 +13,7 @@ import { Loading } from '@/components/shared/loading'
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/'
+  const redirect = searchParams.get('redirect') || '/jobs'
 
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
