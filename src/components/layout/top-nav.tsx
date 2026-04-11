@@ -19,6 +19,8 @@ import {
   Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
+import { Lock } from "lucide-react";
 
 /* Desktop nav — all items */
 const NAV_ITEMS = [
@@ -45,6 +47,7 @@ export function TopNav() {
   const pathname = usePathname();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
+  const { activate: lockScreen } = usePrivacyScreen();
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
@@ -89,6 +92,15 @@ export function TopNav() {
               </Link>
             ))}
           </div>
+
+          {/* Lock screen */}
+          <button
+            onClick={lockScreen}
+            title="Lock screen (⌘⇧L)"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            <Lock className="w-4 h-4" />
+          </button>
 
           {/* User dropdown */}
           <div className="relative">

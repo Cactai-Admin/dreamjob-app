@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import {
   Sun, Moon, Monitor, Bell, Shield, Trash2, Zap, Link2,
   LogOut, ChevronRight, Eye, EyeOff, Check, AlertCircle as AlertTriangle,
-  RefreshCw, WifiOff,
+  RefreshCw, WifiOff, Lock,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
@@ -57,6 +57,7 @@ export default function SettingsPage() {
   const [privacy, setPrivacy] = useState({
     analyticsOptIn: true,
   });
+  const [privacyScreenTimeout, setPrivacyScreenTimeout] = useState(5 * 60 * 1000);
   const [showEmail, setShowEmail] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -71,12 +72,20 @@ export default function SettingsPage() {
     if (stored.aiProvider) setAiProvider(stored.aiProvider);
     if (stored.notifications) setNotifications(stored.notifications);
     if (stored.privacy) setPrivacy(stored.privacy);
+    if (stored.privacyScreenTimeout) setPrivacyScreenTimeout(stored.privacyScreenTimeout);
   }, []);
 
   const handleSave = () => {
-    saveSettings({ theme, aiProvider, notifications, privacy });
+    saveSettings({ theme, aiProvider, notifications, privacy, privacyScreenTimeout });
+    // Notify the PrivacyScreenProvider (same tab won't fire StorageEvent)
+    window.dispatchEvent(new Event('dreamjob:settings-saved'));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    window.location.href = "/login";
   };
 
   const launchLinkedIn = async () => {
@@ -459,6 +468,43 @@ export default function SettingsPage() {
         />
       </section>
 
+      {/* Privacy Screen */}
+      <section className="card-base p-5 mb-5">
+        <h2 className="font-semibold text-slate-900 mb-1 flex items-center gap-2">
+          <Lock className="w-4 h-4 text-sky-500" />
+          Privacy Screen
+        </h2>
+        <p className="text-xs text-slate-400 mb-4">
+          Activates the starfield lock screen after a period of inactivity.
+          You can also trigger it manually with the lock icon in the nav or <kbd className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">⌘⇧L</kbd>.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "5 min",  ms: 5  * 60 * 1000 },
+            { label: "15 min", ms: 15 * 60 * 1000 },
+            { label: "30 min", ms: 30 * 60 * 1000 },
+            { label: "60 min", ms: 60 * 60 * 1000 },
+          ].map(({ label, ms }) => (
+            <button
+              key={ms}
+              onClick={() => setPrivacyScreenTimeout(ms)}
+              className={cn(
+                "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+                privacyScreenTimeout === ms
+                  ? "border-sky-500 bg-sky-50 text-sky-700"
+                  : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
+              )}
+            >
+              {privacyScreenTimeout === ms && <Check className="w-3 h-3 inline mr-1.5 mb-0.5" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400 mt-3">
+          Click <strong className="text-slate-600">Save Preferences</strong> below to apply.
+        </p>
+      </section>
+
       {/* Danger zone */}
       <section className="card-base p-5 mb-5 border-red-100">
         <h2 className="font-semibold text-red-600 mb-3 flex items-center gap-2">
@@ -484,7 +530,10 @@ export default function SettingsPage() {
         >
           {saved ? <><Check className="w-4 h-4" /> Saved!</> : "Save Preferences"}
         </button>
-        <button className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+        <button
+          onClick={handleSignOut}
+          className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
+        >
           <LogOut className="w-4 h-4" />
           Sign Out
         </button>

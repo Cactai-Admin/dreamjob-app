@@ -48,27 +48,77 @@ export function LoginBg() {
         {
           duration: 3000,
           iterations: Infinity,
-          delay: i * -15,   // stagger: i * -0.015s
+          delay: i * -15,
           easing: 'linear',
         }
       )
       anims.push(anim)
     }
 
-    function handleMove(e: MouseEvent | TouchEvent) {
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
-      if (wrap) wrap.style.perspectiveOrigin = `${clientX}px ${clientY}px`
+    // ── Mouse / touch parallax ─────────────────────────────────────────────
+    function setPerspective(x: number, y: number) {
+      if (wrap) wrap.style.perspectiveOrigin = `${x}px ${y}px`
     }
 
-    window.addEventListener('mousemove', handleMove)
-    window.addEventListener('touchstart', handleMove as EventListener, { passive: true })
-    window.addEventListener('touchmove',  handleMove as EventListener, { passive: true })
+    function handleMouse(e: MouseEvent) {
+      setPerspective(e.clientX, e.clientY)
+    }
+
+    function handleTouch(e: TouchEvent) {
+      setPerspective(e.touches[0].clientX, e.touches[0].clientY)
+    }
+
+    // ── Device orientation parallax (mobile tilt) ──────────────────────────
+    let orientationActive = false
+
+    function handleOrientation(e: DeviceOrientationEvent) {
+      if (!orientationActive) return
+      // gamma: left-right tilt (-90…90), beta: front-back tilt (-180…180)
+      const gamma = e.gamma ?? 0
+      const beta  = Math.min(Math.max(e.beta ?? 0, -90), 90)
+      const x = ((gamma + 90) / 180) * window.innerWidth
+      const y = ((beta  + 90) / 180) * window.innerHeight
+      setPerspective(x, y)
+    }
+
+    async function requestOrientationPermission() {
+      // iOS 13+ requires explicit permission
+      const DOE = DeviceOrientationEvent as unknown as {
+        requestPermission?: () => Promise<'granted' | 'denied'>
+      }
+      if (typeof DOE.requestPermission === 'function') {
+        try {
+          const result = await DOE.requestPermission()
+          if (result === 'granted') {
+            orientationActive = true
+            window.addEventListener('deviceorientation', handleOrientation)
+          }
+        } catch { /* permission denied or not available */ }
+      } else if (typeof DeviceOrientationEvent !== 'undefined') {
+        // Android / non-gated browsers — just attach
+        orientationActive = true
+        window.addEventListener('deviceorientation', handleOrientation)
+      }
+    }
+
+    // Request on first touch (user gesture required for iOS)
+    let orientationRequested = false
+    function onFirstTouch() {
+      if (orientationRequested) return
+      orientationRequested = true
+      requestOrientationPermission()
+    }
+
+    window.addEventListener('mousemove',  handleMouse)
+    window.addEventListener('touchstart', handleTouch,   { passive: true })
+    window.addEventListener('touchmove',  handleTouch,   { passive: true })
+    window.addEventListener('touchstart', onFirstTouch,  { passive: true, once: true })
 
     return () => {
-      window.removeEventListener('mousemove', handleMove)
-      window.removeEventListener('touchstart', handleMove as EventListener)
-      window.removeEventListener('touchmove',  handleMove as EventListener)
+      window.removeEventListener('mousemove',       handleMouse)
+      window.removeEventListener('touchstart',      handleTouch)
+      window.removeEventListener('touchmove',       handleTouch)
+      window.removeEventListener('deviceorientation', handleOrientation)
       anims.forEach(a => a.cancel())
       dots.forEach(d => d.remove())
     }
@@ -79,13 +129,13 @@ export function LoginBg() {
       ref={wrapRef}
       aria-hidden="true"
       style={{
-        position: 'fixed',
-        inset: 0,
-        background: '#000',
-        overflow: 'hidden',
-        perspective: '200px',
-        transformStyle: 'preserve-3d',
-        zIndex: 0,
+        position:      'fixed',
+        inset:         0,
+        background:    '#000',
+        overflow:      'hidden',
+        perspective:   '200px',
+        transformStyle:'preserve-3d',
+        zIndex:        0,
       }}
     />
   )
