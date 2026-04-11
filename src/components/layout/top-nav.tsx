@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   Sun,
   Moon,
+  Briefcase,
 } from "lucide-react";
 import { useTheme } from "@/app/providers";
 import { cn } from "@/lib/utils";
