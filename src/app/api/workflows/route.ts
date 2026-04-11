@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getProvider } from '@/lib/ai/provider'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminClient } from '@/lib/supabase/admin'
+
+const supabaseAdmin = getAdminClient()
 
 async function getAccountId() {
   const cookieStore = await cookies()
@@ -24,7 +26,6 @@ async function getAccountId() {
 }
 
 export async function GET(request: NextRequest) {
-  const supabaseAdmin = createAdminClient()
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -59,7 +60,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabaseAdmin = createAdminClient()
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

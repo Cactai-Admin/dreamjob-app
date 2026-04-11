@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminClient } from '@/lib/supabase/admin'
 import {
+
+const supabaseAdmin = getAdminClient()
   RESUME_SYSTEM_PROMPT,
   COVER_LETTER_SYSTEM_PROMPT,
   INTERVIEW_GUIDE_SYSTEM_PROMPT,
@@ -25,7 +27,6 @@ async function getAccountId() {
 }
 
 export async function POST(request: NextRequest) {
-  const supabaseAdmin = createAdminClient()
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
