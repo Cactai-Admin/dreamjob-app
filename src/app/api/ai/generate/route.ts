@@ -4,13 +4,13 @@ import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { getAdminClient } from '@/lib/supabase/admin'
 import {
-
-const supabaseAdmin = getAdminClient()
   RESUME_SYSTEM_PROMPT,
   COVER_LETTER_SYSTEM_PROMPT,
   INTERVIEW_GUIDE_SYSTEM_PROMPT,
   NEGOTIATION_GUIDE_SYSTEM_PROMPT,
 } from '@/lib/ai/prompts/resume-generation'
+
+const supabaseAdmin = getAdminClient()
 
 async function getAccountId() {
   const cookieStore = await cookies()

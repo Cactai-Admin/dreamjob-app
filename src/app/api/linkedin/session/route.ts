@@ -3,14 +3,14 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getAdminClient } from '@/lib/supabase/admin'
 import {
-
-const supabaseAdmin = getAdminClient()
   launchLinkedInBrowser,
   verifyLinkedInSession,
   closeLinkedInBrowser,
   revokeLinkedInSession,
   isSessionActive,
 } from '@/lib/linkedin/browser'
+
+const supabaseAdmin = getAdminClient()
 
 async function getAccountId() {
   const cookieStore = await cookies()
