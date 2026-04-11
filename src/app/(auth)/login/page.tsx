@@ -116,7 +116,7 @@ function LoginForm() {
 
       {/* Footer */}
       <p className="login-footer">
-        AI-assisted job applications · DreamJob
+        AI-assisted Job Application Materials · DreamJob
       </p>
     </>
   )
