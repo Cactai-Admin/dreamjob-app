@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
-import {
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
   RESUME_SYSTEM_PROMPT,
   COVER_LETTER_SYSTEM_PROMPT,
   INTERVIEW_GUIDE_SYSTEM_PROMPT,
