@@ -16,11 +16,8 @@ import {
   Shield,
   Trash2,
   LayoutDashboard,
-  Sun,
-  Moon,
   Briefcase,
 } from "lucide-react";
-import { useTheme } from "@/app/providers";
 import { cn } from "@/lib/utils";
 
 /* Desktop nav — all items */
@@ -30,7 +27,7 @@ const NAV_ITEMS = [
   { href: "/jobs",      label: "Applications", icon: Briefcase },
 ];
 
-/* Mobile bottom tab bar — only the most-used items */
+/* Mobile bottom tab bar */
 const MOBILE_NAV_ITEMS = [
   { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
   { href: "/listings",  label: "Analyze",      icon: Zap },
@@ -48,7 +45,6 @@ export function TopNav() {
   const pathname = usePathname();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
-  const { resolvedTheme, toggleTheme } = useTheme();
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
@@ -59,6 +55,11 @@ export function TopNav() {
     if (href === "/jobs") return pathname === "/jobs" || (pathname.startsWith("/jobs/") && !pathname.startsWith("/listings"));
     if (href === "/listings") return pathname.startsWith("/listings");
     return pathname.startsWith(href);
+  };
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    window.location.href = "/login";
   };
 
   return (
@@ -72,7 +73,7 @@ export function TopNav() {
               <Zap className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold text-slate-900 text-[15px] tracking-tight">
-              JobAssist
+              DreamJob
             </span>
           </Link>
 
@@ -88,21 +89,6 @@ export function TopNav() {
               </Link>
             ))}
           </div>
-
-          {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
-            style={{ color: 'var(--color-text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {resolvedTheme === 'dark'
-              ? <Sun className="w-4 h-4" />
-              : <Moon className="w-4 h-4" />
-            }
-          </button>
 
           {/* User dropdown */}
           <div className="relative">
@@ -143,7 +129,10 @@ export function TopNav() {
                     </Link>
                   ))}
                   <div className="border-t border-slate-100 mt-1">
-                    <button className="flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full transition-colors">
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full transition-colors"
+                    >
                       <LogOut className="w-3.5 h-3.5" />
                       Sign out
                     </button>
@@ -161,7 +150,7 @@ export function TopNav() {
           <div className="w-6 h-6 rounded-md bg-slate-900 flex items-center justify-center">
             <Zap className="w-3.5 h-3.5 text-white" />
           </div>
-          <span className="font-bold text-slate-900 text-sm tracking-tight">JobAssist</span>
+          <span className="font-bold text-slate-900 text-sm tracking-tight">DreamJob</span>
         </Link>
         <div className="relative">
           <button
@@ -197,7 +186,10 @@ export function TopNav() {
                   </Link>
                 ))}
                 <div className="border-t border-slate-100 mt-1">
-                  <button className="flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full transition-colors">
+                  <button
+                    onClick={handleSignOut}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 w-full transition-colors"
+                  >
                     <LogOut className="w-3.5 h-3.5" />
                     Sign out
                   </button>
@@ -208,7 +200,7 @@ export function TopNav() {
         </div>
       </div>
 
-      {/* ── Mobile bottom tab bar (Analyze + Applications only) ── */}
+      {/* ── Mobile bottom tab bar ── */}
       <nav
         className="mobile-bottom-nav flex md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -242,7 +234,6 @@ export function TopNav() {
           })}
         </div>
       </nav>
-
     </>
   );
 }
