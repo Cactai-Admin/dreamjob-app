@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react'
 
 const TOTAL = 200
 const FOV   = 200                     // perspective: 200px
-const SPEED = 1500 / (3 * 60)        // 1500 z-units / 3 s / 60 fps ≈ 8.33
+const SPEED = 1500 / (8 * 60)        // 1500 z-units / 8 s / 60 fps ≈ 3.125
 const Z_END = 500                     // same end point as original
 
 const PARALLAX_STRENGTH = 0.35

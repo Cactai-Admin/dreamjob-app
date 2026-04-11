@@ -76,7 +76,7 @@ export function TopNav() {
     <div className="relative">
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className="w-8 h-8 rounded-xl bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0"
+        className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0"
         title="Account"
       >
         {profile.avatar_url ? (
@@ -126,7 +126,7 @@ export function TopNav() {
       <nav className="top-nav hidden md:block">
         <div className="top-nav-inner relative">
 
-          {/* Left: brand + nav links */}
+          {/* Left: brand (always) + nav links (only on non-doc pages) */}
           <div className="flex items-center gap-4 flex-shrink-0">
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center">
@@ -135,17 +135,19 @@ export function TopNav() {
               <span className="font-bold text-slate-900 text-[15px] tracking-tight">DreamJob</span>
             </Link>
 
-            <div className="flex items-center gap-1">
-              {NAV_ITEMS.map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn("nav-link", isActive(href) && "nav-link-active")}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
+            {!controls && (
+              <div className="flex items-center gap-1">
+                {NAV_ITEMS.map(({ href, label }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn("nav-link", isActive(href) && "nav-link-active")}
+                  >
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Center: doc type tabs — absolutely centered, only on doc pages */}
@@ -172,25 +174,6 @@ export function TopNav() {
           {/* Right: doc controls (when on doc page) + lock screen + profile */}
           <div className="flex items-center gap-2 flex-shrink-0">
 
-            {controls && (
-              /* Status dropdown — left of the right group */
-              <div className="relative">
-                <select
-                  value={controls.appStatus}
-                  onChange={e => controls.onStatusChange(e.target.value)}
-                  className={cn(
-                    'text-xs font-medium pl-3 pr-6 py-2 rounded-xl border bg-white appearance-none cursor-pointer',
-                    statusColor(controls.appStatus)
-                  )}
-                >
-                  {STATUS_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
-              </div>
-            )}
-
             {/* Lock screen */}
             <button
               onClick={lockScreen}
@@ -210,7 +193,7 @@ export function TopNav() {
                 >
                   {controls.isDirty
                     ? <Save className="w-3.5 h-3.5" />
-                    : <span className="text-emerald-600 font-semibold">Saved</span>
+                    : <span className="text-sky-500 font-semibold">Saved</span>
                   }
                 </button>
 
@@ -256,7 +239,7 @@ export function TopNav() {
                 >
                   {controls.isDirty
                     ? <Save className="w-3.5 h-3.5" />
-                    : <span className="text-emerald-600 font-semibold">Saved</span>
+                    : <span className="text-sky-500 font-semibold">Saved</span>
                   }
                 </button>
 
@@ -287,9 +270,9 @@ export function TopNav() {
         )}
       </div>
 
-      {/* ── Mobile bottom tab bar ── */}
+      {/* ── Mobile bottom tab bar — hidden on doc pages ── */}
       <nav
-        className="mobile-bottom-nav flex md:hidden"
+        className={cn("mobile-bottom-nav md:hidden", mobileWorkflowId ? "hidden" : "flex")}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-stretch w-full">
