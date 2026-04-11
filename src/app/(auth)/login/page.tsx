@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Zap, AlertCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { LoginBg } from '@/components/auth/login-bg'
 
 function LoginForm() {
   const router      = useRouter()
@@ -39,8 +40,8 @@ function LoginForm() {
 
   return (
     <div className="login-root">
-      {/* ── Animated background (populated via login-bg class) ── */}
-      <div className="login-bg" aria-hidden="true" />
+      {/* ── Animated background ── */}
+      <LoginBg />
 
       {/* ── Centered column ─────────────────────────────────── */}
       <div className="login-column">

@@ -283,6 +283,7 @@
   }
 
   /* ── Login page ────────────────────────────────────────── */
+  /* Background is always the black starfield — card floats on top */
   .login-root {
     position: relative;
     min-height: 100dvh;
@@ -290,16 +291,7 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    background: var(--color-bg);
-  }
-
-  /* Placeholder layer — replaced by animated background CSS */
-  .login-bg {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    background: var(--color-bg);
-    /* animated background will be added here */
+    background: #000;
   }
 
   .login-column {
@@ -324,7 +316,8 @@
     width: 36px;
     height: 36px;
     border-radius: 10px;
-    background: var(--color-text);
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.18);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -334,35 +327,28 @@
   .login-brand-zap {
     width: 18px;
     height: 18px;
-    color: var(--color-bg);
+    color: #fff;
   }
 
   .login-brand-name {
     font-size: 20px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--color-text);
+    color: #fff;
   }
 
   .login-card {
     width: 100%;
     border-radius: 20px;
     padding: 32px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border-raw);
-    box-shadow:
-      0 0 0 1px rgba(0,0,0,0.03),
-      0 8px 32px rgba(0,0,0,0.08),
-      0 2px 8px rgba(0,0,0,0.04);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
-  .dark .login-card {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
     box-shadow:
       0 0 0 1px rgba(255,255,255,0.04),
-      0 8px 32px rgba(0,0,0,0.4),
-      0 2px 8px rgba(0,0,0,0.2);
+      0 8px 40px rgba(0,0,0,0.6),
+      0 2px 12px rgba(0,0,0,0.3);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
   }
 
   .login-card-header {
@@ -373,13 +359,13 @@
     font-size: 22px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--color-text);
+    color: #fff;
     margin-bottom: 4px;
   }
 
   .login-subtitle {
     font-size: 14px;
-    color: var(--color-text-muted);
+    color: rgba(255,255,255,0.5);
   }
 
   .login-form {
@@ -397,7 +383,7 @@
   .login-label {
     font-size: 13px;
     font-weight: 600;
-    color: var(--color-text-secondary);
+    color: rgba(255,255,255,0.7);
     letter-spacing: 0.01em;
   }
 
@@ -406,20 +392,20 @@
     padding: 10px 14px;
     border-radius: 12px;
     font-size: 14px;
-    background: var(--color-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border-raw);
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.14);
     transition: border-color 150ms ease, box-shadow 150ms ease;
     outline: none;
   }
 
   .login-input::placeholder {
-    color: var(--color-text-muted);
+    color: rgba(255,255,255,0.3);
   }
 
   .login-input:focus {
-    border-color: var(--color-accent-raw);
-    box-shadow: 0 0 0 3px rgba(2, 133, 255, 0.15);
+    border-color: rgba(2, 133, 255, 0.7);
+    box-shadow: 0 0 0 3px rgba(2, 133, 255, 0.2);
   }
 
   .login-error {
@@ -429,9 +415,9 @@
     padding: 10px 14px;
     border-radius: 12px;
     font-size: 13px;
-    background: rgba(255, 133, 131, 0.1);
-    border: 1px solid rgba(255, 133, 131, 0.25);
-    color: var(--color-error);
+    background: rgba(255, 133, 131, 0.12);
+    border: 1px solid rgba(255, 133, 131, 0.3);
+    color: #FF8583;
   }
 
   .login-error-icon {
@@ -459,14 +445,14 @@
   }
 
   .login-submit-ready {
-    background: var(--color-text);
-    color: var(--color-bg);
+    background: #fff;
+    color: #0D0D0D;
   }
 
   .login-submit-ready:hover {
-    opacity: 0.88;
+    opacity: 0.92;
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 20px rgba(255,255,255,0.15);
   }
 
   .login-submit-ready:active {
@@ -475,8 +461,8 @@
   }
 
   .login-submit-disabled {
-    background: var(--color-surface-secondary);
-    color: var(--color-text-muted);
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.3);
     cursor: not-allowed;
   }
 
@@ -488,9 +474,8 @@
 
   .login-footer {
     font-size: 12px;
-    color: var(--color-text-muted);
+    color: rgba(255,255,255,0.3);
     text-align: center;
-    opacity: 0.7;
   }
 
   .workflow-stage {
