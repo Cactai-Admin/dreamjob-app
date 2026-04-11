@@ -35,7 +35,6 @@ export function LoginBg() {
         border-radius: 50%;
         background: ${color};
         box-shadow: 0 0 ${size}px ${color};
-        will-change: transform, opacity;
       `
       wrap.appendChild(dot)
       dots.push(dot)
@@ -129,13 +128,14 @@ export function LoginBg() {
       ref={wrapRef}
       aria-hidden="true"
       style={{
-        position:      'fixed',
-        inset:         0,
-        background:    '#000',
-        overflow:      'hidden',
-        perspective:   '200px',
-        transformStyle:'preserve-3d',
-        zIndex:        0,
+        position:        'fixed',
+        inset:           0,
+        background:      '#000',
+        overflow:        'hidden',
+        perspective:     '200px',
+        transformStyle:  'preserve-3d',
+        zIndex:          0,
+        willChange:      'perspective-origin',
       }}
     />
   )
