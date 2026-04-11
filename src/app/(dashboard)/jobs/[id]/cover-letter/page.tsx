@@ -193,7 +193,7 @@ export default function CoverLetterBuilderPage({ params }: Props) {
         <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden lg:block")}>
           {generating ? (
             <div className="flex flex-col items-center justify-center h-full p-8">
-              <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center mb-6">
+              <div className="w-16 h-16 rounded-2xl bg-ocean-300 flex items-center justify-center mb-6">
                 <Sparkles className="w-8 h-8 text-white animate-pulse" />
               </div>
               <h2 className="text-xl font-bold text-slate-900 mb-2 text-center">Writing your cover letter…</h2>
