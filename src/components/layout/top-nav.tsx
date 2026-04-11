@@ -17,7 +17,7 @@ import {
   Trash2,
   LayoutDashboard,
   Briefcase,
-  Lock,
+  HatGlasses,
   Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -72,17 +72,20 @@ export function TopNav() {
   const mobileActiveDoc = mobileDocMatch?.[2] as typeof DOC_TABS[number]['type'] | undefined;
 
   // Profile button — shared across desktop and mobile
-  const ProfileButton = () => (
+  const ProfileButton = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="relative">
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0"
+        className={cn(
+          "rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0",
+          mobile ? "w-9 h-9" : "w-11 h-11"
+        )}
         title="Account"
       >
         {profile.avatar_url ? (
           <img src={profile.avatar_url} alt={profile.first_name ?? ""} className="w-full h-full object-cover" />
         ) : (
-          <span className="text-xs font-bold text-slate-600">{profile.first_name?.[0] ?? "?"}</span>
+          <span className={cn("font-bold text-slate-600", mobile ? "text-xs" : "text-sm")}>{profile.first_name?.[0] ?? "?"}</span>
         )}
       </button>
 
@@ -128,11 +131,11 @@ export function TopNav() {
 
           {/* Left: brand always */}
           <div className="flex items-center flex-shrink-0">
-            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-              <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white" />
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
               </div>
-              <span className="font-bold text-slate-900 text-[15px] tracking-tight">DreamJob</span>
+              <span className="font-bold text-slate-900 text-[20px] tracking-tight">DreamJob</span>
             </Link>
           </div>
 
@@ -158,13 +161,13 @@ export function TopNav() {
                   key={type}
                   onClick={() => type !== controls.activeDoc && router.push(`/jobs/${controls.workflowId}/${type}`)}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                    'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
                     type === controls.activeDoc
                       ? 'bg-white text-slate-900 shadow-sm font-semibold'
                       : 'text-slate-500 hover:text-slate-700'
                   )}
                 >
-                  <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                  <Icon className="w-4 h-4 flex-shrink-0" />
                   {label}
                 </button>
               ))}
@@ -174,13 +177,13 @@ export function TopNav() {
           {/* Right: doc controls (when on doc page) + lock screen + profile */}
           <div className="flex items-center gap-2 flex-shrink-0">
 
-            {/* Lock screen */}
+            {/* Privacy screen */}
             <button
               onClick={lockScreen}
               title="Lock screen (⌘⇧L)"
-              className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
             >
-              <Lock className="w-4 h-4" />
+              <HatGlasses className="w-5 h-5" />
             </button>
 
             {controls && (
@@ -188,11 +191,11 @@ export function TopNav() {
                 {/* Save */}
                 <button
                   onClick={controls.onSave}
-                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
+                  className="flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600"
                   title="Save"
                 >
                   {controls.isDirty
-                    ? <Save className="w-3.5 h-3.5" />
+                    ? <Save className="w-4 h-4" />
                     : <span className="text-sky-500 font-semibold">Saved</span>
                   }
                 </button>
@@ -200,10 +203,10 @@ export function TopNav() {
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
-                  className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                   title="Delete application"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </>
             )}
@@ -215,7 +218,7 @@ export function TopNav() {
       </nav>
 
       {/* ── Mobile top bar ─────────────────────────────── */}
-      <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3" style={{ height: 64 }}>
+      <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3" style={{ height: 74 }}>
 
         {mobileWorkflowId ? (
           /* On doc page: back arrow + centered doc controls + profile */
@@ -235,10 +238,10 @@ export function TopNav() {
                 {/* Save */}
                 <button
                   onClick={controls.onSave}
-                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
+                  className="flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
                 >
                   {controls.isDirty
-                    ? <Save className="w-3.5 h-3.5" />
+                    ? <Save className="w-4 h-4" />
                     : <span className="text-sky-500 font-semibold">Saved</span>
                   }
                 </button>
@@ -246,26 +249,26 @@ export function TopNav() {
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
-                  className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400"
+                  className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </>
             )}
 
-            <ProfileButton />
+            <ProfileButton mobile />
           </>
         ) : (
           /* On all other pages: brand + profile */
           <>
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-              <div className="w-6 h-6 rounded-md bg-slate-900 flex items-center justify-center">
-                <Zap className="w-3.5 h-3.5 text-white" />
+              <div className="w-7 h-7 rounded-md bg-slate-900 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-slate-900 text-sm tracking-tight">DreamJob</span>
+              <span className="font-bold text-slate-900 text-base tracking-tight">DreamJob</span>
             </Link>
             <div className="flex-1" />
-            <ProfileButton />
+            <ProfileButton mobile />
           </>
         )}
       </div>

@@ -87,7 +87,7 @@
     --radius: 0.625rem;
 
     /* App-specific properties carried over from Bolt */
-    --top-nav-height: 52px;
+    --top-nav-height: 68px;
     --color-primary-raw: #0f172a;
     --color-primary-hover: #1e293b;
     --color-bg: #f8fafc;
@@ -167,7 +167,7 @@
   }
 
   .nav-link {
-    @apply px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all;
+    @apply px-4 py-2 rounded-lg text-base font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-all;
   }
 
   .nav-link-active {
