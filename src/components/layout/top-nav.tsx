@@ -247,30 +247,52 @@ export function TopNav() {
       <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3" style={{ height: 64 }}>
 
         {mobileWorkflowId ? (
-          /* On doc page: back arrow + doc dropdown + profile */
+          /* On doc page: back arrow + centered doc controls + profile */
           <>
             <button
               onClick={() => router.push(`/jobs/${mobileWorkflowId}`)}
-              className="text-slate-500 flex-shrink-0 text-lg leading-none"
+              className="text-slate-500 flex-shrink-0 text-lg leading-none w-8 text-center"
               aria-label="Back"
             >
               ←
             </button>
 
-            <div className="relative flex-1">
-              <select
-                value={mobileActiveDoc ?? ''}
-                onChange={e => {
-                  const t = e.target.value as typeof DOC_TABS[number]['type']
-                  if (t !== mobileActiveDoc) router.push(`/jobs/${mobileWorkflowId}/${t}`)
-                }}
-                className="w-full text-sm font-semibold pl-3 pr-8 py-2 rounded-xl border border-slate-200 bg-white appearance-none cursor-pointer text-slate-800"
-              >
-                {DOC_TABS.map(({ type, label }) => (
-                  <option key={type} value={type}>{label}</option>
-                ))}
-              </select>
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
+            <div className="flex-1 flex items-center justify-center gap-2">
+              {controls && (
+                <>
+                  {/* Save */}
+                  <button
+                    onClick={controls.onSave}
+                    className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
+                  >
+                    {controls.isDirty
+                      ? <Save className="w-3.5 h-3.5" />
+                      : <span className="text-emerald-600 font-semibold">Saved</span>
+                    }
+                  </button>
+
+                  {/* Tap to Edit / Tap to Lock */}
+                  <button
+                    onClick={controls.onToggleLock}
+                    className={cn(
+                      'text-xs font-medium px-3 py-2 rounded-xl border',
+                      controls.docLocked
+                        ? 'border-slate-300 bg-slate-50 text-slate-700'
+                        : 'border-sky-300 bg-sky-50 text-sky-700'
+                    )}
+                  >
+                    {controls.docLocked ? 'Tap to Edit' : 'Tap to Lock'}
+                  </button>
+
+                  {/* Trash */}
+                  <button
+                    onClick={controls.onDelete}
+                    className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
 
             <ProfileButton />
