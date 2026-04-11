@@ -58,6 +58,7 @@ export default function SettingsPage() {
     analyticsOptIn: true,
   });
   const [privacyScreenTimeout, setPrivacyScreenTimeout] = useState(5 * 60 * 1000);
+  const [privacyScreenEnabled, setPrivacyScreenEnabled] = useState(true);
   const [showEmail, setShowEmail] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -73,10 +74,11 @@ export default function SettingsPage() {
     if (stored.notifications) setNotifications(stored.notifications);
     if (stored.privacy) setPrivacy(stored.privacy);
     if (stored.privacyScreenTimeout) setPrivacyScreenTimeout(stored.privacyScreenTimeout);
+    if (typeof stored.privacyScreenEnabled === 'boolean') setPrivacyScreenEnabled(stored.privacyScreenEnabled);
   }, []);
 
   const handleSave = () => {
-    saveSettings({ theme, aiProvider, notifications, privacy, privacyScreenTimeout });
+    saveSettings({ theme, aiProvider, notifications, privacy, privacyScreenTimeout, privacyScreenEnabled });
     // Notify the PrivacyScreenProvider (same tab won't fire StorageEvent)
     window.dispatchEvent(new Event('dreamjob:settings-saved'));
     setSaved(true);
@@ -479,6 +481,18 @@ export default function SettingsPage() {
           You can also trigger it manually with the lock icon in the nav or <kbd className="font-mono bg-slate-100 px-1 py-0.5 rounded text-slate-600">⌘⇧L</kbd>.
         </p>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setPrivacyScreenEnabled(false)}
+            className={cn(
+              "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+              !privacyScreenEnabled
+                ? "border-slate-800 bg-slate-900 text-white"
+                : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
+            )}
+          >
+            {!privacyScreenEnabled && <Check className="w-3 h-3 inline mr-1.5 mb-0.5" />}
+            Off
+          </button>
           {[
             { label: "5 min",  ms: 5  * 60 * 1000 },
             { label: "15 min", ms: 15 * 60 * 1000 },
@@ -487,15 +501,15 @@ export default function SettingsPage() {
           ].map(({ label, ms }) => (
             <button
               key={ms}
-              onClick={() => setPrivacyScreenTimeout(ms)}
+              onClick={() => { setPrivacyScreenEnabled(true); setPrivacyScreenTimeout(ms); }}
               className={cn(
                 "px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all",
-                privacyScreenTimeout === ms
+                privacyScreenEnabled && privacyScreenTimeout === ms
                   ? "border-sky-500 bg-sky-50 text-sky-700"
                   : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
               )}
             >
-              {privacyScreenTimeout === ms && <Check className="w-3 h-3 inline mr-1.5 mb-0.5" />}
+              {privacyScreenEnabled && privacyScreenTimeout === ms && <Check className="w-3 h-3 inline mr-1.5 mb-0.5" />}
               {label}
             </button>
           ))}

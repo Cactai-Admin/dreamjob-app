@@ -25,14 +25,17 @@ import { LoginBg } from '@/components/auth/login-bg'
 const DEFAULT_INACTIVITY_MS = 5 * 60 * 1000
 const LS_KEY = 'dreamjob_settings'
 
-function readTimeout(): number {
+function readSettings(): { ms: number; enabled: boolean } {
   try {
     const stored = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}')
-    return typeof stored.privacyScreenTimeout === 'number'
-      ? stored.privacyScreenTimeout
-      : DEFAULT_INACTIVITY_MS
+    return {
+      ms: typeof stored.privacyScreenTimeout === 'number'
+        ? stored.privacyScreenTimeout
+        : DEFAULT_INACTIVITY_MS,
+      enabled: stored.privacyScreenEnabled !== false, // default true
+    }
   } catch {
-    return DEFAULT_INACTIVITY_MS
+    return { ms: DEFAULT_INACTIVITY_MS, enabled: true }
   }
 }
 
@@ -50,6 +53,7 @@ export function usePrivacyScreen() {
 
 export function PrivacyScreenProvider({ children }: { children: ReactNode }) {
   const [inactivityMs, setInactivityMs] = useState(DEFAULT_INACTIVITY_MS)
+  const [autoEnabled, setAutoEnabled] = useState(true)
   const [visible,      setVisible]      = useState(false)
   const [dissolving,   setDissolving]   = useState(false)
   const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -57,15 +61,17 @@ export function PrivacyScreenProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { visibleRef.current = visible }, [visible])
 
-  // Read timeout from localStorage on mount and on settings changes
+  // Read settings from localStorage on mount and on settings changes
   useEffect(() => {
-    setInactivityMs(readTimeout())
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === LS_KEY) setInactivityMs(readTimeout())
+    const apply = () => {
+      const { ms, enabled } = readSettings()
+      setInactivityMs(ms)
+      setAutoEnabled(enabled)
     }
-    // Same-tab saves won't fire StorageEvent, so also listen for a custom event
-    const onSettingsSaved = () => setInactivityMs(readTimeout())
+    apply()
+
+    const onStorage = (e: StorageEvent) => { if (e.key === LS_KEY) apply() }
+    const onSettingsSaved = () => apply()
 
     window.addEventListener('storage', onStorage)
     window.addEventListener('dreamjob:settings-saved', onSettingsSaved)
@@ -86,14 +92,14 @@ export function PrivacyScreenProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       setVisible(false)
       setDissolving(false)
-      timerRef.current = setTimeout(activate, inactivityMs)
+      if (autoEnabled) timerRef.current = setTimeout(activate, inactivityMs)
     }, 700)
-  }, [activate, inactivityMs])
+  }, [activate, inactivityMs, autoEnabled])
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(activate, inactivityMs)
-  }, [activate, inactivityMs])
+    if (autoEnabled) timerRef.current = setTimeout(activate, inactivityMs)
+  }, [activate, inactivityMs, autoEnabled])
 
   // Inactivity detection
   useEffect(() => {
