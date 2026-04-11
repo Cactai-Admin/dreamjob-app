@@ -196,22 +196,9 @@ export default function CoverLetterBuilderPage({ params }: Props) {
         </div>
       )}
 
-      {/* Mobile doc controls bar */}
-      <div className="md:hidden flex-shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
-        <button onClick={handleSave} className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">
-          {isDirty ? <Save className="w-3.5 h-3.5" /> : <span className="text-emerald-600 font-semibold">Saved</span>}
-        </button>
-        <button onClick={handleToggleLock} className={cn("flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border", docLocked ? "border-slate-300 bg-slate-50 text-slate-700" : "border-sky-300 bg-sky-50 text-sky-700")}>
-          {docLocked ? "Locked" : "Editing"}
-        </button>
-        <button onClick={() => setConfirmDel(true)} className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400" title="Delete">
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden">
-        <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8", chatOpen && "hidden lg:block")}>
+        <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden lg:block")}>
           {generating ? (
             <div className="flex flex-col items-center justify-center h-full p-8">
               <div className="w-16 h-16 rounded-2xl bg-slate-900 flex items-center justify-center mb-6">
@@ -260,15 +247,14 @@ export default function CoverLetterBuilderPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Mobile AI toggle */}
-      <div className="md:hidden fixed z-30" style={{ bottom: "calc(64px + env(safe-area-inset-bottom))", right: "1rem" }}>
-        <button
-          onClick={() => setChatOpen(!chatOpen)}
-          className="w-12 h-12 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center"
-        >
-          <Sparkles className="w-5 h-5" />
-        </button>
-      </div>
+      {/* Mobile AI button — top-right, below header */}
+      <button
+        onClick={() => setChatOpen(!chatOpen)}
+        className="md:hidden fixed z-30 w-10 h-10 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center"
+        style={{ top: "72px", right: "1rem" }}
+      >
+        <Sparkles className="w-4 h-4" />
+      </button>
       {chatOpen && (
         <div className="md:hidden fixed inset-0 z-50">
           <AiChatPanel workflowId={id} surface="cover_letter" onClose={() => setChatOpen(false)} className="h-full" />
