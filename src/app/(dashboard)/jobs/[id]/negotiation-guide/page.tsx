@@ -112,8 +112,13 @@ export default function NegotiationGuidePage({ params }: Props) {
   }, [content, saveContent]);
 
   const handleStatusChange = useCallback(async (val: string) => {
+    if (val === "draft") {
+      await fetch(`/api/workflows/${id}/status`, { method: "DELETE" });
+      setAppStatus("draft");
+      return;
+    }
     const opt = STATUS_OPTIONS.find(o => o.value === val);
-    if (!opt || !opt.event) { setAppStatus(val); return; }
+    if (!opt?.event) { setAppStatus(val); return; }
     await fetch(`/api/workflows/${id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

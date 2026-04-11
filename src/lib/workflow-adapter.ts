@@ -17,7 +17,7 @@ export function deriveApplicationStatus(
   if (types.includes('interview'))   return 'interviewing'
   if (types.includes('received'))    return 'received'
   if (types.includes('sent') || state === 'sent' || state === 'completed') return 'applied'
-  return 'ready'
+  return 'draft'
 }
 
 export function deriveAllStatuses(
