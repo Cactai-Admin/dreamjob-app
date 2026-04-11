@@ -126,31 +126,31 @@ export function TopNav() {
       <nav className="top-nav hidden md:block">
         <div className="top-nav-inner relative">
 
-          {/* Left: brand (always) + nav links (only on non-doc pages) */}
-          <div className="flex items-center gap-4 flex-shrink-0">
+          {/* Left: brand always */}
+          <div className="flex items-center flex-shrink-0">
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <div className="w-7 h-7 rounded-lg bg-slate-900 flex items-center justify-center">
                 <Zap className="w-4 h-4 text-white" />
               </div>
               <span className="font-bold text-slate-900 text-[15px] tracking-tight">DreamJob</span>
             </Link>
-
-            {!controls && (
-              <div className="flex items-center gap-1">
-                {NAV_ITEMS.map(({ href, label }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className={cn("nav-link", isActive(href) && "nav-link-active")}
-                  >
-                    {label}
-                  </Link>
-                ))}
-              </div>
-            )}
           </div>
 
-          {/* Center: doc type tabs — absolutely centered, only on doc pages */}
+          {/* Center: nav links (non-doc) or doc tabs — absolutely centered */}
+          {!controls && (
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
+              {NAV_ITEMS.map(({ href, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn("nav-link", isActive(href) && "nav-link-active")}
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          )}
+
           {controls && (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 p-1 bg-slate-100 rounded-lg">
               {DOC_TABS.map(({ type, label, icon: Icon }) => (

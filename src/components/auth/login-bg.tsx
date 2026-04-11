@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react'
 
 const TOTAL = 200
 const FOV   = 200                     // perspective: 200px
-const SPEED = 1500 / (8 * 60)        // 1500 z-units / 8 s / 60 fps ≈ 3.125
+const SPEED = 1500 / 6               // 1500 z-units / 6 s — per second, frame-rate independent
 const Z_END = 500                     // same end point as original
 
 const PARALLAX_STRENGTH = 1.0
@@ -64,17 +64,22 @@ export function LoginBg() {
     })
 
     let animId = 0
+    let lastTime = 0
 
-    function draw() {
-      // Ease vanishing point toward target
-      vx += (tvx - vx) * 0.06
-      vy += (tvy - vy) * 0.06
+    function draw(now: number) {
+      const dt = lastTime === 0 ? 1 / 60 : Math.min((now - lastTime) / 1000, 0.1)
+      lastTime = now
+
+      // Ease vanishing point toward target (frame-rate independent at ~60 fps feel)
+      const ease = 1 - Math.pow(1 - 0.06, dt * 60)
+      vx += (tvx - vx) * ease
+      vy += (tvy - vy) * ease
 
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
-        dot.z += SPEED
+        dot.z += SPEED * dt
 
         // Reset — same as TweenMax repeat: -1
         if (dot.z >= Z_END) {
@@ -115,10 +120,10 @@ export function LoginBg() {
       // Reset shadow so it doesn't bleed into the next fillRect
       ctx.shadowBlur = 0
 
-      animId = requestAnimationFrame(draw)
+      animId = requestAnimationFrame(draw as FrameRequestCallback)
     }
 
-    draw()
+    animId = requestAnimationFrame(draw as FrameRequestCallback)
 
     // ── Mouse / touch — moves the vanishing point (perspectiveOrigin equiv) ──
     function setVanish(x: number, y: number) {
@@ -128,8 +133,8 @@ export function LoginBg() {
 
     function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
 
-    let orientationActive = false
-    const GAMMA_RANGE = 35, BETA_RANGE = 35
+    const GAMMA_RANGE = 25, BETA_RANGE = 25
+    let orientationAttached = false
 
     function handleOrientation(e: DeviceOrientationEvent) {
       const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
@@ -138,15 +143,15 @@ export function LoginBg() {
         ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w,
         ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h,
       )
-      orientationActive = true
     }
 
     function handleTouch(e: TouchEvent) {
-      if (orientationActive) return
       setVanish(e.touches[0].clientX, e.touches[0].clientY)
     }
 
     function attachOrientation() {
+      if (orientationAttached) return
+      orientationAttached = true
       window.addEventListener('deviceorientation', handleOrientation)
     }
 
@@ -156,14 +161,18 @@ export function LoginBg() {
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
-        const requestOnTouch = async () => {
-          try {
-            const result = await DOE.requestPermission!()
-            if (result === 'granted') attachOrientation()
-          } catch { /* denied or unavailable */ }
+        // iOS: must call requestPermission() synchronously from a user gesture.
+        // Use .then() (not async/await) to keep the call in the gesture stack.
+        // Re-attempt on each touch until granted so tapping any element works.
+        const requestOnTouch = () => {
+          if (orientationAttached) return
+          DOE.requestPermission!()
+            .then(result => { if (result === 'granted') attachOrientation() })
+            .catch(() => { /* denied or unavailable */ })
         }
-        window.addEventListener('touchstart', requestOnTouch, { once: true, passive: true })
+        window.addEventListener('touchstart', requestOnTouch, { passive: true })
       } else {
+        // Android / non-gated browsers — attach immediately
         attachOrientation()
       }
     }
