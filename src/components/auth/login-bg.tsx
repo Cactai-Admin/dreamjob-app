@@ -2,106 +2,130 @@
 
 import { useEffect, useRef } from 'react'
 
-const TOTAL   = 200
-const MAX_DEG = 8   // max tilt in degrees for mouse/tilt parallax
+// ── Canvas-based starfield ────────────────────────────────────────────────────
+// All 200 dots are drawn into a single <canvas> element via requestAnimationFrame.
+// One canvas = one GPU texture = one compositor layer.
+// This eliminates the layer-thrashing caused by 200 individually promoted DOM
+// elements, which was the root cause of the login column flashing.
+//
+// The parallax tilt is applied as a CSS transform on the canvas element itself
+// (perspective() rotateX/Y) — compositor-only, zero repaints.
 
-function random(min: number, max: number) {
+const TOTAL   = 200
+const MAX_DEG = 8    // max tilt degrees
+const FOV     = 200  // perspective distance for dot projection (px)
+const Z_MIN   = -1400
+const Z_NEAR  = FOV - 2  // clip just before the eye
+
+function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
 }
 
+interface Dot {
+  x: number; y: number; z: number
+  zStart: number; size: number; hue: number
+}
+
 export function LoginBg() {
-  const wrapRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const wrap = wrapRef.current
-    if (!wrap) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
 
     const w  = window.innerWidth
     const h  = window.innerHeight
     const cx = w / 2
     const cy = h / 2
-    const dots: HTMLDivElement[] = []
-    const anims: Animation[]     = []
 
-    for (let i = 0; i < TOTAL; i++) {
-      const x      = random(0, w)
-      const y      = random(0, h)
-      const zStart = random(-1000, -200)
-      const color  = `hsla(${i * 1.8}, 50%, 50%, 1)`
-      const size   = random(2, 30)
+    canvas.width  = w
+    canvas.height = h
 
-      const dot = document.createElement('div')
-      dot.style.cssText = `
-        position: absolute;
-        width: ${size}px;
-        height: ${size}px;
-        border-radius: 50%;
-        background: ${color};
-      `
-      wrap.appendChild(dot)
-      dots.push(dot)
+    // Stagger initial z so all depth layers are populated on first frame
+    const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
+      const zStart = rand(Z_MIN, -100)
+      const range  = Z_NEAR - zStart
+      return {
+        x:      rand(0, w),
+        y:      rand(0, h),
+        z:      zStart + range * (i / TOTAL),
+        zStart,
+        size:   rand(1, 8),
+        hue:    i * 1.8,
+      }
+    })
 
-      const anim = dot.animate(
-        [
-          { opacity: 0, transform: `translate3d(${x}px, ${y}px, ${zStart}px)` },
-          { opacity: 1, transform: `translate3d(${x}px, ${y}px, 500px)` },
-        ],
-        {
-          duration:   3000,
-          iterations: Infinity,
-          delay:      i * -15,
-          easing:     'linear',
+    let animId = 0
+
+    function draw() {
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, w, h)
+
+      for (const dot of dots) {
+        dot.z += 3
+
+        if (dot.z >= Z_NEAR) {
+          dot.z = dot.zStart
+          dot.x = rand(0, w)
+          dot.y = rand(0, h)
         }
-      )
-      anims.push(anim)
+
+        const scale = FOV / (FOV - dot.z)
+        if (scale <= 0) continue
+
+        const px = (dot.x - cx) * scale + cx
+        const py = (dot.y - cy) * scale + cy
+
+        // Cull dots that project off-screen (enormous near the eye)
+        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
+
+        const r = Math.max(0.3, dot.size * scale * 0.06)
+
+        // Fade in from back; fully opaque in the front half of the z range
+        const progress = (dot.z - dot.zStart) / (Z_NEAR - dot.zStart)
+        const alpha    = Math.min(1, progress * 2)
+
+        ctx.beginPath()
+        ctx.arc(px, py, r, 0, Math.PI * 2)
+        ctx.fillStyle = `hsla(${dot.hue}, 50%, 60%, ${alpha})`
+        ctx.fill()
+      }
+
+      animId = requestAnimationFrame(draw)
     }
 
-    // ── Parallax via transform (compositor-only — zero repaints) ────────────
-    // rotateX/Y on a will-change:transform element is handled entirely by the
-    // GPU compositor. Unlike perspectiveOrigin, it never triggers a repaint.
+    draw()
+
+    // ── Compositor-only tilt ──────────────────────────────────────────────────
+    // perspective() inside transform applies to the element itself — no parent
+    // element needed, no repaints triggered.
     function setTilt(x: number, y: number) {
       const rx = ((y - cy) / cy) * -MAX_DEG
       const ry = ((x - cx) / cx) *  MAX_DEG
-      if (wrap) wrap.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`
+      canvas.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg)`
     }
 
-    // ── Desktop: mouse ───────────────────────────────────────────────────────
-    function handleMouse(e: MouseEvent) {
-      setTilt(e.clientX, e.clientY)
-    }
+    // ── Desktop: mouse ────────────────────────────────────────────────────────
+    function handleMouse(e: MouseEvent) { setTilt(e.clientX, e.clientY) }
 
-    // ── Mobile: device orientation (tilt) ───────────────────────────────────
+    // ── Mobile: device orientation ────────────────────────────────────────────
     let orientationActive = false
-    
-    // Higher = more responsive to smaller physical movement
     const ORIENTATION_SENSITIVITY = 1.6
-    
-    // Smaller range = stronger effect from the same tilt
-    const GAMMA_RANGE = 35 // left-right
-    const BETA_RANGE = 35  // front-back
-    
-    function clamp(value: number, min: number, max: number) {
-      return Math.min(Math.max(value, min), max)
-    }
-    
+    const GAMMA_RANGE = 35
+    const BETA_RANGE  = 35
+
     function handleOrientation(e: DeviceOrientationEvent) {
-      // Raw input
-      const rawGamma = e.gamma ?? 0
-      const rawBeta = e.beta ?? 0
-    
-      // Clamp to a tighter usable range, then amplify
-      const gamma = clamp(rawGamma * ORIENTATION_SENSITIVITY, -GAMMA_RANGE, GAMMA_RANGE)
-      const beta = clamp(rawBeta * ORIENTATION_SENSITIVITY, -BETA_RANGE, BETA_RANGE)
-    
-      // Map tighter tilt range to full viewport
-      const x = ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * window.innerWidth
-      const y = ((beta + BETA_RANGE) / (BETA_RANGE * 2)) * window.innerHeight
-    
-      setPerspective(x, y)
+      const gamma = Math.min(Math.max((e.gamma ?? 0) * ORIENTATION_SENSITIVITY, -GAMMA_RANGE), GAMMA_RANGE)
+      const beta  = Math.min(Math.max((e.beta  ?? 0) * ORIENTATION_SENSITIVITY, -BETA_RANGE),  BETA_RANGE)
+      const x = ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w
+      const y = ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h
+      setTilt(x, y)
       orientationActive = true
     }
 
-    // Touch fallback — only used when orientation hasn't fired yet
+    // Touch fallback — only fires when orientation hasn't been granted
     function handleTouch(e: TouchEvent) {
       if (orientationActive) return
       setTilt(e.touches[0].clientX, e.touches[0].clientY)
@@ -134,29 +158,26 @@ export function LoginBg() {
     window.addEventListener('touchmove',  handleTouch, { passive: true })
 
     return () => {
+      cancelAnimationFrame(animId)
       window.removeEventListener('mousemove',         handleMouse)
       window.removeEventListener('touchstart',        handleTouch)
       window.removeEventListener('touchmove',         handleTouch)
       window.removeEventListener('deviceorientation', handleOrientation)
-      anims.forEach(a => a.cancel())
-      dots.forEach(d => d.remove())
     }
   }, [])
 
   return (
-    <div
-      ref={wrapRef}
+    <canvas
+      ref={canvasRef}
       aria-hidden="true"
       style={{
-        position:       'fixed',
-        inset:          0,
-        background:     '#000',
-        overflow:       'hidden',
-        perspective:    '200px',
-        transformStyle: 'preserve-3d',
-        zIndex:         0,
-        pointerEvents:  'none',
-        willChange:     'transform',
+        position:      'fixed',
+        inset:         0,
+        background:    '#000',
+        zIndex:        0,
+        pointerEvents: 'none',
+        willChange:    'transform',
+        display:       'block',
       }}
     />
   )
