@@ -74,7 +74,6 @@ export default function ResumeBuilderPage({ params }: Props) {
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
-  const [docLocked, setDocLocked] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [sections, setSections] = useState<DocumentSection[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -101,7 +100,6 @@ export default function ResumeBuilderPage({ params }: Props) {
       const out = wf.outputs?.find(o => o.type === "resume" && o.is_current);
       if (out) {
         setSections(parseSections(out));
-        setDocLocked(out.status === "approved");
         setGenerating(false);
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       } else {
@@ -160,29 +158,6 @@ export default function ResumeBuilderPage({ params }: Props) {
     setIsDirty(false);
   }, [id, sections]);
 
-  const handleToggleLock = useCallback(async () => {
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    const newLocked = !docLocked;
-    await fetch(`/api/workflows/${id}/outputs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "resume",
-        content: JSON.stringify(sections),
-        status: newLocked ? "approved" : "draft",
-      }),
-    });
-    if (newLocked) {
-      await fetch(`/api/workflows/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: "draft", is_active: true }),
-      });
-    }
-    setDocLocked(newLocked);
-    setIsDirty(false);
-  }, [id, sections, docLocked]);
-
   const handleStatusChange = useCallback(async (val: string) => {
     const opt = STATUS_OPTIONS.find(o => o.value === val);
     if (!opt || !opt.event) { setAppStatus(val); return; }
@@ -208,14 +183,12 @@ export default function ResumeBuilderPage({ params }: Props) {
       companyName: workflow.listing?.company_name ?? "",
       appStatus,
       isDirty,
-      docLocked,
       onSave: handleManualSave,
-      onToggleLock: handleToggleLock,
       onStatusChange: handleStatusChange,
       onDelete: () => setConfirmDel(true),
     });
     return () => clearDocControls();
-  }, [workflow, appStatus, isDirty, docLocked, handleManualSave, handleToggleLock, handleStatusChange]);
+  }, [workflow, appStatus, isDirty, handleManualSave, handleStatusChange]);
 
   const updateSection = (secId: string, content: string) => {
     setSections(prev => prev.map(s => s.id === secId ? { ...s, content } : s));
@@ -293,19 +266,17 @@ export default function ResumeBuilderPage({ params }: Props) {
                         <h3 className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
                           {section.title}
                         </h3>
-                        {!docLocked && (
-                          <button
-                            onClick={() => setEditingId(editingId === section.id ? null : section.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-sky-600 flex items-center gap-1 hover:underline"
-                          >
-                            <Edit3 className="w-3 h-3" /> Edit
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setEditingId(editingId === section.id ? null : section.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-sky-600 flex items-center gap-1 hover:underline"
+                        >
+                          <Edit3 className="w-3 h-3" /> Edit
+                        </button>
                       </div>
                     )}
                     <div className={cn("px-6 sm:px-8", section.id === "sec-header" ? "pt-8 pb-4" : "pb-5")}>
                       {section.id === "sec-header" ? (
-                        docLocked || editingId !== section.id ? (
+                        editingId !== section.id ? (
                           <div>
                             <div className="text-2xl font-bold text-slate-900 tracking-tight mb-1">
                               {section.content.split("\n")[0]}
@@ -317,10 +288,10 @@ export default function ResumeBuilderPage({ params }: Props) {
                         ) : (
                           <SectionEditor section={section} onUpdate={updateSection} onSave={handleManualSave} />
                         )
-                      ) : docLocked || editingId !== section.id ? (
+                      ) : editingId !== section.id ? (
                         <div
-                          className={cn("cursor-text", docLocked && "cursor-default")}
-                          onClick={() => !docLocked && setEditingId(section.id)}
+                          className="cursor-text"
+                          onClick={() => setEditingId(section.id)}
                         >
                           <MarkdownDoc content={section.content} />
                         </div>

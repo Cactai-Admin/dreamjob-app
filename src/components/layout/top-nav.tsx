@@ -173,24 +173,35 @@ export function TopNav() {
           <div className="flex items-center gap-2 flex-shrink-0">
 
             {controls && (
-              <>
-                {/* Status */}
-                <div className="relative">
-                  <select
-                    value={controls.appStatus}
-                    onChange={e => controls.onStatusChange(e.target.value)}
-                    className={cn(
-                      'text-xs font-medium pl-3 pr-6 py-2 rounded-xl border bg-white appearance-none cursor-pointer',
-                      statusColor(controls.appStatus)
-                    )}
-                  >
-                    {STATUS_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                  <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
-                </div>
+              /* Status dropdown — left of the right group */
+              <div className="relative">
+                <select
+                  value={controls.appStatus}
+                  onChange={e => controls.onStatusChange(e.target.value)}
+                  className={cn(
+                    'text-xs font-medium pl-3 pr-6 py-2 rounded-xl border bg-white appearance-none cursor-pointer',
+                    statusColor(controls.appStatus)
+                  )}
+                >
+                  {STATUS_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
+              </div>
+            )}
 
+            {/* Lock screen */}
+            <button
+              onClick={lockScreen}
+              title="Lock screen (⌘⇧L)"
+              className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+
+            {controls && (
+              <>
                 {/* Save */}
                 <button
                   onClick={controls.onSave}
@@ -203,20 +214,6 @@ export function TopNav() {
                   }
                 </button>
 
-                {/* Edit / Lock — text only on desktop */}
-                <button
-                  onClick={controls.onToggleLock}
-                  className={cn(
-                    'text-xs font-medium px-3 py-2 rounded-xl border',
-                    controls.docLocked
-                      ? 'border-slate-300 bg-slate-50 text-slate-700'
-                      : 'border-sky-300 bg-sky-50 text-sky-700'
-                  )}
-                  title={controls.docLocked ? 'Locked — click to edit' : 'Editing — click to lock'}
-                >
-                  {controls.docLocked ? 'Click to Edit' : 'Click to Lock'}
-                </button>
-
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
@@ -227,15 +224,6 @@ export function TopNav() {
                 </button>
               </>
             )}
-
-            {/* Lock screen — icon only, far right before profile */}
-            <button
-              onClick={lockScreen}
-              title="Lock screen (⌘⇧L)"
-              className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              <Lock className="w-4 h-4" />
-            </button>
 
             {/* Profile — icon only */}
             <ProfileButton />
@@ -257,43 +245,30 @@ export function TopNav() {
               ←
             </button>
 
-            <div className="flex-1 flex items-center justify-center gap-2">
-              {controls && (
-                <>
-                  {/* Save */}
-                  <button
-                    onClick={controls.onSave}
-                    className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
-                  >
-                    {controls.isDirty
-                      ? <Save className="w-3.5 h-3.5" />
-                      : <span className="text-emerald-600 font-semibold">Saved</span>
-                    }
-                  </button>
+            <div className="flex-1" />
 
-                  {/* Tap to Edit / Tap to Lock */}
-                  <button
-                    onClick={controls.onToggleLock}
-                    className={cn(
-                      'text-xs font-medium px-3 py-2 rounded-xl border',
-                      controls.docLocked
-                        ? 'border-slate-300 bg-slate-50 text-slate-700'
-                        : 'border-sky-300 bg-sky-50 text-sky-700'
-                    )}
-                  >
-                    {controls.docLocked ? 'Tap to Edit' : 'Tap to Lock'}
-                  </button>
+            {controls && (
+              <>
+                {/* Save */}
+                <button
+                  onClick={controls.onSave}
+                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
+                >
+                  {controls.isDirty
+                    ? <Save className="w-3.5 h-3.5" />
+                    : <span className="text-emerald-600 font-semibold">Saved</span>
+                  }
+                </button>
 
-                  {/* Trash */}
-                  <button
-                    onClick={controls.onDelete}
-                    className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
+                {/* Trash */}
+                <button
+                  onClick={controls.onDelete}
+                  className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
 
             <ProfileButton />
           </>
