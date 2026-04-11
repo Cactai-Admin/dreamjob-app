@@ -1,207 +1,212 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import gsap from 'gsap'
 
-// ── Canvas port of the original TweenMax starfield ────────────────────────────
-// Matches the original exactly:
-//   - 200 dots, hsla(i*1.8, 50%, 50%) colors, size 2–30 px
-//   - box-shadow glow via ctx.shadowBlur
-//   - z: random(-1000,-200) → 500 over 3 s (8.33 units/frame at 60 fps)
-//   - opacity 0→1 as z travels from start to 500
-//   - perspectiveOrigin parallax = vanishing-point shift in projection math
-//
-// Canvas keeps it all in one GPU texture so the login column never flashes.
+const TOTAL = 160
+const Z_MIN = -1000
+const Z_MAX = -200
+const Z_END = 500
 
-const TOTAL = 200
-const FOV   = 200                     // perspective: 200px
-const SPEED = 1500 / 6               // 1500 z-units / 6 s — per second, frame-rate independent
-const Z_END = 500                     // same end point as original
-
-const PARALLAX_STRENGTH = 1.0
-
-function rand(min: number, max: number) {
+function random(min: number, max: number) {
   return Math.random() * (max - min) + min
 }
 
-interface Dot {
-  x: number; y: number; z: number
-  zStart: number; size: number; hue: number
-}
-
 export function LoginBg() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const particleRefs = useRef<(HTMLDivElement | null)[]>([])
+  const driftTweenRef = useRef<gsap.core.Tween | null>(null)
+  const pauseTweenRef = useRef<gsap.core.Tween | null>(null)
+
+  const particles = useMemo(() => Array.from({ length: TOTAL }, (_, i) => i), [])
 
   useEffect(() => {
-    const canvas = canvasRef.current!
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    if (!ctx) return
+    const wrap = wrapRef.current
+    if (!wrap) return
 
-    const w  = window.innerWidth
-    const h  = window.innerHeight
-    const cx = w / 2
-    const cy = h / 2
+    const w = window.innerWidth
+    const h = window.innerHeight
 
-    canvas.width  = w
-    canvas.height = h
+    const driftState = {
+      x: w * 0.5,
+      y: h * 0.5,
+    }
 
-    // Vanishing point — starts at center, eases toward cursor
-    let vx = cx, vy = cy
-    let tvx = cx, tvy = cy
-
-    // Build dots and stagger their initial z so all depths are full on frame 1
-    const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
-      const zStart = rand(-1000, -200)
-      const range  = Z_END - zStart
-      return {
-        x:      rand(0, w),
-        y:      rand(0, h),
-        z:      zStart + range * (i / TOTAL),   // staggered like delay: i * -.015
-        zStart,
-        size:   rand(2, 30),
-        hue:    i * 1.8,
-      }
+    gsap.set(wrap, {
+      perspective: 1000,
+      perspectiveOrigin: `${driftState.x}px ${driftState.y}px`,
+      transformStyle: 'preserve-3d',
+      force3D: true,
     })
 
-    let animId = 0
-    let lastTime = 0
+    particleRefs.current.forEach((node, i) => {
+      if (!node) return
 
-    function draw(now: number) {
-      const dt = lastTime === 0 ? 1 / 60 : Math.min((now - lastTime) / 1000, 0.1)
-      lastTime = now
+      const x = random(0, w)
+      const y = random(0, h)
+      const z = random(Z_MIN, Z_MAX)
+      const size = random(2, 30)
+      const hue = i * 1.8
+      const color = `hsla(${hue}, 50%, 58%, 0.85)`
 
-      // Ease vanishing point toward target (frame-rate independent at ~60 fps feel)
-      const ease = 1 - Math.pow(1 - 0.06, dt * 60)
-      vx += (tvx - vx) * ease
-      vy += (tvy - vy) * ease
+      gsap.set(node, {
+        x,
+        y,
+        z,
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        opacity: 0,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        background: `radial-gradient(circle, hsla(${hue}, 55%, 68%, 0.30) 0%, hsla(${hue}, 55%, 54%, 0.20) 28%, hsla(${hue}, 55%, 50%, 0.10) 48%, transparent 72%)`,
+        boxShadow: `0 0 ${size * 0.9}px ${size * 0.22}px ${color}`,
+        willChange: 'transform, opacity',
+        force3D: true,
+      })
 
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, w, h)
-
-      for (const dot of dots) {
-        dot.z += SPEED * dt
-
-        // Reset — same as TweenMax repeat: -1
-        if (dot.z >= Z_END) {
-          dot.z = dot.zStart
-          dot.x = rand(0, w)
-          dot.y = rand(0, h)
-          continue
+      gsap.fromTo(
+        node,
+        {
+          opacity: 0,
+          x,
+          y,
+          z,
+        },
+        {
+          opacity: 1,
+          z: Z_END,
+          duration: 3,
+          repeat: -1,
+          ease: 'none',
+          delay: i * -0.015,
+          force3D: true,
         }
-
-        // Skip dots past the eye (would produce negative/infinite scale)
-        if (dot.z >= FOV) continue
-
-        const scale = FOV / (FOV - dot.z)
-
-        // Project from vanishing point (perspectiveOrigin equivalent)
-        const px = (dot.x - vx) * scale + vx
-        const py = (dot.y - vy) * scale + vy
-
-        // Cull off-screen
-        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
-
-        // Opacity 0→1 over the journey, matching TweenMax fromTo opacity
-        const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
-
-        const r     = Math.max(0.3, (dot.size / 2) * scale)
-        const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
-
-        // Glow — base of dot.size px (matches original box-shadow) + grows with scale
-        ctx.shadowBlur  = dot.size * (scale + 1)
-        ctx.shadowColor = color
-
-        ctx.beginPath()
-        ctx.arc(px, py, r, 0, Math.PI * 2)
-        ctx.fillStyle = color
-        ctx.fill()
-      }
-
-      // Reset shadow so it doesn't bleed into the next fillRect
-      ctx.shadowBlur = 0
-
-      animId = requestAnimationFrame(draw as FrameRequestCallback)
-    }
-
-    animId = requestAnimationFrame(draw as FrameRequestCallback)
-
-    // ── Mouse / touch — moves the vanishing point (perspectiveOrigin equiv) ──
-    function setVanish(x: number, y: number) {
-      tvx = cx + (x - cx) * PARALLAX_STRENGTH
-      tvy = cy + (y - cy) * PARALLAX_STRENGTH
-    }
-
-    function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
-
-    const GAMMA_RANGE = 25, BETA_RANGE = 25
-    let orientationAttached = false
-
-    function handleOrientation(e: DeviceOrientationEvent) {
-      const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
-      const beta  = Math.min(Math.max(e.beta  ?? 0, -BETA_RANGE),  BETA_RANGE)
-      setVanish(
-        ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w,
-        ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h,
       )
+    })
+
+    const setPerspectiveOrigin = () => {
+      wrap.style.perspectiveOrigin = `${driftState.x}px ${driftState.y}px`
+      ;(wrap.style as CSSStyleDeclaration).webkitPerspectiveOrigin =
+        `${driftState.x}px ${driftState.y}px`
     }
 
-    function handleTouch(e: TouchEvent) {
-      setVanish(e.touches[0].clientX, e.touches[0].clientY)
+    const scheduleNextDrift = () => {
+      const currentX = driftState.x
+      const currentY = driftState.y
+
+      const bigMove = Math.random() < 0.16
+
+      const targetX = bigMove
+        ? random(w * 0.2, w * 0.8)
+        : random(
+            Math.max(w * 0.35, currentX - w * 0.12),
+            Math.min(w * 0.65, currentX + w * 0.12)
+          )
+
+      const targetY = bigMove
+        ? random(h * 0.2, h * 0.8)
+        : random(
+            Math.max(h * 0.35, currentY - h * 0.12),
+            Math.min(h * 0.65, currentY + h * 0.12)
+          )
+
+      const duration = random(6, 18)
+      const pause = random(2, 8)
+
+      pauseTweenRef.current = gsap.delayedCall(pause, () => {
+        driftTweenRef.current = gsap.to(driftState, {
+          x: targetX,
+          y: targetY,
+          duration,
+          ease: 'sine.inOut',
+          onUpdate: setPerspectiveOrigin,
+          onComplete: scheduleNextDrift,
+        })
+      })
     }
 
-    function attachOrientation() {
-      if (orientationAttached) return
-      orientationAttached = true
-      window.addEventListener('deviceorientation', handleOrientation)
+    setPerspectiveOrigin()
+    scheduleNextDrift()
+
+    const handleResize = () => {
+      const nextW = window.innerWidth
+      const nextH = window.innerHeight
+
+      driftState.x = nextW * 0.5
+      driftState.y = nextH * 0.5
+
+      gsap.set(wrap, {
+        perspectiveOrigin: `${driftState.x}px ${driftState.y}px`,
+      })
     }
 
-    const DOE = DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<'granted' | 'denied'>
-    }
-
-    if (typeof DeviceOrientationEvent !== 'undefined') {
-      if (typeof DOE.requestPermission === 'function') {
-        // iOS: must call requestPermission() synchronously from a user gesture.
-        // Use .then() (not async/await) to keep the call in the gesture stack.
-        // Re-attempt on each touch until granted so tapping any element works.
-        const requestOnTouch = () => {
-          if (orientationAttached) return
-          DOE.requestPermission!()
-            .then(result => { if (result === 'granted') attachOrientation() })
-            .catch(() => { /* denied or unavailable */ })
-        }
-        window.addEventListener('touchstart', requestOnTouch, { passive: true })
-      } else {
-        // Android / non-gated browsers — attach immediately
-        attachOrientation()
-      }
-    }
-
-    window.addEventListener('mousemove',  handleMouse)
-    window.addEventListener('touchstart', handleTouch, { passive: true })
-    window.addEventListener('touchmove',  handleTouch, { passive: true })
+    window.addEventListener('resize', handleResize)
 
     return () => {
-      cancelAnimationFrame(animId)
-      window.removeEventListener('mousemove',         handleMouse)
-      window.removeEventListener('touchstart',        handleTouch)
-      window.removeEventListener('touchmove',         handleTouch)
-      window.removeEventListener('deviceorientation', handleOrientation)
+      window.removeEventListener('resize', handleResize)
+      driftTweenRef.current?.kill()
+      pauseTweenRef.current?.kill()
+      gsap.killTweensOf(particleRefs.current)
+      gsap.killTweensOf(driftState)
     }
   }, [])
 
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      style={{
-        position:      'fixed',
-        inset:         0,
-        background:    '#000',
-        zIndex:        0,
-        pointerEvents: 'none',
-        display:       'block',
-      }}
-    />
+    <>
+      <div
+        ref={wrapRef}
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          zIndex: 0,
+          isolation: 'isolate',
+          contain: 'layout paint style',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+          background:
+            'radial-gradient(circle at 50% 50%, rgba(18,26,44,0.34) 0%, rgba(6,10,20,0.74) 42%, rgba(0,0,0,0.96) 78%, rgba(0,0,0,1) 100%)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: '-10%',
+            background:
+              'radial-gradient(circle at 50% 50%, rgba(120,150,255,0.07) 0%, rgba(40,65,120,0.05) 24%, rgba(0,0,0,0) 62%)',
+            filter: 'blur(42px)',
+            opacity: 0.9,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transformStyle: 'preserve-3d',
+            willChange: 'transform',
+          }}
+        >
+          {particles.map((i) => (
+            <div
+              key={i}
+              ref={(el) => {
+                particleRefs.current[i] = el
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <style jsx>{`
+        div[aria-hidden='true'] :global(div) {
+          transform-style: preserve-3d;
+        }
+      `}</style>
+    </>
   )
 }
