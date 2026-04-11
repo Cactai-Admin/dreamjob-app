@@ -17,7 +17,7 @@ const FOV   = 200                     // perspective: 200px
 const SPEED = 1500 / (8 * 60)        // 1500 z-units / 8 s / 60 fps ≈ 3.125
 const Z_END = 500                     // same end point as original
 
-const PARALLAX_STRENGTH = 0.35
+const PARALLAX_STRENGTH = 1.0
 
 function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -102,8 +102,8 @@ export function LoginBg() {
         const r     = Math.max(0.3, (dot.size / 2) * scale)
         const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
 
-        // Glow — matches box-shadow: 0 0 ${size}px ${color}
-        ctx.shadowBlur  = dot.size * scale
+        // Glow — matches box-shadow: 0 0 ${size}px ${color} (fixed size, not distance-scaled)
+        ctx.shadowBlur  = dot.size
         ctx.shadowColor = color
 
         ctx.beginPath()
