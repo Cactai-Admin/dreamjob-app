@@ -306,14 +306,12 @@
     width: 100%;
     border-radius: 20px;
     padding: 32px;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(18, 18, 18, 0.82);
+    border: 1px solid rgba(255,255,255,0.10);
     box-shadow:
       0 0 0 1px rgba(255,255,255,0.04),
-      0 8px 40px rgba(0,0,0,0.6),
-      0 2px 12px rgba(0,0,0,0.3);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+      0 8px 40px rgba(0,0,0,0.7),
+      0 2px 12px rgba(0,0,0,0.4);
   }
 
   .login-card-header {
