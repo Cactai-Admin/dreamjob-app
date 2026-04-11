@@ -147,8 +147,8 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
           </div>
           <div>
             <div className="text-sm font-semibold text-slate-900">AI Assistant</div>
-            <div className="text-xs text-emerald-600 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+            <div className="text-xs text-sky-500 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block" />
               Ready to help
             </div>
           </div>
