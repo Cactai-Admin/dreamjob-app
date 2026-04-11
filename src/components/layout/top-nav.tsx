@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { Lock } from "lucide-react";
+import { useMobileNavSlot } from "@/components/layout/mobile-nav-slot";
 
 /* Desktop nav — all items */
 const NAV_ITEMS = [
@@ -46,6 +47,7 @@ const USER_MENU_ITEMS = [
 export function TopNav() {
   const pathname = usePathname();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { slot } = useMobileNavSlot();
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
   const { activate: lockScreen } = usePrivacyScreen();
 
@@ -158,13 +160,21 @@ export function TopNav() {
 
       {/* ── Mobile top bar (brand + avatar → dropdown menu) ── */}
       <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center justify-between px-4" style={{ height: 64 }}>
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 flex-shrink-0">
           <div className="w-6 h-6 rounded-md bg-slate-900 flex items-center justify-center">
             <Zap className="w-3.5 h-3.5 text-white" />
           </div>
           <span className="font-bold text-slate-900 text-sm tracking-tight">DreamJob</span>
         </Link>
-        <div className="relative">
+
+        {/* Mobile nav slot — injected by document pages (status dropdown) */}
+        {slot && (
+          <div className="flex-1 flex justify-center px-2">
+            {slot}
+          </div>
+        )}
+
+        <div className="relative flex-shrink-0">
           <button
             onClick={() => setUserMenuOpen(!userMenuOpen)}
             className="w-7 h-7 rounded-full bg-slate-200 overflow-hidden ring-2 ring-transparent hover:ring-sky-400 transition-all"
