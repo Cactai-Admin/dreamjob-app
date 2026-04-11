@@ -111,10 +111,10 @@
     --color-border-raw:       #414141;
     --color-border-hover:     #525252;
     --color-accent-raw:       #0285FF;
-    --color-accent-hover:     #3DA0FF;
-    --color-success:          #40C977;
-    --color-warning:          #FF9E6C;
-    --color-error:            #FF8583;
+    --color-accent-hover:     #0070E0;
+    --color-success:          #008635;
+    --color-warning:          #E25507;
+    --color-error:            #E02E2A;
   }
 }
 
