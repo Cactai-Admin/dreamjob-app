@@ -282,6 +282,202 @@
     border-radius: 8px;
   }
 
+  /* ── Login page ────────────────────────────────────────── */
+  /* Background is always the black starfield — card floats on top */
+  .login-root {
+    position: relative;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .login-column {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
+    padding: 24px 16px;
+    gap: 20px;
+  }
+
+  .login-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .login-brand-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .login-brand-zap {
+    width: 18px;
+    height: 18px;
+    color: #fff;
+  }
+
+  .login-brand-name {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+
+  .login-card {
+    width: 100%;
+    border-radius: 20px;
+    padding: 32px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04),
+      0 8px 40px rgba(0,0,0,0.6),
+      0 2px 12px rgba(0,0,0,0.3);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .login-card-header {
+    margin-bottom: 24px;
+  }
+
+  .login-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+
+  .login-subtitle {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .login-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    letter-spacing: 0.01em;
+  }
+
+  .login-input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.14);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    outline: none;
+  }
+
+  .login-input::placeholder {
+    color: rgba(255,255,255,0.3);
+  }
+
+  .login-input:focus {
+    border-color: rgba(2, 133, 255, 0.7);
+    box-shadow: 0 0 0 3px rgba(2, 133, 255, 0.2);
+  }
+
+  .login-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    background: rgba(255, 133, 131, 0.12);
+    border: 1px solid rgba(255, 133, 131, 0.3);
+    color: #FF8583;
+  }
+
+  .login-error-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .login-submit {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: all 150ms ease;
+    margin-top: 4px;
+    cursor: pointer;
+    border: none;
+  }
+
+  .login-submit-ready {
+    background: #fff;
+    color: #0D0D0D;
+  }
+
+  .login-submit-ready:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(255,255,255,0.15);
+  }
+
+  .login-submit-ready:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+
+  .login-submit-disabled {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.3);
+    cursor: not-allowed;
+  }
+
+  .login-submit-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+  }
+
+  .login-footer {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+  }
+
   .workflow-stage {
     @apply min-h-[calc(100vh-52px)] flex items-center justify-center px-4;
   }
