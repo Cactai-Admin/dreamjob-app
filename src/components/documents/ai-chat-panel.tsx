@@ -12,6 +12,7 @@ interface Props {
   surface?: string;
   onClose?: () => void;
   className?: string;
+  initialMessages?: ChatMessage[];
 }
 
 function TypingIndicator() {
@@ -46,9 +47,13 @@ function MessageBubble({ message, onSuggestion }: { message: ChatMessage; onSugg
           isUser
             ? "bg-sky-600 text-white rounded-2xl rounded-br-sm"
             : "bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-bl-sm"
-        )}>
-          {message.content}
-        </div>
+        )}
+          dangerouslySetInnerHTML={{
+            __html: message.content
+              .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+              .replace(/\n/g, "<br/>"),
+          }}
+        />
         {message.suggestions && message.suggestions.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {message.suggestions.map((s) => (
@@ -67,14 +72,16 @@ function MessageBubble({ message, onSuggestion }: { message: ChatMessage; onSugg
   );
 }
 
-export function AiChatPanel({ workflowId, surface = "document", onClose, className }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export function AiChatPanel({ workflowId, surface = "document", onClose, className, initialMessages }: Props) {
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
   }, [messages, isTyping]);
 
   const sendMessage = async (text: string) => {
@@ -92,10 +99,16 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
     setIsTyping(true);
 
     try {
+      let provider: string | undefined;
+      try {
+        const stored = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
+        if (stored.aiProvider) provider = stored.aiProvider;
+      } catch { /* ignore */ }
+
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workflow_id: workflowId, message: text.trim(), surface }),
+        body: JSON.stringify({ workflow_id: workflowId, message: text.trim(), surface, provider }),
       });
       const data = await res.json();
       const aiMsg: ChatMessage = {
@@ -148,8 +161,8 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && !isTyping && (
+      <div ref={scrollAreaRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && !isTyping && !initialMessages?.length && (
           <div className="text-center py-8">
             <div className="w-10 h-10 rounded-full bg-sky-100 flex items-center justify-center mx-auto mb-3">
               <Sparkles className="w-5 h-5 text-sky-500" />
@@ -163,7 +176,6 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
           <MessageBubble key={msg.id} message={msg} onSuggestion={sendMessage} />
         ))}
         {isTyping && <TypingIndicator />}
-        <div ref={bottomRef} />
       </div>
 
       {/* Input */}

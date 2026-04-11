@@ -1,8 +1,8 @@
 "use client";
 
-// ── DocumentEditor — Editable document with section management ──
+// ── DocumentEditor — Editable document with auto-save and section management ──
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CircleCheck as CheckCircle2, CreditCard as Edit3, Eye, Save } from "lucide-react";
 import type { DocumentSection, DocumentStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 interface Props {
   sections: DocumentSection[];
   status: DocumentStatus;
-  onApprove?: () => void;
+  onApprove?: (sections: DocumentSection[]) => void;
   onSave?: (sections: DocumentSection[]) => void;
   title?: string;
 }
@@ -20,24 +20,43 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [docStatus, setDocStatus] = useState(status);
-  const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialRender = useRef(true);
+
+  // Auto-save 2s after any edit
+  useEffect(() => {
+    if (initialRender.current) { initialRender.current = false; return; }
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setSaveState("saving");
+    autoSaveTimer.current = setTimeout(async () => {
+      await onSave?.(sections);
+      setSaveState("saved");
+      setTimeout(() => setSaveState("idle"), 2000);
+    }, 2000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [sections]);
 
   const updateSection = (id: string, content: string) => {
-    setSections((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, content } : s))
-    );
+    setSections((prev) => prev.map((s) => (s.id === id ? { ...s, content } : s)));
   };
 
-  const handleSave = () => {
+  const handleManualSave = async () => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     setEditingId(null);
-    setSaved(true);
-    onSave?.(sections);
-    setTimeout(() => setSaved(false), 2000);
+    setSaveState("saving");
+    await onSave?.(sections);
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 2000);
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     setDocStatus("approved");
-    onApprove?.();
+    setSaveState("saving");
+    await onApprove?.(sections);
+    setSaveState("saved");
+    setTimeout(() => setSaveState("idle"), 2000);
   };
 
   return (
@@ -46,7 +65,10 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-slate-700">{title}</span>
-          {saved && (
+          {saveState === "saving" && (
+            <span className="text-xs text-slate-400 animate-pulse">Saving…</span>
+          )}
+          {saveState === "saved" && (
             <span className="text-xs text-emerald-600 flex items-center gap-1 animate-fade-in">
               <CheckCircle2 className="w-3 h-3" /> Saved
             </span>
@@ -54,7 +76,6 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Preview toggle */}
           <button
             onClick={() => setPreviewMode(!previewMode)}
             className={cn(
@@ -68,7 +89,6 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
             {previewMode ? "Edit" : "Preview"}
           </button>
 
-          {/* Approve button */}
           {docStatus !== "approved" ? (
             <button
               onClick={handleApprove}
@@ -97,7 +117,6 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
                 idx < sections.length - 1 && "border-b border-slate-100"
               )}
             >
-              {/* Section header */}
               {section.id !== "sec-header" && (
                 <div className="px-6 sm:px-8 pt-5 pb-1">
                   <div className="flex items-center justify-between">
@@ -117,13 +136,11 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
                 </div>
               )}
 
-              {/* Section content */}
               <div className={cn(
                 "px-6 sm:px-8",
                 section.id === "sec-header" ? "pt-8 pb-4" : "pb-5"
               )}>
                 {section.id === "sec-header" ? (
-                  /* Header section — name/contact styled specially */
                   previewMode || editingId !== section.id ? (
                     <div>
                       <div className="text-2xl font-bold text-slate-900 tracking-tight mb-1">
@@ -134,7 +151,7 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
                       </div>
                     </div>
                   ) : (
-                    <EditableArea section={section} onUpdate={updateSection} onSave={handleSave} />
+                    <EditableArea section={section} onUpdate={updateSection} onSave={handleManualSave} />
                   )
                 ) : previewMode || editingId !== section.id ? (
                   <div
@@ -144,13 +161,11 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
                     {section.content}
                   </div>
                 ) : (
-                  <EditableArea section={section} onUpdate={updateSection} onSave={handleSave} />
+                  <EditableArea section={section} onUpdate={updateSection} onSave={handleManualSave} />
                 )}
               </div>
             </div>
           ))}
-
-          {/* Page padding */}
           <div className="h-8" />
         </div>
       </div>
@@ -158,7 +173,6 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
   );
 }
 
-/* ── EditableArea subcomponent ─────────────────────────── */
 function EditableArea({
   section,
   onUpdate,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { createClient } from '@supabase/supabase-js'
+import { getProvider } from '@/lib/ai/provider'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,7 +40,9 @@ export async function GET(request: NextRequest) {
     .select(`
       *,
       listing:job_listings(*),
-      company:companies(*)
+      company:companies(*),
+      outputs(*),
+      status_events(*)
     `)
     .eq('account_id', accountId)
     .order('created_at', { ascending: false })
@@ -62,21 +65,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // One active application at a time — listing_review doesn't count (pre-application)
-  const { data: existing } = await supabaseAdmin
-    .from('workflows')
-    .select('id')
-    .eq('account_id', accountId)
-    .eq('is_active', true)
-    .not('state', 'in', '("sent","completed","archived","listing_review")')
-
-  if (existing && existing.length > 0) {
-    return NextResponse.json(
-      { error: 'You already have an active application in progress. Complete or archive it before starting a new one.' },
-      { status: 409 }
-    )
-  }
 
   const body = await request.json()
   const {
@@ -103,6 +91,26 @@ export async function POST(request: NextRequest) {
     requirements = rawRequirements.split(/\n|;/).map((s: string) => s.trim()).filter(Boolean)
   }
 
+  // If no company website URL was parsed, try to discover it via AI
+  let resolvedWebsiteUrl: string | null = company_website_url || null
+  if (!resolvedWebsiteUrl && company_name) {
+    try {
+      const provider = getProvider()
+      if (provider.isConfigured()) {
+        const aiResponse = await provider.generate({
+          messages: [
+            { role: 'system', content: 'You are a research assistant. Return only the exact URL requested — no explanation, no markdown, no punctuation.' },
+            { role: 'user', content: `What is the official company website URL for "${company_name}"?${description ? `\n\nContext: ${description.slice(0, 300)}` : ''}\n\nReturn only the URL (e.g. https://example.com). If you are not confident, return your best guess anyway.` },
+          ],
+          maxTokens: 100,
+          temperature: 0,
+        })
+        const match = aiResponse.trim().match(/https?:\/\/[^\s"'<>]+/)
+        if (match) resolvedWebsiteUrl = match[0].replace(/[.,)]+$/, '')
+      }
+    } catch { /* non-critical — proceed without website URL */ }
+  }
+
   // Create or find company
   let companyId: string | null = null
   if (company_name) {
@@ -115,9 +123,9 @@ export async function POST(request: NextRequest) {
     if (existingCompany) {
       companyId = existingCompany.id
       // Update website/linkedin if we have new info
-      if (company_website_url || company_linkedin_url) {
+      if (resolvedWebsiteUrl || company_linkedin_url) {
         await supabaseAdmin.from('companies').update({
-          ...(company_website_url ? { website_url: company_website_url } : {}),
+          ...(resolvedWebsiteUrl ? { website_url: resolvedWebsiteUrl } : {}),
           ...(company_linkedin_url ? { linkedin_url: company_linkedin_url } : {}),
         }).eq('id', companyId)
       }
@@ -127,7 +135,7 @@ export async function POST(request: NextRequest) {
         .insert({
           name: company_name,
           created_by: accountId,
-          ...(company_website_url ? { website_url: company_website_url } : {}),
+          ...(resolvedWebsiteUrl ? { website_url: resolvedWebsiteUrl } : {}),
           ...(company_linkedin_url ? { linkedin_url: company_linkedin_url } : {}),
         })
         .select()
@@ -152,7 +160,7 @@ export async function POST(request: NextRequest) {
       experience_level: experience_level || null,
       responsibilities: responsibilities || null,
       benefits: benefits || null,
-      company_website_url: company_website_url || null,
+      company_website_url: resolvedWebsiteUrl || null,
       created_by: accountId,
     })
     .select()

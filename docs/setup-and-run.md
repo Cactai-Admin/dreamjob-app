@@ -36,26 +36,28 @@ See [environment-variables.md](environment-variables.md) for all available varia
 
 ## Step 3: Set Up Database
 
-### Option A: Supabase Dashboard (Recommended)
+Run migrations in order via Supabase Dashboard → SQL Editor:
 
-1. Go to your Supabase Dashboard → SQL Editor
-2. Open `supabase/migrations/001_initial_schema.sql`
-3. Copy the entire contents and paste into the SQL Editor
-4. Click **Run**
+### Migration 001 — Initial schema
 
-### Option B: Supabase CLI
+Copy the contents of `supabase/migrations/001_initial_schema.sql` into the SQL Editor and click **Run**.
 
-```bash
-npx supabase db reset
+### Migration 002 — Add company_website_url to job_listings
+
+```sql
+ALTER TABLE job_listings ADD COLUMN IF NOT EXISTS company_website_url TEXT;
 ```
 
-### Option C: Reset Script
+Or paste the contents of `supabase/migrations/002_add_company_website_to_listings.sql`.
+
+> If you skip migration 002 you will get a "column not found" error when saving any new listing.
+
+### Supabase CLI (alternative)
 
 ```bash
-npm run db:reset
+npx supabase link --project-ref your-project-ref
+npx supabase db push
 ```
-
-> Note: The reset script requires the `exec_sql` RPC function to be available in your Supabase project. If it's not, use Option A.
 
 ## Step 4: Seed Super Admin
 
@@ -85,7 +87,9 @@ The app will be available at `http://localhost:3000`.
 
 ### AI Providers
 
-To enable AI-powered document generation and Q&A, configure at least one AI provider. See [ai-providers-setup.md](ai-providers-setup.md).
+To enable AI-powered document generation and listing parsing, configure at least one AI provider. See [ai-providers-setup.md](ai-providers-setup.md).
+
+Without an AI provider, URL parsing will fail and document generation will return an error.
 
 ### Google OAuth
 
@@ -93,7 +97,7 @@ To enable Google sign-in for external users, configure Google OAuth. See [google
 
 ### LinkedIn Integration
 
-To enable company research and connection discovery, set up Playwright. See [linkedin-integration.md](linkedin-integration.md).
+To enable company research and connection discovery via browser automation, set up Playwright. See [linkedin-integration.md](linkedin-integration.md).
 
 ### Stripe
 
@@ -116,6 +120,14 @@ Run `npm install --legacy-peer-deps` instead of `npm install`.
 
 Add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to your `.env.local`. See [ai-providers-setup.md](ai-providers-setup.md).
 
+### "Could not find the 'company_website_url' column" error when saving a listing
+
+Migration 002 has not been applied. Run this in Supabase Dashboard → SQL Editor:
+
+```sql
+ALTER TABLE job_listings ADD COLUMN IF NOT EXISTS company_website_url TEXT;
+```
+
 ### Login fails for Super Admin
 
 1. Verify the seed script ran successfully: `npm run seed`
@@ -124,4 +136,4 @@ Add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to your `.env.local`. See [ai-provid
 
 ### Database tables not found
 
-Run the migration SQL in Supabase Dashboard → SQL Editor. See Step 3 above.
+Run both migration SQL files in Supabase Dashboard → SQL Editor. See Step 3 above.

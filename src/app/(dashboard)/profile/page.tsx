@@ -3,13 +3,14 @@
 // ── Profile — Employment history, education, skills, credentials, and stats ──
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { User, Briefcase, GraduationCap, Star, Award, Globe, Plus, Pencil, Save, CreditCard as Edit2, MapPin, Phone, Mail, ExternalLink, ChartBar as BarChart2, ArrowRight, Calendar, Target, Trophy, TrendingUp } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { User, Briefcase, GraduationCap, Star, Award, Globe, Plus, Pencil, Save, CreditCard as Edit2, MapPin, Phone, Mail, ExternalLink, ChartBar as BarChart2, ArrowRight, Calendar, Target, Trophy, TrendingUp, Trash2, X, Check, Upload } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import { cn } from "@/lib/utils";
 import type { ApplicationStatus, Workflow, Job } from "@/lib/types";
+import { UploadArtifactModal } from "@/components/profile/upload-artifact-modal";
 
 type Tab = "overview" | "experience" | "education" | "skills" | "achievements" | "stats";
 
@@ -23,12 +24,13 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 const STATUS_ORDER: ApplicationStatus[] = [
-  "draft", "saved", "applied", "interviewing", "offer", "hired",
+  "ready", "applied", "received", "interviewing", "offer", "negotiating",
+  "hired", "declined", "ghosted", "rejected",
 ];
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  draft: "Draft", saved: "Saved", applied: "Applied",
-  interviewing: "Interviewing", offer: "Offer", hired: "Hired",
-  rejected: "Rejected", withdrawn: "Withdrawn",
+  ready: "Ready", applied: "Applied", received: "Received",
+  interviewing: "Interviewing", offer: "Offer", negotiating: "Negotiating",
+  hired: "Hired", declined: "Declined", ghosted: "Ghosted", rejected: "Rejected",
 };
 
 interface Profile {
@@ -44,62 +46,466 @@ interface Profile {
   portfolio_url?: string;
   github_url?: string;
   skills?: string[];
+  keywords?: string[];
+  tools?: string[];
+  certifications?: string[];
+  clearances?: string[];
+}
+
+interface Education {
+  id: string;
+  institution: string;
+  degree?: string;
+  field_of_study?: string;
+  start_date?: string;
+  end_date?: string;
+  gpa?: string;
+  description?: string;
 }
 
 interface Employment {
   id: string;
-  company: string;
+  company_name: string;
   title: string;
   location?: string;
   start_date?: string;
   end_date?: string;
   is_current?: boolean;
-  description?: string | string[];
-  skills?: string[];
+  description?: string;
+  technologies?: string[];
+}
+
+const EMPTY_EXP: Omit<Employment, "id"> = {
+  company_name: "", title: "", location: "", start_date: "", end_date: "",
+  is_current: false, description: "", technologies: [],
+};
+
+function ExpForm({
+  initial,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  initial: Omit<Employment, "id"> & { id?: string };
+  onSave: (data: Omit<Employment, "id">) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [form, setForm] = useState({
+    company_name: initial.company_name ?? "",
+    title: initial.title ?? "",
+    location: initial.location ?? "",
+    start_date: initial.start_date ?? "",
+    end_date: initial.end_date ?? "",
+    is_current: initial.is_current ?? false,
+    description: initial.description ?? "",
+    techText: Array.isArray(initial.technologies)
+      ? initial.technologies.join(", ")
+      : "",
+  });
+
+  const set = (k: string, v: string | boolean) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = () => {
+    onSave({
+      company_name: form.company_name,
+      title: form.title,
+      location: form.location || undefined,
+      start_date: form.start_date || "Present",
+      end_date: form.is_current ? undefined : (form.end_date || undefined),
+      is_current: form.is_current,
+      description: form.description || undefined,
+      technologies: form.techText
+        ? form.techText.split(",").map(s => s.trim()).filter(Boolean)
+        : [],
+    });
+  };
+
+  return (
+    <div className="card-base p-5 border-sky-200 ring-1 ring-sky-200">
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="text-xs font-medium text-slate-500 mb-1 block">Job Title *</label>
+          <input
+            value={form.title}
+            onChange={e => set("title", e.target.value)}
+            placeholder="Senior Engineer"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 mb-1 block">Company *</label>
+          <input
+            value={form.company_name}
+            onChange={e => set("company_name", e.target.value)}
+            placeholder="Acme Corp"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 mb-1 block">Location</label>
+          <input
+            value={form.location}
+            onChange={e => set("location", e.target.value)}
+            placeholder="San Francisco, CA"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500 mb-1 block">Start Date</label>
+          <input
+            type="month"
+            value={form.start_date?.slice(0, 7) ?? ""}
+            onChange={e => set("start_date", e.target.value)}
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+          />
+        </div>
+        {!form.is_current && (
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">End Date</label>
+            <input
+              type="month"
+              value={form.end_date?.slice(0, 7) ?? ""}
+              onChange={e => set("end_date", e.target.value)}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+            />
+          </div>
+        )}
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.is_current}
+              onChange={e => set("is_current", e.target.checked)}
+              className="rounded"
+            />
+            Currently working here
+          </label>
+        </div>
+      </div>
+      <div className="mb-3">
+        <label className="text-xs font-medium text-slate-500 mb-1 block">Description</label>
+        <textarea
+          value={form.description}
+          onChange={e => set("description", e.target.value)}
+          placeholder="Describe your role and key accomplishments…"
+          rows={4}
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none"
+        />
+      </div>
+      <div className="mb-4">
+        <label className="text-xs font-medium text-slate-500 mb-1 block">
+          Technologies <span className="font-normal">(comma-separated)</span>
+        </label>
+        <input
+          value={form.techText}
+          onChange={e => set("techText", e.target.value)}
+          placeholder="React, TypeScript, Node.js"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+        />
+      </div>
+      <div className="flex items-center gap-2 justify-end">
+        <button
+          onClick={onCancel}
+          className="text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !form.title || !form.company_name}
+          className="text-sm px-4 py-1.5 rounded-lg bg-sky-600 text-white hover:bg-sky-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+        >
+          <Save className="w-3.5 h-3.5" />
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [profile, setProfile] = useState<Profile>({});
   const [employment, setEmployment] = useState<Employment[]>([]);
+  const [education, setEducation] = useState<Education[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  // Name editing
+  const [editingName, setEditingName] = useState(false);
+  const [nameForm, setNameForm] = useState({ first_name: "", last_name: "" });
+  const [savingName, setSavingName] = useState(false);
+
+  // Keyword management
+  const [newKeyword, setNewKeyword] = useState("");
+  const [savingKeywords, setSavingKeywords] = useState(false);
+
+  // Tools management
+  const [newTool, setNewTool] = useState("");
+  const [savingTools, setSavingTools] = useState(false);
+
+  // Certifications management
+  const [newCert, setNewCert] = useState("");
+  const [savingCerts, setSavingCerts] = useState(false);
+
+  // Clearances management
+  const [newClearance, setNewClearance] = useState("");
+  const [savingClearances, setSavingClearances] = useState(false);
+
+  // Headline
   const [editingHeadline, setEditingHeadline] = useState(false);
   const [headline, setHeadline] = useState("");
+
+  // Summary
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [summary, setSummary] = useState("");
+  const [savingSummary, setSavingSummary] = useState(false);
+
+  // Skills
+  const [newSkill, setNewSkill] = useState("");
+  const [savingSkills, setSavingSkills] = useState(false);
+  const skillInputRef = useRef<HTMLInputElement>(null);
+
+  // Experience
+  const [editingExpId, setEditingExpId] = useState<string | "new" | null>(null);
+  const [savingExp, setSavingExp] = useState(false);
+  const [deletingExpId, setDeletingExpId] = useState<string | null>(null);
+
+  // Education
+  const [editingEduId, setEditingEduId] = useState<string | "new" | null>(null);
+  const [savingEdu, setSavingEdu] = useState(false);
+  const [deletingEduId, setDeletingEduId] = useState<string | null>(null);
+  const [eduForm, setEduForm] = useState<Omit<Education, "id">>({
+    institution: "", degree: "", field_of_study: "", start_date: "", end_date: "", gpa: "", description: "",
+  });
+
+  // Hero edit
+  const [editingHero, setEditingHero] = useState(false);
+  const [heroForm, setHeroForm] = useState<Pick<Profile, "location" | "phone" | "linkedin_url" | "portfolio_url" | "github_url">>({});
+  const [savingHero, setSavingHero] = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/profile").then(r => r.json()),
       fetch("/api/profile/employment").then(r => r.json()),
+      fetch("/api/profile/education").then(r => r.json()),
       fetch("/api/workflows").then(r => r.json()),
-    ]).then(([prof, emp, workflows]) => {
+    ]).then(([prof, emp, edu, workflows]) => {
       if (prof && !prof.error) {
         setProfile(prof);
         setHeadline(prof.headline ?? "");
+        setSummary(prof.summary ?? "");
+        setNameForm({ first_name: prof.first_name ?? "", last_name: prof.last_name ?? "" });
+        setHeroForm({
+          location: prof.location,
+          phone: prof.phone,
+          linkedin_url: prof.linkedin_url,
+          portfolio_url: prof.portfolio_url,
+          github_url: prof.github_url,
+        });
       }
       if (Array.isArray(emp)) setEmployment(emp);
+      if (Array.isArray(edu)) setEducation(edu);
       if (Array.isArray(workflows)) setJobs(workflows.map(workflowToJob));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
-  const saveHeadline = async () => {
-    await fetch("/api/profile", {
+  const patchProfile = async (update: Partial<Profile>) => {
+    const res = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ headline }),
+      body: JSON.stringify(update),
     });
-    setProfile(prev => ({ ...prev, headline }));
+    const data = await res.json();
+    if (!data.error) setProfile(data);
+    return data;
+  };
+
+  const saveHeadline = async () => {
+    await patchProfile({ headline });
     setEditingHeadline(false);
+  };
+
+  const saveSummary = async () => {
+    setSavingSummary(true);
+    await patchProfile({ summary });
+    setSavingSummary(false);
+    setEditingSummary(false);
+  };
+
+  const saveHero = async () => {
+    setSavingHero(true);
+    await patchProfile(heroForm);
+    setSavingHero(false);
+    setEditingHero(false);
+  };
+
+  const addSkill = async () => {
+    const skill = newSkill.trim();
+    if (!skill) return;
+    const updated = [...(profile.skills ?? []).filter(s => s !== skill), skill];
+    setSavingSkills(true);
+    await patchProfile({ skills: updated });
+    setNewSkill("");
+    setSavingSkills(false);
+  };
+
+  const removeSkill = async (skill: string) => {
+    const updated = (profile.skills ?? []).filter(s => s !== skill);
+    setSavingSkills(true);
+    await patchProfile({ skills: updated });
+    setSavingSkills(false);
+  };
+
+  const saveName = async () => {
+    setSavingName(true);
+    await patchProfile({ first_name: nameForm.first_name, last_name: nameForm.last_name });
+    setSavingName(false);
+    setEditingName(false);
+  };
+
+  const addKeyword = async () => {
+    const kw = newKeyword.trim();
+    if (!kw) return;
+    const updated = [...(profile.keywords ?? []).filter(k => k !== kw), kw];
+    setSavingKeywords(true);
+    await patchProfile({ keywords: updated });
+    setNewKeyword("");
+    setSavingKeywords(false);
+  };
+
+  const removeKeyword = async (kw: string) => {
+    const updated = (profile.keywords ?? []).filter(k => k !== kw);
+    setSavingKeywords(true);
+    await patchProfile({ keywords: updated });
+    setSavingKeywords(false);
+  };
+
+  const addTool = async () => {
+    const t = newTool.trim();
+    if (!t) return;
+    const updated = [...(profile.tools ?? []).filter(x => x !== t), t];
+    setSavingTools(true);
+    await patchProfile({ tools: updated });
+    setNewTool("");
+    setSavingTools(false);
+  };
+
+  const removeTool = async (t: string) => {
+    const updated = (profile.tools ?? []).filter(x => x !== t);
+    setSavingTools(true);
+    await patchProfile({ tools: updated });
+    setSavingTools(false);
+  };
+
+  const addCert = async () => {
+    const c = newCert.trim();
+    if (!c) return;
+    const updated = [...(profile.certifications ?? []).filter(x => x !== c), c];
+    setSavingCerts(true);
+    await patchProfile({ certifications: updated });
+    setNewCert("");
+    setSavingCerts(false);
+  };
+
+  const removeCert = async (c: string) => {
+    const updated = (profile.certifications ?? []).filter(x => x !== c);
+    setSavingCerts(true);
+    await patchProfile({ certifications: updated });
+    setSavingCerts(false);
+  };
+
+  const addClearance = async () => {
+    const c = newClearance.trim();
+    if (!c) return;
+    const updated = [...(profile.clearances ?? []).filter(x => x !== c), c];
+    setSavingClearances(true);
+    await patchProfile({ clearances: updated });
+    setNewClearance("");
+    setSavingClearances(false);
+  };
+
+  const removeClearance = async (c: string) => {
+    const updated = (profile.clearances ?? []).filter(x => x !== c);
+    setSavingClearances(true);
+    await patchProfile({ clearances: updated });
+    setSavingClearances(false);
+  };
+
+  const saveExp = async (data: Omit<Employment, "id">) => {
+    setSavingExp(true);
+    if (editingExpId === "new") {
+      const res = await fetch("/api/profile/employment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const created = await res.json();
+      if (!created.error) setEmployment(prev => [created, ...prev]);
+    } else if (editingExpId) {
+      const res = await fetch(`/api/profile/employment/${editingExpId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const updated = await res.json();
+      if (!updated.error) setEmployment(prev => prev.map(e => e.id === editingExpId ? updated : e));
+    }
+    setSavingExp(false);
+    setEditingExpId(null);
+  };
+
+  const deleteExp = async (id: string) => {
+    setDeletingExpId(id);
+    await fetch(`/api/profile/employment/${id}`, { method: "DELETE" });
+    setEmployment(prev => prev.filter(e => e.id !== id));
+    setDeletingExpId(null);
+  };
+
+  const saveEdu = async () => {
+    setSavingEdu(true);
+    if (editingEduId === "new") {
+      const res = await fetch("/api/profile/education", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eduForm),
+      });
+      const created = await res.json();
+      if (!created.error) setEducation(prev => [...prev, created]);
+    } else if (editingEduId) {
+      const res = await fetch(`/api/profile/education/${editingEduId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eduForm),
+      });
+      const updated = await res.json();
+      if (!updated.error) setEducation(prev => prev.map(e => e.id === editingEduId ? updated : e));
+    }
+    setSavingEdu(false);
+    setEditingEduId(null);
+  };
+
+  const deleteEdu = async (id: string) => {
+    setDeletingEduId(id);
+    await fetch(`/api/profile/education/${id}`, { method: "DELETE" });
+    setEducation(prev => prev.filter(e => e.id !== id));
+    setDeletingEduId(null);
   };
 
   const firstName = profile.first_name ?? "";
   const lastName = profile.last_name ?? "";
   const skills = profile.skills ?? [];
+  const keywords = profile.keywords ?? [];
+  const tools = profile.tools ?? [];
+  const certifications = profile.certifications ?? [];
+  const clearances = profile.clearances ?? [];
 
-  // Computed stats
+  // Stats
   const total = jobs.length;
-  const active = jobs.filter(j => !["hired", "rejected", "withdrawn"].includes(j.status)).length;
+  const active = jobs.filter(j => !["hired", "declined", "rejected", "ghosted"].includes(j.status)).length;
   const interviews = jobs.filter(j => j.status === "interviewing").length;
   const offers = jobs.filter(j => j.status === "offer" || j.status === "hired").length;
   const successRate = total > 0 ? Math.round((offers / total) * 100) : 0;
@@ -133,11 +539,11 @@ export default function ProfilePage() {
         subtitle="Keep this updated for best AI results"
         actions={
           <button
-            onClick={() => {}}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-sky-600 text-white hover:bg-sky-700 transition-colors shadow-sm"
-            aria-label="Edit profile"
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center gap-2 bg-slate-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-colors flex-shrink-0"
           >
-            <Pencil className="w-4 h-4" />
+            <Upload className="w-4 h-4" />
+            <span>Upload Artifact</span>
           </button>
         }
       />
@@ -155,9 +561,37 @@ export default function ProfilePage() {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold text-slate-900">
-              {firstName} {lastName}
-            </h2>
+            {editingName ? (
+              <div className="flex items-center gap-2 mb-1">
+                <input
+                  value={nameForm.first_name}
+                  onChange={e => setNameForm(f => ({ ...f, first_name: e.target.value }))}
+                  placeholder="First name"
+                  className="flex-1 text-sm border border-sky-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  autoFocus
+                />
+                <input
+                  value={nameForm.last_name}
+                  onChange={e => setNameForm(f => ({ ...f, last_name: e.target.value }))}
+                  placeholder="Last name"
+                  className="flex-1 text-sm border border-sky-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                />
+                <button onClick={saveName} disabled={savingName} className="text-xs bg-sky-600 text-white px-2 py-1 rounded-lg disabled:opacity-50">
+                  {savingName ? "…" : "Save"}
+                </button>
+                <button onClick={() => setEditingName(false)} className="text-xs text-slate-500 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setNameForm({ first_name: firstName, last_name: lastName }); setEditingName(true); }}
+                className="text-xl font-bold text-slate-900 text-left hover:text-sky-600 group flex items-center gap-1.5 mb-0.5"
+              >
+                {firstName || lastName ? `${firstName} ${lastName}`.trim() : "Add your name"}
+                <Pencil className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+              </button>
+            )}
             {editingHeadline ? (
               <div className="flex items-center gap-2 mt-1">
                 <input
@@ -170,6 +604,9 @@ export default function ProfilePage() {
                 <button onClick={saveHeadline} className="text-xs bg-sky-600 text-white px-2 py-1 rounded-lg">
                   Save
                 </button>
+                <button onClick={() => setEditingHeadline(false)} className="text-xs text-slate-500 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             ) : (
               <button
@@ -180,11 +617,73 @@ export default function ProfilePage() {
                 <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             )}
-            <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-500">
-              {profile.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{profile.location}</span>}
-              {profile.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{profile.email}</span>}
-              {profile.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{profile.phone}</span>}
-            </div>
+
+            {/* Contact info — view or edit */}
+            {editingHero ? (
+              <div className="mt-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={heroForm.location ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, location: e.target.value }))}
+                    placeholder="Location"
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                  <input
+                    value={heroForm.phone ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, phone: e.target.value }))}
+                    placeholder="Phone"
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                  <input
+                    value={heroForm.linkedin_url ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, linkedin_url: e.target.value }))}
+                    placeholder="LinkedIn URL"
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                  <input
+                    value={heroForm.portfolio_url ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, portfolio_url: e.target.value }))}
+                    placeholder="Portfolio URL"
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                  <input
+                    value={heroForm.github_url ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, github_url: e.target.value }))}
+                    placeholder="GitHub URL"
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveHero}
+                    disabled={savingHero}
+                    className="text-xs bg-sky-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <Check className="w-3 h-3" />
+                    {savingHero ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    onClick={() => setEditingHero(false)}
+                    className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-500">
+                {profile.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{profile.location}</span>}
+                {profile.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{profile.email}</span>}
+                {profile.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{profile.phone}</span>}
+                <button
+                  onClick={() => setEditingHero(true)}
+                  className="flex items-center gap-1 text-slate-400 hover:text-sky-600 transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Edit info
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -228,13 +727,54 @@ export default function ProfilePage() {
         {/* Overview */}
         {activeTab === "overview" && (
           <div className="card-base p-5">
-            <h3 className="font-semibold text-slate-900 mb-3">Professional Summary</h3>
-            {profile.summary ? (
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-slate-900">Professional Summary</h3>
+              {!editingSummary && (
+                <button
+                  onClick={() => { setSummary(profile.summary ?? ""); setEditingSummary(true); }}
+                  className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-600 transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </button>
+              )}
+            </div>
+            {editingSummary ? (
+              <div>
+                <textarea
+                  value={summary}
+                  onChange={e => setSummary(e.target.value)}
+                  rows={6}
+                  placeholder="Write a professional summary that highlights your experience, skills, and career goals…"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none"
+                  autoFocus
+                />
+                <div className="flex gap-2 mt-2 justify-end">
+                  <button
+                    onClick={() => setEditingSummary(false)}
+                    className="text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveSummary}
+                    disabled={savingSummary}
+                    className="text-sm px-4 py-1.5 rounded-lg bg-sky-600 text-white hover:bg-sky-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {savingSummary ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : profile.summary ? (
               <p className="text-slate-600 text-sm leading-relaxed">{profile.summary}</p>
             ) : (
-              <div className="text-slate-400 text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
-                No summary yet — add one via the Edit button above.
-              </div>
+              <button
+                onClick={() => setEditingSummary(true)}
+                className="w-full text-slate-400 text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl hover:border-sky-300 hover:text-sky-500 transition-colors"
+              >
+                Click to add a professional summary
+              </button>
             )}
           </div>
         )}
@@ -242,46 +782,63 @@ export default function ProfilePage() {
         {/* Experience */}
         {activeTab === "experience" && (
           <div className="space-y-4">
-            {employment.length === 0 && (
+            {employment.length === 0 && editingExpId !== "new" && (
               <div className="text-slate-400 text-sm text-center py-8 card-base">No employment history yet.</div>
             )}
             {employment.map((exp) => {
-              const desc: string[] = Array.isArray(exp.description)
-                ? exp.description
-                : exp.description
-                ? [exp.description]
-                : [];
-              const expSkills: string[] = Array.isArray(exp.skills) ? exp.skills : [];
+              const expTech: string[] = Array.isArray(exp.technologies) ? exp.technologies : [];
+              const isEditing = editingExpId === exp.id;
+
+              if (isEditing) {
+                return (
+                  <ExpForm
+                    key={exp.id}
+                    initial={exp}
+                    onSave={saveExp}
+                    onCancel={() => setEditingExpId(null)}
+                    saving={savingExp}
+                  />
+                );
+              }
+
               return (
                 <div key={exp.id} className="card-base p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <h3 className="font-semibold text-slate-900">{exp.title}</h3>
-                      <p className="text-sky-600 font-medium text-sm">{exp.company}</p>
+                      <p className="text-sky-600 font-medium text-sm">{exp.company_name}</p>
                       <p className="text-slate-400 text-xs mt-0.5">
                         {exp.location && `${exp.location} · `}
                         {exp.start_date} — {exp.is_current ? "Present" : (exp.end_date ?? "")}
                       </p>
                     </div>
-                    {exp.is_current && (
-                      <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
-                        Current
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {exp.is_current && (
+                        <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">
+                          Current
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setEditingExpId(exp.id)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteExp(exp.id)}
+                        disabled={deletingExpId === exp.id}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  {desc.length > 0 && (
-                    <ul className="mt-3 space-y-1.5">
-                      {desc.map((d, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400 mt-1.5 flex-shrink-0" />
-                          {d}
-                        </li>
-                      ))}
-                    </ul>
+                  {exp.description && (
+                    <p className="mt-3 text-sm text-slate-600 leading-relaxed">{exp.description}</p>
                   )}
-                  {expSkills.length > 0 && (
+                  {expTech.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
-                      {expSkills.map(s => (
+                      {expTech.map(s => (
                         <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{s}</span>
                       ))}
                     </div>
@@ -289,21 +846,277 @@ export default function ProfilePage() {
                 </div>
               );
             })}
-            <button className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-sky-300 hover:text-sky-600 transition-colors text-sm">
-              <Plus className="w-4 h-4" />
-              Add Experience
-            </button>
+
+            {editingExpId === "new" && (
+              <ExpForm
+                initial={EMPTY_EXP}
+                onSave={saveExp}
+                onCancel={() => setEditingExpId(null)}
+                saving={savingExp}
+              />
+            )}
+
+            {editingExpId !== "new" && (
+              <button
+                onClick={() => setEditingExpId("new")}
+                className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-sky-300 hover:text-sky-600 transition-colors text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Experience
+              </button>
+            )}
           </div>
         )}
 
         {/* Education */}
         {activeTab === "education" && (
           <div className="space-y-4">
-            <div className="text-slate-400 text-sm text-center py-8 card-base">Education management coming soon.</div>
-            <button className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-sky-300 hover:text-sky-600 transition-colors text-sm">
-              <Plus className="w-4 h-4" />
-              Add Education
-            </button>
+            {education.length === 0 && editingEduId !== "new" && (
+              <div className="text-slate-400 text-sm text-center py-8 card-base">No education history yet. Upload an artifact or add manually.</div>
+            )}
+            {education.map(edu => {
+              const isEditing = editingEduId === edu.id;
+
+              if (isEditing) {
+                return (
+                  <div key={edu.id} className="card-base p-5 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Institution *</label>
+                        <input
+                          value={eduForm.institution}
+                          onChange={e => setEduForm(f => ({ ...f, institution: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="University or school name"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Degree</label>
+                        <input
+                          value={eduForm.degree ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, degree: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="BS, MS, PhD…"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Field of Study</label>
+                        <input
+                          value={eduForm.field_of_study ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, field_of_study: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="Computer Science…"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Start Year</label>
+                        <input
+                          value={eduForm.start_date ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, start_date: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="2018"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">End Year</label>
+                        <input
+                          value={eduForm.end_date ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, end_date: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="2022"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">GPA</label>
+                        <input
+                          value={eduForm.gpa ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, gpa: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="3.8"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Description</label>
+                        <textarea
+                          value={eduForm.description ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, description: e.target.value }))}
+                          rows={3}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400 resize-none"
+                          placeholder="Honors, activities, thesis…"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={saveEdu}
+                        disabled={savingEdu || !eduForm.institution.trim()}
+                        className="px-4 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-40 transition-colors"
+                      >
+                        {savingEdu ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingEduId(null)}
+                        className="px-4 py-1.5 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={edu.id} className="card-base p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-slate-900">{edu.institution}</div>
+                      {(edu.degree || edu.field_of_study) && (
+                        <div className="text-sm text-slate-600 mt-0.5">
+                          {[edu.degree, edu.field_of_study].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                      {(edu.start_date || edu.end_date) && (
+                        <div className="text-xs text-slate-400 mt-1">
+                          {edu.start_date}{edu.end_date ? ` – ${edu.end_date}` : ""}
+                        </div>
+                      )}
+                      {edu.gpa && (
+                        <div className="text-xs text-slate-400 mt-0.5">GPA: {edu.gpa}</div>
+                      )}
+                      {edu.description && (
+                        <p className="text-sm text-slate-500 mt-2">{edu.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setEduForm({
+                            institution: edu.institution,
+                            degree: edu.degree ?? "",
+                            field_of_study: edu.field_of_study ?? "",
+                            start_date: edu.start_date ?? "",
+                            end_date: edu.end_date ?? "",
+                            gpa: edu.gpa ?? "",
+                            description: edu.description ?? "",
+                          });
+                          setEditingEduId(edu.id);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteEdu(edu.id)}
+                        disabled={deletingEduId === edu.id}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {editingEduId === "new" && (
+              <div className="card-base p-5 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Institution *</label>
+                    <input
+                      value={eduForm.institution}
+                      onChange={e => setEduForm(f => ({ ...f, institution: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="University or school name"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Degree</label>
+                    <input
+                      value={eduForm.degree ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, degree: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="BS, MS, PhD…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Field of Study</label>
+                    <input
+                      value={eduForm.field_of_study ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, field_of_study: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="Computer Science…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Start Year</label>
+                    <input
+                      value={eduForm.start_date ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, start_date: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="2018"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">End Year</label>
+                    <input
+                      value={eduForm.end_date ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, end_date: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="2022"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">GPA</label>
+                    <input
+                      value={eduForm.gpa ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, gpa: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="3.8"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Description</label>
+                    <textarea
+                      value={eduForm.description ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, description: e.target.value }))}
+                      rows={3}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400 resize-none"
+                      placeholder="Honors, activities, thesis…"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={saveEdu}
+                    disabled={savingEdu || !eduForm.institution.trim()}
+                    className="px-4 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-40 transition-colors"
+                  >
+                    {savingEdu ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    onClick={() => setEditingEduId(null)}
+                    className="px-4 py-1.5 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {editingEduId !== "new" && (
+              <button
+                onClick={() => {
+                  setEduForm({ institution: "", degree: "", field_of_study: "", start_date: "", end_date: "", gpa: "", description: "" });
+                  setEditingEduId("new");
+                }}
+                className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-sky-300 hover:text-sky-600 transition-colors text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Education
+              </button>
+            )}
           </div>
         )}
 
@@ -311,20 +1124,219 @@ export default function ProfilePage() {
         {activeTab === "skills" && (
           <div className="space-y-5">
             <div className="card-base p-5">
-              <h3 className="font-semibold text-slate-900 mb-3">Skills</h3>
+              <h3 className="font-semibold text-slate-900 mb-1">Skills</h3>
+              <p className="text-xs text-slate-400 mb-3">Concrete capabilities and competencies (e.g. Financial Modeling, Data Analysis, Public Speaking).</p>
               <div className="flex flex-wrap gap-2">
                 {skills.map((skill) => (
-                  <span key={skill} className="text-sm bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-full font-medium">
+                  <span
+                    key={skill}
+                    className="group flex items-center gap-1 text-sm bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-full font-medium"
+                  >
                     {skill}
+                    <button
+                      onClick={() => removeSkill(skill)}
+                      disabled={savingSkills}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </span>
                 ))}
-                {skills.length === 0 && (
-                  <p className="text-slate-400 text-sm">No skills added yet.</p>
+                {/* Add skill input */}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    ref={skillInputRef}
+                    value={newSkill}
+                    onChange={e => setNewSkill(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addSkill()}
+                    placeholder="Add skill…"
+                    className="text-sm bg-transparent outline-none w-28 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addSkill}
+                    disabled={!newSkill.trim() || savingSkills}
+                    className="text-sky-600 hover:text-sky-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {skills.length === 0 && !newSkill && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a skill above and press Enter to add it.</p>
                 )}
-                <button className="text-sm bg-slate-100 text-slate-500 border border-dashed border-slate-300 px-3 py-1.5 rounded-full hover:border-sky-300 hover:text-sky-600 transition-colors flex items-center gap-1">
-                  <Plus className="w-3 h-3" /> Add skill
-                </button>
               </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a skill to remove it.</p>
+            </div>
+
+            {/* Keywords */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Keywords</h3>
+              <p className="text-xs text-slate-400 mb-3">ATS buzzwords, industry terms, and soft skills from your resume.</p>
+              <div className="flex flex-wrap gap-2">
+                {keywords.map((kw) => (
+                  <span
+                    key={kw}
+                    className="group flex items-center gap-1 text-sm bg-violet-50 text-violet-700 border border-violet-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {kw}
+                    <button
+                      onClick={() => removeKeyword(kw)}
+                      disabled={savingKeywords}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newKeyword}
+                    onChange={e => setNewKeyword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addKeyword()}
+                    placeholder="Add keyword…"
+                    className="text-sm bg-transparent outline-none w-28 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addKeyword}
+                    disabled={!newKeyword.trim() || savingKeywords}
+                    className="text-violet-600 hover:text-violet-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {keywords.length === 0 && !newKeyword && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a keyword above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a keyword to remove it.</p>
+            </div>
+
+            {/* Tools */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Tools</h3>
+              <p className="text-xs text-slate-400 mb-3">Software, platforms, and technologies you use (e.g. Salesforce, Excel, Python, JIRA).</p>
+              <div className="flex flex-wrap gap-2">
+                {tools.map((t) => (
+                  <span
+                    key={t}
+                    className="group flex items-center gap-1 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {t}
+                    <button
+                      onClick={() => removeTool(t)}
+                      disabled={savingTools}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newTool}
+                    onChange={e => setNewTool(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addTool()}
+                    placeholder="Add tool…"
+                    className="text-sm bg-transparent outline-none w-28 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addTool}
+                    disabled={!newTool.trim() || savingTools}
+                    className="text-emerald-600 hover:text-emerald-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {tools.length === 0 && !newTool && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a tool above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a tool to remove it.</p>
+            </div>
+
+            {/* Certifications */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Certifications</h3>
+              <p className="text-xs text-slate-400 mb-3">Named credentials, licenses, and professional designations (e.g. PMP, CPA, AWS Solutions Architect).</p>
+              <div className="flex flex-wrap gap-2">
+                {certifications.map((c) => (
+                  <span
+                    key={c}
+                    className="group flex items-center gap-1 text-sm bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {c}
+                    <button
+                      onClick={() => removeCert(c)}
+                      disabled={savingCerts}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newCert}
+                    onChange={e => setNewCert(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addCert()}
+                    placeholder="Add certification…"
+                    className="text-sm bg-transparent outline-none w-36 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addCert}
+                    disabled={!newCert.trim() || savingCerts}
+                    className="text-amber-600 hover:text-amber-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {certifications.length === 0 && !newCert && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a certification above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a certification to remove it.</p>
+            </div>
+
+            {/* Clearances */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Clearances</h3>
+              <p className="text-xs text-slate-400 mb-3">Government or security clearances (e.g. Secret, Top Secret, TS/SCI, Public Trust).</p>
+              <div className="flex flex-wrap gap-2">
+                {clearances.map((c) => (
+                  <span
+                    key={c}
+                    className="group flex items-center gap-1 text-sm bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {c}
+                    <button
+                      onClick={() => removeClearance(c)}
+                      disabled={savingClearances}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newClearance}
+                    onChange={e => setNewClearance(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addClearance()}
+                    placeholder="Add clearance…"
+                    className="text-sm bg-transparent outline-none w-32 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addClearance}
+                    disabled={!newClearance.trim() || savingClearances}
+                    className="text-rose-600 hover:text-rose-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {clearances.length === 0 && !newClearance && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a clearance level above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a clearance to remove it.</p>
             </div>
           </div>
         )}
@@ -449,6 +1461,35 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+
+      {showUploadModal && (
+        <UploadArtifactModal
+          onClose={() => setShowUploadModal(false)}
+          onApplied={() => {
+            Promise.all([
+              fetch("/api/profile").then(r => r.json()),
+              fetch("/api/profile/employment").then(r => r.json()),
+              fetch("/api/profile/education").then(r => r.json()),
+            ]).then(([prof, emp, edu]) => {
+              if (prof && !prof.error) {
+                setProfile(prof);
+                setHeadline(prof.headline ?? "");
+                setSummary(prof.summary ?? "");
+                setNameForm({ first_name: prof.first_name ?? "", last_name: prof.last_name ?? "" });
+                setHeroForm({
+                  location: prof.location,
+                  phone: prof.phone,
+                  linkedin_url: prof.linkedin_url,
+                  portfolio_url: prof.portfolio_url,
+                  github_url: prof.github_url,
+                });
+              }
+              if (Array.isArray(emp)) setEmployment(emp);
+              if (Array.isArray(edu)) setEducation(edu);
+            }).catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }

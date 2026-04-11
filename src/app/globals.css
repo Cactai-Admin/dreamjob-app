@@ -377,9 +377,3 @@
   border-top: 1px solid #e2e8f0;
 }
 
-/* ── Print Styles ───────────────────────────────────────── */
-@media print {
-  .no-print { display: none !important; }
-  body { background: white !important; }
-  .document-paper { box-shadow: none !important; }
-}

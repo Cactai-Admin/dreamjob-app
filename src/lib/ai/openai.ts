@@ -18,16 +18,21 @@ export class OpenAIProvider implements AIProvider {
   async generate(options: AIGenerateOptions): Promise<string> {
     const { messages, maxTokens = 4096, temperature = 0.7, model } = options
 
-    const response = await this.client.chat.completions.create({
+    // Separate system prompt from conversation turns
+    const systemMsg = messages.find(m => m.role === 'system')
+    const inputMsgs = messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+
+    const response = await this.client.responses.create({
       model: model || 'gpt-4o',
-      max_tokens: maxTokens,
+      max_output_tokens: maxTokens,
       temperature,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-      })),
+      store: false,
+      ...(systemMsg ? { instructions: systemMsg.content } : {}),
+      input: inputMsgs,
     })
 
-    return response.choices[0]?.message?.content ?? ''
+    return response.output_text ?? ''
   }
 }

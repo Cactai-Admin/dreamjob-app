@@ -9,6 +9,7 @@ import {
   ArrowLeft, Plus, X, Briefcase, MapPin, DollarSign, Building2,
   Users, Star, Sparkles, ExternalLink, RefreshCw, Check, Save,
   Link2, TrendingUp, AlertCircle, ChevronRight, ChevronDown, Trash2,
+  BookmarkPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
@@ -16,6 +17,8 @@ import type { Workflow } from "@/lib/types";
 interface Props {
   params: Promise<{ id: string }>;
 }
+
+type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
 
 // Parse requirements from DB TEXT field (stored as JSON string or plain)
 function parseReqs(val: unknown): string[] {
@@ -31,33 +34,47 @@ function parseReqs(val: unknown): string[] {
   return [];
 }
 
-function computeMatch(reqs: string[], skills: string[], tech: string[]) {
-  const userTerms = new Set([...skills, ...tech].map(s => s.toLowerCase().trim()));
-  if (userTerms.size === 0) return { score: 0, matched: [] as string[], missing: reqs.slice(0, 10) };
+function computeMatch(
+  reqs: string[],
+  skills: string[], keywords: string[], tools: string[], certs: string[], clearances: string[], tech: string[],
+  manuallyMarked: string[] = []
+) {
+  const userTerms = [...new Set(
+    [...skills, ...keywords, ...tools, ...certs, ...clearances, ...tech].map(s => s.toLowerCase().trim()).filter(s => s.length > 2)
+  )];
 
-  // Break each requirement into candidate keywords
-  const reqTerms = reqs.flatMap(r =>
-    r.split(/[,;()\n/]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 1 && s.length < 40)
-  );
+  if (userTerms.length === 0 && manuallyMarked.length === 0) return { score: 0, matched: [] as string[], missing: reqs.slice(0, 10) };
+  if (reqs.length === 0) return { score: 0, matched: [], missing: [] };
 
-  const matched: string[] = [];
-  const missing: string[] = [];
-  const seen = new Set<string>();
+  const reqsText = reqs.join(' ').toLowerCase();
 
-  for (const term of reqTerms) {
-    const tLow = term.toLowerCase();
-    if (seen.has(tLow)) continue;
-    seen.add(tLow);
-    const hit = [...userTerms].some(u => tLow === u || tLow.includes(u) || u.includes(tLow));
-    if (hit) matched.push(term);
-    else missing.push(term);
+  // Check if a user term covers a requirement (full substring OR any significant word ≥4 chars)
+  const termCoversReq = (u: string, rLow: string): boolean => {
+    if (rLow.includes(u)) return true;
+    const words = u.split(/\s+/).filter(w => w.length >= 4);
+    return words.length > 0 && words.some(w => rLow.includes(w));
+  };
+
+  // "You have": user terms that cover at least one requirement
+  const matchedTerms: string[] = [];
+  for (const t of userTerms) {
+    if (reqs.some(req => termCoversReq(t, req.toLowerCase()))) {
+      matchedTerms.push(t);
+    }
   }
 
-  const total = matched.length + missing.length;
-  const score = total === 0 ? 0 : Math.round((matched.length / total) * 100);
-  return { score, matched: matched.slice(0, 12), missing: missing.slice(0, 10) };
+  // Score + missing: use the same coverage logic so score matches what's shown
+  const coveredReqs: boolean[] = reqs.map(req => {
+    if (manuallyMarked.includes(req)) return true;
+    const rLow = req.toLowerCase();
+    return userTerms.some(u => termCoversReq(u, rLow));
+  });
+
+  const coveredCount = coveredReqs.filter(Boolean).length;
+  const score = Math.round((coveredCount / reqs.length) * 100);
+  const missingReqs = reqs.filter((req, i) => !coveredReqs[i]);
+
+  return { score, matched: matchedTerms.slice(0, 12), missing: missingReqs.slice(0, 10) };
 }
 
 export default function ListingReviewPage({ params }: Props) {
@@ -87,7 +104,16 @@ export default function ListingReviewPage({ params }: Props) {
 
   // Profile for match
   const [skills, setSkills] = useState<string[]>([]);
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [profileTools, setProfileTools] = useState<string[]>([]);
+  const [profileCerts, setProfileCerts] = useState<string[]>([]);
+  const [profileClearances, setProfileClearances] = useState<string[]>([]);
   const [tech, setTech] = useState<string[]>([]);
+
+  // Add-to-profile modal
+  const [addModal, setAddModal] = useState<{ term: string; editedTerm: string } | null>(null);
+  const [addingSaving, setAddingSaving] = useState(false);
+  const [manuallyMarked, setManuallyMarked] = useState<string[]>([]);
 
   // LinkedIn
   const [linkedInActive, setLinkedInActive] = useState(false);
@@ -127,7 +153,13 @@ export default function ListingReviewPage({ params }: Props) {
         setAdditionalDetails(l.responsibilities ?? "");
         setLinkedInUrl(wf.company?.linkedin_url ?? "");
       }
-      if (prof && !prof.error) setSkills(Array.isArray(prof.skills) ? prof.skills : []);
+      if (prof && !prof.error) {
+        setSkills(Array.isArray(prof.skills) ? prof.skills : []);
+        setKeywords(Array.isArray(prof.keywords) ? prof.keywords : []);
+        setProfileTools(Array.isArray(prof.tools) ? prof.tools : []);
+        setProfileCerts(Array.isArray(prof.certifications) ? prof.certifications : []);
+        setProfileClearances(Array.isArray(prof.clearances) ? prof.clearances : []);
+      }
       if (Array.isArray(emp)) {
         setTech(emp.flatMap((e: { technologies?: string[] }) => Array.isArray(e.technologies) ? e.technologies : []));
       }
@@ -137,6 +169,35 @@ export default function ListingReviewPage({ params }: Props) {
   }, [id]);
 
   const mark = () => setDirty(true);
+
+  const addToProfile = async (category: ProfileCategory, term: string) => {
+    if (!term.trim()) return;
+    setAddingSaving(true);
+    const currentMap: Record<ProfileCategory, string[]> = {
+      skills, keywords, tools: profileTools, certifications: profileCerts, clearances: profileClearances,
+    };
+    const existing = currentMap[category];
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const isDup = existing.some(e => norm(e) === norm(term.trim()));
+    if (!isDup) {
+      const updated = [...existing, term.trim()];
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [category]: updated }),
+      });
+      const data = await res.json();
+      if (!data.error) {
+        if (category === "skills") setSkills(updated);
+        else if (category === "keywords") setKeywords(updated);
+        else if (category === "tools") setProfileTools(updated);
+        else if (category === "certifications") setProfileCerts(updated);
+        else if (category === "clearances") setProfileClearances(updated);
+      }
+    }
+    setAddingSaving(false);
+    setAddModal(null);
+  };
 
   const saveListing = async () => {
     setSaving(true);
@@ -217,7 +278,7 @@ export default function ListingReviewPage({ params }: Props) {
       body: JSON.stringify({ workflow_id: id, output_type: "resume", provider }),
     }); // intentionally fire-and-forget
 
-    router.push(`/jobs/${id}/resume`);
+    router.push(`/jobs/${id}`);
   };
 
   const deleteListing = async () => {
@@ -226,7 +287,7 @@ export default function ListingReviewPage({ params }: Props) {
     router.push("/listings");
   };
 
-  const match = computeMatch(reqs, skills, tech);
+  const match = computeMatch(reqs, skills, keywords, profileTools, profileCerts, profileClearances, tech, manuallyMarked);
 
   if (loading) {
     return (
@@ -249,7 +310,15 @@ export default function ListingReviewPage({ params }: Props) {
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{title || "Untitled Listing"}</h1>
-            <p className="text-sm text-slate-500 mt-0.5">{companyName} · Review before applying</p>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <p className="text-sm text-slate-500">{companyName} · Review before applying</p>
+              {workflow?.listing?.source_url && (
+                <a href={workflow.listing.source_url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-xs text-sky-500 hover:underline">
+                  <ExternalLink className="w-3 h-3" />Original listing
+                </a>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -417,19 +486,33 @@ export default function ListingReviewPage({ params }: Props) {
         {/* ── Right: Analysis (2/5) ── */}
         <div className="lg:col-span-2 space-y-5">
 
+          {/* CTA card */}
+          <div className="card-base p-5 bg-slate-900 border-slate-900">
+            <h2 className="font-semibold text-white mb-1">Ready to apply?</h2>
+            <p className="text-slate-400 text-sm mb-4">We'll build a tailored resume and cover letter with AI assistance.</p>
+            <button
+              onClick={startApplication}
+              disabled={starting}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors disabled:opacity-50 text-sm"
+            >
+              {starting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {starting ? "Starting…" : "Start Application"}
+            </button>
+          </div>
+
           {/* Match Score */}
           <div className="card-base p-5">
             <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-sky-500" />
               Profile Match
             </h2>
-            {skills.length === 0 && tech.length === 0 ? (
+            {skills.length === 0 && keywords.length === 0 && profileTools.length === 0 && tech.length === 0 ? (
               <div className="text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
                 <Link href="/profile?tab=skills" className="text-sky-500 hover:underline">Add skills to your profile</Link>
                 <span className="text-slate-400"> to see your match score.</span>
               </div>
             ) : reqs.length === 0 ? (
-              <p className="text-slate-400 text-sm">Add requirements above to calculate your match.</p>
+              <p className="text-slate-400 text-sm">Add requirements to the listing to see how your experience matches.</p>
             ) : (
               <>
                 <div className="flex items-center gap-4 mb-5">
@@ -448,18 +531,33 @@ export default function ListingReviewPage({ params }: Props) {
                     )}>
                       {match.score >= 70 ? "Strong match" : match.score >= 40 ? "Partial match" : "Low match"}
                     </p>
-                    <p className="text-xs text-slate-400 mt-0.5">{match.matched.length} skill{match.matched.length !== 1 ? "s" : ""} matched · {match.missing.length} gap{match.missing.length !== 1 ? "s" : ""}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{match.matched.length} term{match.matched.length !== 1 ? "s" : ""} matched · {match.missing.length} requirement{match.missing.length !== 1 ? "s" : ""} to address</p>
                   </div>
                 </div>
 
-                {match.matched.length > 0 && (
+                {(match.matched.length > 0 || manuallyMarked.length > 0) && (
                   <div className="mb-4">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-2">You have</p>
                     <div className="flex flex-wrap gap-1.5">
                       {match.matched.map(s => (
-                        <span key={s} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <button
+                          key={s}
+                          onClick={() => setAddModal({ term: s, editedTerm: s })}
+                          className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-emerald-100 hover:border-emerald-300 transition-colors cursor-pointer"
+                          title="Click to add to a profile category"
+                        >
                           <Check className="w-2.5 h-2.5" />{s}
-                        </span>
+                        </button>
+                      ))}
+                      {manuallyMarked.map(s => (
+                        <button
+                          key={`manual-${s}`}
+                          onClick={() => setManuallyMarked(prev => prev.filter(m => m !== s))}
+                          className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors cursor-pointer"
+                          title="Click to move back to uncovered"
+                        >
+                          <Check className="w-2.5 h-2.5" />{s}
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -467,12 +565,18 @@ export default function ListingReviewPage({ params }: Props) {
 
                 {match.missing.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-2">Gaps to address</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-2">Requirements not yet covered</p>
+                    <p className="text-[10px] text-slate-400 mb-2">Click any requirement to add it to your profile.</p>
                     <div className="flex flex-wrap gap-1.5">
                       {match.missing.map(s => (
-                        <span key={s} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <button
+                          key={s}
+                          onClick={() => setAddModal({ term: s, editedTerm: s })}
+                          className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-amber-100 hover:border-amber-300 transition-colors cursor-pointer"
+                          title="Click to add to profile"
+                        >
                           <AlertCircle className="w-2.5 h-2.5" />{s}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -543,32 +647,6 @@ export default function ListingReviewPage({ params }: Props) {
                 {connError && <p className="text-xs text-red-500">{connError}</p>}
               </div>
             )}
-          </div>
-
-          {/* Source URL */}
-          {workflow.listing?.source_url && (
-            <div className="card-base p-4">
-              <h2 className="font-semibold text-slate-900 mb-2 text-sm">Original Listing</h2>
-              <a href={workflow.listing.source_url} target="_blank" rel="noreferrer"
-                className="flex items-center gap-2 text-sm text-sky-600 hover:underline break-all">
-                <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{workflow.listing.source_url}</span>
-              </a>
-            </div>
-          )}
-
-          {/* CTA card */}
-          <div className="card-base p-5 bg-slate-900 border-slate-900">
-            <h2 className="font-semibold text-white mb-1">Ready to apply?</h2>
-            <p className="text-slate-400 text-sm mb-4">We'll build a tailored resume and cover letter with AI assistance.</p>
-            <button
-              onClick={startApplication}
-              disabled={starting}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors disabled:opacity-50 text-sm"
-            >
-              {starting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {starting ? "Starting…" : "Start Application"}
-            </button>
           </div>
 
           {/* Delete card */}
@@ -652,6 +730,75 @@ export default function ListingReviewPage({ params }: Props) {
                 </a>
               ))
             )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Add to Profile Modal ── */}
+    {addModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+        onClick={() => setAddModal(null)}
+      >
+        <div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <BookmarkPlus className="w-4 h-4 text-sky-500" />
+              <h3 className="font-semibold text-slate-900">Add to Profile</h3>
+            </div>
+            <button onClick={() => setAddModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="text-xs font-medium text-slate-500 mb-1 block">Term to add (edit if needed)</label>
+              <input
+                value={addModal.editedTerm}
+                onChange={e => setAddModal(m => m ? { ...m, editedTerm: e.target.value } : null)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500 mb-2 block">Add to category</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { key: "skills" as ProfileCategory,         label: "Skills",          color: "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100" },
+                  { key: "keywords" as ProfileCategory,       label: "Keywords",        color: "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100" },
+                  { key: "tools" as ProfileCategory,          label: "Tools",           color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+                  { key: "certifications" as ProfileCategory, label: "Certifications",  color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+                  { key: "clearances" as ProfileCategory,     label: "Clearances",      color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
+                ] as const).map(({ key, label, color }) => (
+                  <button
+                    key={key}
+                    onClick={() => addToProfile(key, addModal.editedTerm)}
+                    disabled={addingSaving || !addModal.editedTerm.trim()}
+                    className={cn(
+                      "text-sm font-medium border rounded-lg px-3 py-2 transition-colors disabled:opacity-40 text-left",
+                      color
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    setManuallyMarked(prev => prev.includes(addModal!.term) ? prev : [...prev, addModal!.term]);
+                    setAddModal(null);
+                  }}
+                  className="col-span-2 text-sm font-medium border border-slate-200 rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors text-center"
+                >
+                  Don&apos;t add to profile — mark as covered
+                </button>
+              </div>
+            </div>
+            {addingSaving && <p className="text-xs text-slate-400 text-center">Saving…</p>}
           </div>
         </div>
       </div>

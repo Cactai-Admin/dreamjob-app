@@ -5,10 +5,25 @@
 import { useState, useEffect, useRef, use } from "react";
 import { notFound } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { Sparkles, Save, CircleCheck as CheckCircle2, Eye, CreditCard as Edit3, FileText, Mail, MessageSquare, TrendingUp, Download, Trash2 } from "lucide-react";
+import { Sparkles, Save, CircleCheck as CheckCircle2, Eye, CreditCard as Edit3, FileText, Mail, MessageSquare, TrendingUp, Download, Trash2, ChevronDown } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
+import { MarkdownDoc } from "@/components/documents/markdown-doc";
 import { cn } from "@/lib/utils";
 import type { Workflow, Output } from "@/lib/types";
+import { deriveApplicationStatus } from "@/lib/workflow-adapter";
+
+const STATUS_OPTIONS = [
+  { value: "ready",        label: "Ready",        event: null },
+  { value: "applied",      label: "Applied",      event: "sent" },
+  { value: "received",     label: "Received",     event: "received" },
+  { value: "interviewing", label: "Interviewing", event: "interview" },
+  { value: "offer",        label: "Offer",        event: "offer" },
+  { value: "negotiating",  label: "Negotiating",  event: "negotiation" },
+  { value: "hired",        label: "Hired",        event: "hired" },
+  { value: "declined",     label: "Declined",     event: "declined" },
+  { value: "ghosted",      label: "Ghosted",      event: "ghosted" },
+  { value: "rejected",     label: "Rejected",     event: "rejected" },
+] as const;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -24,9 +39,10 @@ export default function NegotiationGuidePage({ params }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [status, setStatus] = useState<"draft" | "approved">("draft");
-  const [saved, setSaved] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [appStatus, setAppStatus] = useState("draft");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialContent = useRef(true);
@@ -36,13 +52,14 @@ export default function NegotiationGuidePage({ params }: Props) {
       const wf: Workflow = await fetch(`/api/workflows/${id}`).then(r => r.json());
       if (!wf?.id) { setLoading(false); return; }
       if (wf.state === "listing_review") {
-        fetch(`/api/workflows/${id}`, {
+        await fetch(`/api/workflows/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ state: "draft", is_active: true }),
         });
       }
       setWorkflow(wf);
+      setAppStatus(deriveApplicationStatus(wf.state, wf.status_events));
       const out = wf.outputs?.find(o => o.type === "negotiation_guide" && o.is_current);
       if (out) {
         setOutput(out);
@@ -81,6 +98,7 @@ export default function NegotiationGuidePage({ params }: Props) {
   useEffect(() => {
     if (initialContent.current) { initialContent.current = false; return; }
     if (generating || !content) return;
+    setIsDirty(true);
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       await fetch(`/api/workflows/${id}/outputs`, {
@@ -88,8 +106,7 @@ export default function NegotiationGuidePage({ params }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "negotiation_guide", content }),
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setIsDirty(false);
     }, 2000);
   }, [content]);
 
@@ -103,8 +120,7 @@ export default function NegotiationGuidePage({ params }: Props) {
     if (res.ok) {
       const out = await res.json();
       setOutput(out);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setIsDirty(false);
     }
   };
 
@@ -132,6 +148,27 @@ export default function NegotiationGuidePage({ params }: Props) {
     router.push("/jobs");
   };
 
+  const downloadMarkdown = () => {
+    const co = workflow?.listing?.company_name ?? "Company";
+    const ro = workflow?.listing?.title ?? "Role";
+    const md = `# Negotiation Guide\n${ro} · ${co}\n\n${content}`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${co.replace(/\s+/g, "_")}_Negotiation_Guide.md`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleStatusChange = async (val: string) => {
+    const opt = STATUS_OPTIONS.find(o => o.value === val);
+    if (!opt || !opt.event) { setAppStatus(val); return; }
+    await fetch(`/api/workflows/${id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: opt.event }),
+    });
+    setAppStatus(val);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -149,17 +186,6 @@ export default function NegotiationGuidePage({ params }: Props) {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <a href={`/jobs/${id}`} className="text-sm text-slate-500 hover:text-slate-700 flex-shrink-0">← Back</a>
-            {confirmDel ? (
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className="text-xs text-red-600 font-medium">Delete?</span>
-                <button onClick={handleDelete} className="text-xs font-semibold px-2 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors">Yes</button>
-                <button onClick={() => setConfirmDel(false)} className="text-xs px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">No</button>
-              </div>
-            ) : (
-              <button onClick={() => setConfirmDel(true)} className="flex-shrink-0 text-slate-400 hover:text-red-500 transition-colors" title="Delete application">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
             <div className="w-px h-4 bg-slate-200 flex-shrink-0" />
             <span className="font-semibold text-slate-900 text-sm truncate">{workflow.listing?.company_name}</span>
             {/* Doc type toggle */}
@@ -177,9 +203,47 @@ export default function NegotiationGuidePage({ params }: Props) {
                 <TrendingUp className="w-3 h-3" /><span className="hidden sm:inline">Negotiation</span>
               </button>
             </div>
+            {/* Trash — after tabs */}
+            {confirmDel ? (
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <span className="text-xs text-red-600 font-medium">Delete?</span>
+                <button onClick={handleDelete} className="text-xs font-semibold px-2 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors">Yes</button>
+                <button onClick={() => setConfirmDel(false)} className="text-xs px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">No</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDel(true)} className="flex-shrink-0 text-slate-400 hover:text-red-500 transition-colors" title="Delete application">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Status dropdown */}
+            <div className="relative flex-shrink-0">
+              <select
+                value={appStatus}
+                onChange={e => handleStatusChange(e.target.value)}
+                className={cn(
+                  "text-xs font-medium pl-3 pr-6 py-2 rounded-xl border bg-white appearance-none cursor-pointer transition-all",
+                  appStatus === "hired"        ? "border-emerald-300 text-emerald-700" :
+                  appStatus === "hired"        ? "border-green-300 text-green-700" :
+                  appStatus === "declined"     ? "border-orange-300 text-orange-700" :
+                  appStatus === "rejected"     ? "border-red-300 text-red-600" :
+                  appStatus === "ghosted"      ? "border-slate-300 text-slate-500" :
+                  appStatus === "negotiating"  ? "border-teal-300 text-teal-700" :
+                  appStatus === "offer"        ? "border-emerald-300 text-emerald-700" :
+                  appStatus === "interviewing" ? "border-amber-300 text-amber-700" :
+                  appStatus === "received"     ? "border-violet-300 text-violet-700" :
+                  appStatus === "applied"      ? "border-sky-300 text-sky-700" :
+                                                 "border-slate-200 text-slate-600"
+                )}
+              >
+                {STATUS_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none text-slate-400" />
+            </div>
             <button
               onClick={() => setPreviewMode(!previewMode)}
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-all"
@@ -203,8 +267,8 @@ export default function NegotiationGuidePage({ params }: Props) {
               onClick={handleSave}
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition-all"
             >
-              {saved ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Save className="w-3 h-3" />}
-              <span className="hidden sm:inline">{saved ? "Saved" : "Save"}</span>
+              {!isDirty ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Save className="w-3 h-3" />}
+              <span className="hidden sm:inline">{!isDirty ? "Saved" : "Save"}</span>
             </button>
 
             {status !== "approved" ? (
@@ -226,11 +290,13 @@ export default function NegotiationGuidePage({ params }: Props) {
               </button>
             )}
             <button
-              onClick={() => router.push(`/jobs/${id}/export`)}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-700 transition-colors"
+              onClick={downloadMarkdown}
+              disabled={!content}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-40 transition-all"
+              title="Download as Markdown"
             >
               <Download className="w-3 h-3" />
-              <span className="hidden sm:inline">Export</span>
+              <span className="hidden sm:inline">.md</span>
             </button>
           </div>
         </div>
@@ -259,7 +325,7 @@ export default function NegotiationGuidePage({ params }: Props) {
                   </div>
 
                   {previewMode ? (
-                    <div className="text-slate-800 text-sm leading-loose whitespace-pre-line">{content}</div>
+                    <MarkdownDoc content={content} />
                   ) : (
                     <textarea
                       value={content}
