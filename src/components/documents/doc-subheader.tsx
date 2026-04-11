@@ -131,10 +131,10 @@ export function DocSubheader({
       )}
 
       {/* Subheader bar */}
-      <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-3">
-        <div className="flex items-center justify-between gap-3">
+      <div className="flex-shrink-0 bg-white border-b border-slate-200">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
 
-          {/* ── Left: back · company · doc tabs ── */}
+          {/* ── Left: back · company ── */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <button
               onClick={() => router.push(`/jobs/${workflowId}`)}
@@ -147,25 +147,6 @@ export function DocSubheader({
             <span className="font-semibold text-slate-900 text-sm truncate hidden sm:block">
               {companyName}
             </span>
-
-            {/* Doc type tabs */}
-            <div className="flex items-center gap-0.5 p-1 bg-slate-100 rounded-lg flex-shrink-0">
-              {DOC_TABS.map(({ type, label, icon: Icon }) => (
-                <button
-                  key={type}
-                  onClick={() => type !== activeDoc && router.push(`/jobs/${workflowId}/${type}`)}
-                  className={cn(
-                    'flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors',
-                    type === activeDoc
-                      ? 'bg-white text-slate-900 shadow-sm font-semibold'
-                      : 'text-slate-500'
-                  )}
-                >
-                  <Icon className="w-3 h-3 flex-shrink-0" />
-                  <span className="hidden sm:inline">{label}</span>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* ── Right: status (desktop) · save · lock · AI · trash ── */}
@@ -240,6 +221,46 @@ export function DocSubheader({
             >
               <Trash2 className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+
+        {/* ── Doc nav row: centered tabs (desktop) · dropdown (mobile) ── */}
+        <div className="border-t border-slate-100 flex items-center justify-center px-4 sm:px-6 py-2">
+
+          {/* Desktop: pill tab group, centered */}
+          <div className="hidden sm:flex items-center gap-0.5 p-1 bg-slate-100 rounded-lg">
+            {DOC_TABS.map(({ type, label, icon: Icon }) => (
+              <button
+                key={type}
+                onClick={() => type !== activeDoc && router.push(`/jobs/${workflowId}/${type}`)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  type === activeDoc
+                    ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                    : 'text-slate-500 hover:text-slate-700'
+                )}
+              >
+                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile: dropdown */}
+          <div className="sm:hidden relative w-full max-w-xs">
+            <select
+              value={activeDoc}
+              onChange={e => {
+                const t = e.target.value as typeof activeDoc
+                if (t !== activeDoc) router.push(`/jobs/${workflowId}/${t}`)
+              }}
+              className="w-full text-sm font-medium pl-3 pr-8 py-2 rounded-xl border border-slate-200 bg-white appearance-none cursor-pointer text-slate-700"
+            >
+              {DOC_TABS.map(({ type, label }) => (
+                <option key={type} value={type}>{label}</option>
+              ))}
+            </select>
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
           </div>
         </div>
       </div>
