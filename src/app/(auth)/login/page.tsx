@@ -39,107 +39,104 @@ function LoginForm() {
   const ready = identifier.trim() && password && !loading
 
   return (
-    <div className="login-root">
-      {/* ── Animated background ── */}
-      <LoginBg />
-
-      {/* ── Centered column ─────────────────────────────────── */}
-      <div className="login-column">
-
-        {/* Brand */}
-        <div className="login-brand">
-          <div className="login-brand-icon">
-            <Zap className="login-brand-zap" />
-          </div>
-          <span className="login-brand-name">DreamJob</span>
+    <>
+      {/* Brand */}
+      <div className="login-brand">
+        <div className="login-brand-icon">
+          <Zap className="login-brand-zap" />
         </div>
-
-        {/* Card */}
-        <div className="login-card">
-          <div className="login-card-header">
-            <h1 className="login-title">Welcome back</h1>
-            <p className="login-subtitle">Sign in to continue to your account</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="login-form" noValidate>
-            <div className="login-field">
-              <label htmlFor="identifier" className="login-label">Username</label>
-              <input
-                id="identifier"
-                type="text"
-                className="login-input"
-                placeholder="Enter your username"
-                value={identifier}
-                onChange={e => { setIdentifier(e.target.value); setError('') }}
-                autoComplete="username"
-                autoFocus
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <div className="login-field">
-              <label htmlFor="password" className="login-label">Password</label>
-              <input
-                id="password"
-                type="password"
-                className="login-input"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError('') }}
-                autoComplete="current-password"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            {error && (
-              <div className="login-error" role="alert">
-                <AlertCircle className="login-error-icon" aria-hidden="true" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={!ready}
-              className={`login-submit ${ready ? 'login-submit-ready' : 'login-submit-disabled'}`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="login-submit-icon animate-spin" />
-                  Signing in…
-                </>
-              ) : (
-                <>
-                  Sign in
-                  <ArrowRight className="login-submit-icon" />
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* Footer */}
-        <p className="login-footer">
-          AI-assisted job applications · DreamJob
-        </p>
+        <span className="login-brand-name">DreamJob</span>
       </div>
-    </div>
+
+      {/* Card */}
+      <div className="login-card">
+        <div className="login-card-header">
+          <h1 className="login-title">Welcome back</h1>
+          <p className="login-subtitle">Sign in to continue to your account</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="login-form" noValidate>
+          <div className="login-field">
+            <label htmlFor="identifier" className="login-label">Username</label>
+            <input
+              id="identifier"
+              type="text"
+              className="login-input"
+              placeholder="Enter your username"
+              value={identifier}
+              onChange={e => { setIdentifier(e.target.value); setError('') }}
+              autoComplete="username"
+              autoFocus
+              disabled={loading}
+              required
+            />
+          </div>
+
+          <div className="login-field">
+            <label htmlFor="password" className="login-label">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="login-input"
+              placeholder="••••••••"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError('') }}
+              autoComplete="current-password"
+              disabled={loading}
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="login-error" role="alert">
+              <AlertCircle className="login-error-icon" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={!ready}
+            className={`login-submit ${ready ? 'login-submit-ready' : 'login-submit-disabled'}`}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="login-submit-icon animate-spin" />
+                Signing in…
+              </>
+            ) : (
+              <>
+                Sign in
+                <ArrowRight className="login-submit-icon" />
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* Footer */}
+      <p className="login-footer">
+        AI-assisted job applications · DreamJob
+      </p>
+    </>
   )
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="login-root">
-        <div className="login-bg" aria-hidden="true" />
-        <div className="login-column">
-          <Loader2 className="animate-spin" style={{ color: 'var(--color-text-muted)', width: 20, height: 20 }} />
-        </div>
+    <div className="login-root">
+      {/* Starfield — always rendered, never re-mounts during Suspense */}
+      <LoginBg />
+
+      <div className="login-column">
+        <Suspense fallback={
+          <div className="login-brand">
+            <Loader2 className="animate-spin" style={{ color: 'rgba(255,255,255,0.5)', width: 20, height: 20 }} />
+          </div>
+        }>
+          <LoginForm />
+        </Suspense>
       </div>
-    }>
-      <LoginForm />
-    </Suspense>
+    </div>
   )
 }
