@@ -314,6 +314,7 @@
       0 2px 12px rgba(0,0,0,0.3);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
+    isolation: isolate;
   }
 
   .login-card-header {
