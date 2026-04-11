@@ -38,7 +38,7 @@ export async function GET() {
     // Fetch all accounts with their roles
     const { data: accounts, error } = await supabaseAdmin
       .from('accounts')
-      .select('*, account_roles(*)')
+      .select('*, account_roles!account_roles_account_id_fkey(*)')
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
