@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react'
 
 const TOTAL = 200
 const FOV   = 200                     // perspective: 200px
-const SPEED = 1500 / (8 * 60)        // 1500 z-units / 8 s / 60 fps ≈ 3.125
+const SPEED = 1500 / (6 * 60)        // 1500 z-units / 6 s / 60 fps ≈ 4.17
 const Z_END = 500                     // same end point as original
 
 const PARALLAX_STRENGTH = 1.0
@@ -128,8 +128,8 @@ export function LoginBg() {
 
     function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
 
-    let orientationActive = false
-    const GAMMA_RANGE = 35, BETA_RANGE = 35
+    const GAMMA_RANGE = 25, BETA_RANGE = 25
+    let orientationAttached = false
 
     function handleOrientation(e: DeviceOrientationEvent) {
       const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
@@ -138,15 +138,15 @@ export function LoginBg() {
         ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w,
         ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h,
       )
-      orientationActive = true
     }
 
     function handleTouch(e: TouchEvent) {
-      if (orientationActive) return
       setVanish(e.touches[0].clientX, e.touches[0].clientY)
     }
 
     function attachOrientation() {
+      if (orientationAttached) return
+      orientationAttached = true
       window.addEventListener('deviceorientation', handleOrientation)
     }
 
@@ -156,14 +156,18 @@ export function LoginBg() {
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
-        const requestOnTouch = async () => {
-          try {
-            const result = await DOE.requestPermission!()
-            if (result === 'granted') attachOrientation()
-          } catch { /* denied or unavailable */ }
+        // iOS: must call requestPermission() synchronously from a user gesture.
+        // Use .then() (not async/await) to keep the call in the gesture stack.
+        // Re-attempt on each touch until granted so tapping any element works.
+        const requestOnTouch = () => {
+          if (orientationAttached) return
+          DOE.requestPermission!()
+            .then(result => { if (result === 'granted') attachOrientation() })
+            .catch(() => { /* denied or unavailable */ })
         }
-        window.addEventListener('touchstart', requestOnTouch, { once: true, passive: true })
+        window.addEventListener('touchstart', requestOnTouch, { passive: true })
       } else {
+        // Android / non-gated browsers — attach immediately
         attachOrientation()
       }
     }
