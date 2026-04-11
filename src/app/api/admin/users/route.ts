@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminClient } from '@/lib/supabase/admin'
+
+const supabaseAdmin = getAdminClient()
 
 export async function GET() {
-  const supabaseAdmin = createAdminClient()
   try {
     const cookieStore = await cookies()
     const supabase = createServerClient(

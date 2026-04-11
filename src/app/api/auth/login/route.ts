@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminClient } from '@/lib/supabase/admin'
+
+const supabaseAdmin = getAdminClient()
 
 export async function POST(request: NextRequest) {
-  const supabaseAdmin = createAdminClient()
   try {
     const { identifier, password } = await request.json()
 
@@ -67,7 +68,6 @@ export async function POST(request: NextRequest) {
 
 // Sign out
 export async function DELETE(request: NextRequest) {
-  const supabaseAdmin = createAdminClient()
   try {
     const cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[] = []
 

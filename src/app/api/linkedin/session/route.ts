@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getAdminClient } from '@/lib/supabase/admin'
 import {
   launchLinkedInBrowser,
   verifyLinkedInSession,
@@ -9,6 +9,8 @@ import {
   revokeLinkedInSession,
   isSessionActive,
 } from '@/lib/linkedin/browser'
+
+const supabaseAdmin = getAdminClient()
 
 async function getAccountId() {
   const cookieStore = await cookies()
@@ -26,7 +28,6 @@ async function getAccountId() {
 
 // GET — Check session status
 export async function GET() {
-  const supabaseAdmin = createAdminClient()
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -43,7 +44,6 @@ export async function GET() {
 
 // POST — Launch browser or verify session
 export async function POST(request: NextRequest) {
-  const supabaseAdmin = createAdminClient()
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -81,7 +81,6 @@ export async function POST(request: NextRequest) {
 
 // DELETE — Close browser and revoke session (deletes cookies too)
 export async function DELETE() {
-  const supabaseAdmin = createAdminClient()
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
