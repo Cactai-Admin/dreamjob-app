@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react'
 
 const TOTAL = 200
 const FOV   = 200                     // perspective: 200px
-const SPEED = 1500 / (6 * 60)        // 1500 z-units / 6 s / 60 fps ≈ 4.17
+const SPEED = 1500 / 6               // 1500 z-units / 6 s — per second, frame-rate independent
 const Z_END = 500                     // same end point as original
 
 const PARALLAX_STRENGTH = 1.0
@@ -64,17 +64,22 @@ export function LoginBg() {
     })
 
     let animId = 0
+    let lastTime = 0
 
-    function draw() {
-      // Ease vanishing point toward target
-      vx += (tvx - vx) * 0.06
-      vy += (tvy - vy) * 0.06
+    function draw(now: number) {
+      const dt = lastTime === 0 ? 1 / 60 : Math.min((now - lastTime) / 1000, 0.1)
+      lastTime = now
+
+      // Ease vanishing point toward target (frame-rate independent at ~60 fps feel)
+      const ease = 1 - Math.pow(1 - 0.06, dt * 60)
+      vx += (tvx - vx) * ease
+      vy += (tvy - vy) * ease
 
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
-        dot.z += SPEED
+        dot.z += SPEED * dt
 
         // Reset — same as TweenMax repeat: -1
         if (dot.z >= Z_END) {
@@ -115,10 +120,10 @@ export function LoginBg() {
       // Reset shadow so it doesn't bleed into the next fillRect
       ctx.shadowBlur = 0
 
-      animId = requestAnimationFrame(draw)
+      animId = requestAnimationFrame(draw as FrameRequestCallback)
     }
 
-    draw()
+    animId = requestAnimationFrame(draw as FrameRequestCallback)
 
     // ── Mouse / touch — moves the vanishing point (perspectiveOrigin equiv) ──
     function setVanish(x: number, y: number) {
