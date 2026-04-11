@@ -135,7 +135,7 @@ export function LoginBg() {
         perspective:     '200px',
         transformStyle:  'preserve-3d',
         zIndex:          0,
-        willChange:      'perspective-origin',
+        pointerEvents:   'none', // excluded from hit-testing — prevents hover repaint flash
       }}
     />
   )
