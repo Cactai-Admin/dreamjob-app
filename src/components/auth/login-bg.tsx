@@ -60,7 +60,11 @@ export function LoginBg() {
     }
 
     // ── Desktop: mouse → perspective ────────────────────────────────────────
+    // Skip update when the cursor is over the login column so the card's
+    // compositing layer isn't invalidated by perspectiveOrigin changes.
     function handleMouse(e: MouseEvent) {
+      const target = e.target as Element | null
+      if (target && target.closest('.login-column')) return
       setPerspective(e.clientX, e.clientY)
     }
 
