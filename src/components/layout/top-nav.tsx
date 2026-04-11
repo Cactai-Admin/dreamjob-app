@@ -8,8 +8,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Briefcase,
-  Layers,
   User,
   Settings,
   LogOut,
@@ -18,7 +16,10 @@ import {
   Shield,
   Trash2,
   LayoutDashboard,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useTheme } from "@/app/providers";
 import { cn } from "@/lib/utils";
 
 /* Desktop nav — all items */
@@ -46,6 +47,7 @@ export function TopNav() {
   const pathname = usePathname();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
@@ -85,6 +87,21 @@ export function TopNav() {
               </Link>
             ))}
           </div>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+            style={{ color: 'var(--color-text-muted)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {resolvedTheme === 'dark'
+              ? <Sun className="w-4 h-4" />
+              : <Moon className="w-4 h-4" />
+            }
+          </button>
 
           {/* User dropdown */}
           <div className="relative">
