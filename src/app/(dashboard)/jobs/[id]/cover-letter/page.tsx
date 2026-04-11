@@ -7,18 +7,22 @@ import { notFound } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Sparkles, Save, CircleCheck as CheckCircle2, Eye, CreditCard as Edit3, FileText, Mail, MessageSquare, TrendingUp, Download, Trash2, ChevronDown } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
+import { MarkdownDoc } from "@/components/documents/markdown-doc";
 import { cn } from "@/lib/utils";
 import type { Workflow, Output } from "@/lib/types";
 import { deriveApplicationStatus } from "@/lib/workflow-adapter";
 
 const STATUS_OPTIONS = [
-  { value: "draft",        label: "In Progress",   event: null },
-  { value: "applied",      label: "Applied",        event: "submitted" },
-  { value: "interviewing", label: "Interviewing",   event: "interview_scheduled" },
-  { value: "offer",        label: "Offer Received", event: "offer_received" },
-  { value: "hired",        label: "Hired",          event: "hired" },
-  { value: "rejected",     label: "Rejected",       event: "rejected" },
-  { value: "withdrawn",    label: "Withdrawn",      event: "withdrawn" },
+  { value: "ready",        label: "Ready",        event: null },
+  { value: "applied",      label: "Applied",      event: "sent" },
+  { value: "received",     label: "Received",     event: "received" },
+  { value: "interviewing", label: "Interviewing", event: "interview" },
+  { value: "offer",        label: "Offer",        event: "offer" },
+  { value: "negotiating",  label: "Negotiating",  event: "negotiation" },
+  { value: "hired",        label: "Hired",        event: "hired" },
+  { value: "declined",     label: "Declined",     event: "declined" },
+  { value: "ghosted",      label: "Ghosted",      event: "ghosted" },
+  { value: "rejected",     label: "Rejected",     event: "rejected" },
 ] as const;
 
 interface Props {
@@ -158,6 +162,17 @@ export default function CoverLetterBuilderPage({ params }: Props) {
     router.push("/jobs");
   };
 
+  const downloadMarkdown = () => {
+    const co = workflow?.listing?.company_name ?? "Company";
+    const ro = workflow?.listing?.title ?? "Role";
+    const md = `# Cover Letter\n${ro} · ${co}\n\n${content}`;
+    const slug = `${co.replace(/\s+/g, "_")}_Cover_Letter`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${slug}.md`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleStatusChange = async (val: string) => {
     const opt = STATUS_OPTIONS.find(o => o.value === val);
     if (!opt || !opt.event) { setAppStatus(val); return; }
@@ -226,11 +241,15 @@ export default function CoverLetterBuilderPage({ params }: Props) {
                 className={cn(
                   "text-xs font-medium pl-3 pr-6 py-2 rounded-xl border bg-white appearance-none cursor-pointer transition-all",
                   appStatus === "hired"        ? "border-emerald-300 text-emerald-700" :
+                  appStatus === "hired"        ? "border-green-300 text-green-700" :
+                  appStatus === "declined"     ? "border-orange-300 text-orange-700" :
                   appStatus === "rejected"     ? "border-red-300 text-red-600" :
-                  appStatus === "offer"        ? "border-amber-300 text-amber-700" :
-                  appStatus === "interviewing" ? "border-violet-300 text-violet-700" :
+                  appStatus === "ghosted"      ? "border-slate-300 text-slate-500" :
+                  appStatus === "negotiating"  ? "border-teal-300 text-teal-700" :
+                  appStatus === "offer"        ? "border-emerald-300 text-emerald-700" :
+                  appStatus === "interviewing" ? "border-amber-300 text-amber-700" :
+                  appStatus === "received"     ? "border-violet-300 text-violet-700" :
                   appStatus === "applied"      ? "border-sky-300 text-sky-700" :
-                  appStatus === "withdrawn"    ? "border-slate-300 text-slate-400" :
                                                  "border-slate-200 text-slate-600"
                 )}
               >
@@ -286,11 +305,13 @@ export default function CoverLetterBuilderPage({ params }: Props) {
               </button>
             )}
             <button
-              onClick={() => router.push(`/jobs/${id}/export`)}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-700 transition-colors"
+              onClick={downloadMarkdown}
+              disabled={!content}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-40 transition-all"
+              title="Download as Markdown"
             >
               <Download className="w-3 h-3" />
-              <span className="hidden sm:inline">Export</span>
+              <span className="hidden sm:inline">.md</span>
             </button>
           </div>
         </div>
@@ -324,7 +345,7 @@ export default function CoverLetterBuilderPage({ params }: Props) {
                 </div>
 
                 {previewMode ? (
-                  <div className="text-slate-800 text-sm leading-loose whitespace-pre-line font-serif">{content}</div>
+                  <MarkdownDoc content={content} />
                 ) : (
                   <textarea
                     value={content}

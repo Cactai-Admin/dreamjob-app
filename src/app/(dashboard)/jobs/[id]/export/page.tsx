@@ -6,6 +6,7 @@ import { useState, useEffect, use } from "react";
 import { notFound } from "next/navigation";
 import { Copy, Download, CheckCircle2, FileText, Mail, MessageSquare, TrendingUp, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MarkdownDoc } from "@/components/documents/markdown-doc";
 import type { Workflow, Output } from "@/lib/types";
 
 interface Props {
@@ -21,8 +22,8 @@ const DOC_CONFIG: Record<DocKey, { label: string; Icon: React.ComponentType<{ cl
   negotiation_guide: { label: "Negotiation Guide", Icon: TrendingUp, color: "bg-amber-100 text-amber-600" },
 };
 
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/plain" });
+function downloadMarkdown(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/markdown" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -35,7 +36,7 @@ function DocCard({ docKey, output, company }: { docKey: DocKey; output: Output |
   const [copied, setCopied] = useState(false);
   const config = DOC_CONFIG[docKey];
   const { Icon } = config;
-  const filename = `${company.replace(/\s+/g, "_")}_${config.label.replace(/\s+/g, "_")}.txt`;
+  const filename = `${company.replace(/\s+/g, "_")}_${config.label.replace(/\s+/g, "_")}.md`;
 
   const handleCopy = async () => {
     if (!output) return;
@@ -66,7 +67,10 @@ function DocCard({ docKey, output, company }: { docKey: DocKey; output: Output |
             )}
           </div>
           {output && (
-            <p className="text-slate-500 text-xs mb-3 line-clamp-2">{output.content.slice(0, 140)}…</p>
+            <div className="text-xs text-slate-500 mb-3 border border-slate-100 rounded-lg p-3 bg-slate-50 max-h-40 overflow-hidden relative">
+              <MarkdownDoc content={output.content.slice(0, 600)} />
+              <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-slate-50 to-transparent rounded-b-lg" />
+            </div>
           )}
           <div className="flex items-center gap-2">
             <button
@@ -78,12 +82,12 @@ function DocCard({ docKey, output, company }: { docKey: DocKey; output: Output |
               {copied ? "Copied!" : "Copy text"}
             </button>
             <button
-              onClick={() => output && downloadText(filename, output.content)}
+              onClick={() => output && downloadMarkdown(filename, output.content)}
               disabled={!output}
               className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-40 transition-all"
             >
               <Download className="w-3 h-3" />
-              Download .txt
+              Download .md
             </button>
           </div>
         </div>
@@ -136,7 +140,7 @@ export default function ExportPage({ params }: Props) {
       .map(k => { const o = getOutput(k); return o ? `=== ${DOC_CONFIG[k].label.toUpperCase()} ===\n\n${o.content}` : null; })
       .filter(Boolean) as string[];
     if (!parts.length) return;
-    downloadText(`${company.replace(/\s+/g, "_")}_Application_Packet.txt`, parts.join("\n\n---\n\n"));
+    downloadMarkdown(`${company.replace(/\s+/g, "_")}_Application_Packet.md`, parts.join("\n\n---\n\n"));
   };
 
   return (
@@ -164,7 +168,7 @@ export default function ExportPage({ params }: Props) {
                 className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"
               >
                 <Download className="w-4 h-4" />
-                Download All
+                Download All .md
               </button>
             </div>
           )}

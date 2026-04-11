@@ -24,12 +24,13 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
 ];
 
 const STATUS_ORDER: ApplicationStatus[] = [
-  "draft", "saved", "applied", "interviewing", "offer", "hired",
+  "ready", "applied", "received", "interviewing", "offer", "negotiating",
+  "hired", "declined", "ghosted", "rejected",
 ];
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  draft: "Draft", saved: "Saved", applied: "Applied",
-  interviewing: "Interviewing", offer: "Offer", hired: "Hired",
-  rejected: "Rejected", withdrawn: "Withdrawn",
+  ready: "Ready", applied: "Applied", received: "Received",
+  interviewing: "Interviewing", offer: "Offer", negotiating: "Negotiating",
+  hired: "Hired", declined: "Declined", ghosted: "Ghosted", rejected: "Rejected",
 };
 
 interface Profile {
@@ -46,6 +47,9 @@ interface Profile {
   github_url?: string;
   skills?: string[];
   keywords?: string[];
+  tools?: string[];
+  certifications?: string[];
+  clearances?: string[];
 }
 
 interface Education {
@@ -238,6 +242,18 @@ export default function ProfilePage() {
   const [newKeyword, setNewKeyword] = useState("");
   const [savingKeywords, setSavingKeywords] = useState(false);
 
+  // Tools management
+  const [newTool, setNewTool] = useState("");
+  const [savingTools, setSavingTools] = useState(false);
+
+  // Certifications management
+  const [newCert, setNewCert] = useState("");
+  const [savingCerts, setSavingCerts] = useState(false);
+
+  // Clearances management
+  const [newClearance, setNewClearance] = useState("");
+  const [savingClearances, setSavingClearances] = useState(false);
+
   // Headline
   const [editingHeadline, setEditingHeadline] = useState(false);
   const [headline, setHeadline] = useState("");
@@ -256,6 +272,14 @@ export default function ProfilePage() {
   const [editingExpId, setEditingExpId] = useState<string | "new" | null>(null);
   const [savingExp, setSavingExp] = useState(false);
   const [deletingExpId, setDeletingExpId] = useState<string | null>(null);
+
+  // Education
+  const [editingEduId, setEditingEduId] = useState<string | "new" | null>(null);
+  const [savingEdu, setSavingEdu] = useState(false);
+  const [deletingEduId, setDeletingEduId] = useState<string | null>(null);
+  const [eduForm, setEduForm] = useState<Omit<Education, "id">>({
+    institution: "", degree: "", field_of_study: "", start_date: "", end_date: "", gpa: "", description: "",
+  });
 
   // Hero edit
   const [editingHero, setEditingHero] = useState(false);
@@ -360,6 +384,57 @@ export default function ProfilePage() {
     setSavingKeywords(false);
   };
 
+  const addTool = async () => {
+    const t = newTool.trim();
+    if (!t) return;
+    const updated = [...(profile.tools ?? []).filter(x => x !== t), t];
+    setSavingTools(true);
+    await patchProfile({ tools: updated });
+    setNewTool("");
+    setSavingTools(false);
+  };
+
+  const removeTool = async (t: string) => {
+    const updated = (profile.tools ?? []).filter(x => x !== t);
+    setSavingTools(true);
+    await patchProfile({ tools: updated });
+    setSavingTools(false);
+  };
+
+  const addCert = async () => {
+    const c = newCert.trim();
+    if (!c) return;
+    const updated = [...(profile.certifications ?? []).filter(x => x !== c), c];
+    setSavingCerts(true);
+    await patchProfile({ certifications: updated });
+    setNewCert("");
+    setSavingCerts(false);
+  };
+
+  const removeCert = async (c: string) => {
+    const updated = (profile.certifications ?? []).filter(x => x !== c);
+    setSavingCerts(true);
+    await patchProfile({ certifications: updated });
+    setSavingCerts(false);
+  };
+
+  const addClearance = async () => {
+    const c = newClearance.trim();
+    if (!c) return;
+    const updated = [...(profile.clearances ?? []).filter(x => x !== c), c];
+    setSavingClearances(true);
+    await patchProfile({ clearances: updated });
+    setNewClearance("");
+    setSavingClearances(false);
+  };
+
+  const removeClearance = async (c: string) => {
+    const updated = (profile.clearances ?? []).filter(x => x !== c);
+    setSavingClearances(true);
+    await patchProfile({ clearances: updated });
+    setSavingClearances(false);
+  };
+
   const saveExp = async (data: Omit<Employment, "id">) => {
     setSavingExp(true);
     if (editingExpId === "new") {
@@ -390,14 +465,47 @@ export default function ProfilePage() {
     setDeletingExpId(null);
   };
 
+  const saveEdu = async () => {
+    setSavingEdu(true);
+    if (editingEduId === "new") {
+      const res = await fetch("/api/profile/education", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eduForm),
+      });
+      const created = await res.json();
+      if (!created.error) setEducation(prev => [...prev, created]);
+    } else if (editingEduId) {
+      const res = await fetch(`/api/profile/education/${editingEduId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(eduForm),
+      });
+      const updated = await res.json();
+      if (!updated.error) setEducation(prev => prev.map(e => e.id === editingEduId ? updated : e));
+    }
+    setSavingEdu(false);
+    setEditingEduId(null);
+  };
+
+  const deleteEdu = async (id: string) => {
+    setDeletingEduId(id);
+    await fetch(`/api/profile/education/${id}`, { method: "DELETE" });
+    setEducation(prev => prev.filter(e => e.id !== id));
+    setDeletingEduId(null);
+  };
+
   const firstName = profile.first_name ?? "";
   const lastName = profile.last_name ?? "";
   const skills = profile.skills ?? [];
   const keywords = profile.keywords ?? [];
+  const tools = profile.tools ?? [];
+  const certifications = profile.certifications ?? [];
+  const clearances = profile.clearances ?? [];
 
   // Stats
   const total = jobs.length;
-  const active = jobs.filter(j => !["hired", "rejected", "withdrawn"].includes(j.status)).length;
+  const active = jobs.filter(j => !["hired", "declined", "rejected", "ghosted"].includes(j.status)).length;
   const interviews = jobs.filter(j => j.status === "interviewing").length;
   const offers = jobs.filter(j => j.status === "offer" || j.status === "hired").length;
   const successRate = total > 0 ? Math.round((offers / total) * 100) : 0;
@@ -763,34 +871,252 @@ export default function ProfilePage() {
         {/* Education */}
         {activeTab === "education" && (
           <div className="space-y-4">
-            {education.length === 0 && (
+            {education.length === 0 && editingEduId !== "new" && (
               <div className="text-slate-400 text-sm text-center py-8 card-base">No education history yet. Upload an artifact or add manually.</div>
             )}
-            {education.map(edu => (
-              <div key={edu.id} className="card-base p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-900">{edu.institution}</div>
-                    {(edu.degree || edu.field_of_study) && (
-                      <div className="text-sm text-slate-600 mt-0.5">
-                        {[edu.degree, edu.field_of_study].filter(Boolean).join(", ")}
+            {education.map(edu => {
+              const isEditing = editingEduId === edu.id;
+
+              if (isEditing) {
+                return (
+                  <div key={edu.id} className="card-base p-5 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Institution *</label>
+                        <input
+                          value={eduForm.institution}
+                          onChange={e => setEduForm(f => ({ ...f, institution: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="University or school name"
+                        />
                       </div>
-                    )}
-                    {(edu.start_date || edu.end_date) && (
-                      <div className="text-xs text-slate-400 mt-1">
-                        {edu.start_date}{edu.end_date ? ` – ${edu.end_date}` : ""}
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Degree</label>
+                        <input
+                          value={eduForm.degree ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, degree: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="BS, MS, PhD…"
+                        />
                       </div>
-                    )}
-                    {edu.gpa && (
-                      <div className="text-xs text-slate-400 mt-0.5">GPA: {edu.gpa}</div>
-                    )}
-                    {edu.description && (
-                      <p className="text-sm text-slate-500 mt-2">{edu.description}</p>
-                    )}
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Field of Study</label>
+                        <input
+                          value={eduForm.field_of_study ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, field_of_study: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="Computer Science…"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Start Year</label>
+                        <input
+                          value={eduForm.start_date ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, start_date: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="2018"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">End Year</label>
+                        <input
+                          value={eduForm.end_date ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, end_date: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="2022"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">GPA</label>
+                        <input
+                          value={eduForm.gpa ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, gpa: e.target.value }))}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                          placeholder="3.8"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-slate-500 mb-1 block">Description</label>
+                        <textarea
+                          value={eduForm.description ?? ""}
+                          onChange={e => setEduForm(f => ({ ...f, description: e.target.value }))}
+                          rows={3}
+                          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400 resize-none"
+                          placeholder="Honors, activities, thesis…"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={saveEdu}
+                        disabled={savingEdu || !eduForm.institution.trim()}
+                        className="px-4 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-40 transition-colors"
+                      >
+                        {savingEdu ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        onClick={() => setEditingEduId(null)}
+                        className="px-4 py-1.5 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={edu.id} className="card-base p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-slate-900">{edu.institution}</div>
+                      {(edu.degree || edu.field_of_study) && (
+                        <div className="text-sm text-slate-600 mt-0.5">
+                          {[edu.degree, edu.field_of_study].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                      {(edu.start_date || edu.end_date) && (
+                        <div className="text-xs text-slate-400 mt-1">
+                          {edu.start_date}{edu.end_date ? ` – ${edu.end_date}` : ""}
+                        </div>
+                      )}
+                      {edu.gpa && (
+                        <div className="text-xs text-slate-400 mt-0.5">GPA: {edu.gpa}</div>
+                      )}
+                      {edu.description && (
+                        <p className="text-sm text-slate-500 mt-2">{edu.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => {
+                          setEduForm({
+                            institution: edu.institution,
+                            degree: edu.degree ?? "",
+                            field_of_study: edu.field_of_study ?? "",
+                            start_date: edu.start_date ?? "",
+                            end_date: edu.end_date ?? "",
+                            gpa: edu.gpa ?? "",
+                            description: edu.description ?? "",
+                          });
+                          setEditingEduId(edu.id);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-600 hover:bg-sky-50 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteEdu(edu.id)}
+                        disabled={deletingEduId === edu.id}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+
+            {editingEduId === "new" && (
+              <div className="card-base p-5 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Institution *</label>
+                    <input
+                      value={eduForm.institution}
+                      onChange={e => setEduForm(f => ({ ...f, institution: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="University or school name"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Degree</label>
+                    <input
+                      value={eduForm.degree ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, degree: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="BS, MS, PhD…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Field of Study</label>
+                    <input
+                      value={eduForm.field_of_study ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, field_of_study: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="Computer Science…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Start Year</label>
+                    <input
+                      value={eduForm.start_date ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, start_date: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="2018"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">End Year</label>
+                    <input
+                      value={eduForm.end_date ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, end_date: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="2022"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">GPA</label>
+                    <input
+                      value={eduForm.gpa ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, gpa: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                      placeholder="3.8"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-slate-500 mb-1 block">Description</label>
+                    <textarea
+                      value={eduForm.description ?? ""}
+                      onChange={e => setEduForm(f => ({ ...f, description: e.target.value }))}
+                      rows={3}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400 resize-none"
+                      placeholder="Honors, activities, thesis…"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={saveEdu}
+                    disabled={savingEdu || !eduForm.institution.trim()}
+                    className="px-4 py-1.5 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-40 transition-colors"
+                  >
+                    {savingEdu ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    onClick={() => setEditingEduId(null)}
+                    className="px-4 py-1.5 text-slate-500 text-sm rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            ))}
+            )}
+
+            {editingEduId !== "new" && (
+              <button
+                onClick={() => {
+                  setEduForm({ institution: "", degree: "", field_of_study: "", start_date: "", end_date: "", gpa: "", description: "" });
+                  setEditingEduId("new");
+                }}
+                className="w-full flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-sky-300 hover:text-sky-600 transition-colors text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Education
+              </button>
+            )}
           </div>
         )}
 
@@ -799,7 +1125,7 @@ export default function ProfilePage() {
           <div className="space-y-5">
             <div className="card-base p-5">
               <h3 className="font-semibold text-slate-900 mb-1">Skills</h3>
-              <p className="text-xs text-slate-400 mb-3">Concrete capabilities, tools, and technologies.</p>
+              <p className="text-xs text-slate-400 mb-3">Concrete capabilities and competencies (e.g. Financial Modeling, Data Analysis, Public Speaking).</p>
               <div className="flex flex-wrap gap-2">
                 {skills.map((skill) => (
                   <span
@@ -882,6 +1208,135 @@ export default function ProfilePage() {
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-3">Hover a keyword to remove it.</p>
+            </div>
+
+            {/* Tools */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Tools</h3>
+              <p className="text-xs text-slate-400 mb-3">Software, platforms, and technologies you use (e.g. Salesforce, Excel, Python, JIRA).</p>
+              <div className="flex flex-wrap gap-2">
+                {tools.map((t) => (
+                  <span
+                    key={t}
+                    className="group flex items-center gap-1 text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {t}
+                    <button
+                      onClick={() => removeTool(t)}
+                      disabled={savingTools}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newTool}
+                    onChange={e => setNewTool(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addTool()}
+                    placeholder="Add tool…"
+                    className="text-sm bg-transparent outline-none w-28 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addTool}
+                    disabled={!newTool.trim() || savingTools}
+                    className="text-emerald-600 hover:text-emerald-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {tools.length === 0 && !newTool && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a tool above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a tool to remove it.</p>
+            </div>
+
+            {/* Certifications */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Certifications</h3>
+              <p className="text-xs text-slate-400 mb-3">Named credentials, licenses, and professional designations (e.g. PMP, CPA, AWS Solutions Architect).</p>
+              <div className="flex flex-wrap gap-2">
+                {certifications.map((c) => (
+                  <span
+                    key={c}
+                    className="group flex items-center gap-1 text-sm bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {c}
+                    <button
+                      onClick={() => removeCert(c)}
+                      disabled={savingCerts}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newCert}
+                    onChange={e => setNewCert(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addCert()}
+                    placeholder="Add certification…"
+                    className="text-sm bg-transparent outline-none w-36 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addCert}
+                    disabled={!newCert.trim() || savingCerts}
+                    className="text-amber-600 hover:text-amber-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {certifications.length === 0 && !newCert && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a certification above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a certification to remove it.</p>
+            </div>
+
+            {/* Clearances */}
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-1">Clearances</h3>
+              <p className="text-xs text-slate-400 mb-3">Government or security clearances (e.g. Secret, Top Secret, TS/SCI, Public Trust).</p>
+              <div className="flex flex-wrap gap-2">
+                {clearances.map((c) => (
+                  <span
+                    key={c}
+                    className="group flex items-center gap-1 text-sm bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-full font-medium"
+                  >
+                    {c}
+                    <button
+                      onClick={() => removeClearance(c)}
+                      disabled={savingClearances}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <div className="flex items-center gap-1 bg-slate-50 border border-dashed border-slate-300 rounded-full px-2 py-1">
+                  <input
+                    value={newClearance}
+                    onChange={e => setNewClearance(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && addClearance()}
+                    placeholder="Add clearance…"
+                    className="text-sm bg-transparent outline-none w-32 text-slate-600 placeholder:text-slate-400"
+                  />
+                  <button
+                    onClick={addClearance}
+                    disabled={!newClearance.trim() || savingClearances}
+                    className="text-rose-600 hover:text-rose-700 disabled:opacity-30 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {clearances.length === 0 && !newClearance && (
+                  <p className="text-slate-400 text-sm w-full mt-1">Type a clearance level above and press Enter to add it.</p>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">Hover a clearance to remove it.</p>
             </div>
           </div>
         )}

@@ -11,7 +11,8 @@ import { workflowToJob } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Workflow, Job } from "@/lib/types";
 
 const ALL_STATUSES: ApplicationStatus[] = [
-  "draft", "saved", "applied", "interviewing", "offer", "hired", "rejected",
+  "ready", "applied", "received", "interviewing", "offer", "negotiating",
+  "hired", "declined", "ghosted", "rejected",
 ];
 
 export default function JobsPage() {

@@ -37,14 +37,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Known job board domains — listing URL on these is NOT the company website
+    const JOB_BOARDS = [
+      'linkedin.com', 'indeed.com', 'glassdoor.com', 'greenhouse.io', 'lever.co',
+      'workday.com', 'myworkdayjobs.com', 'icims.com', 'jobvite.com', 'smartrecruiters.com',
+      'recruitingbypaycor.com', 'jazz.co', 'breezy.hr', 'workable.com', 'rippling.com',
+      'ashbyhq.com', 'wellfound.com', 'ziprecruiter.com', 'monster.com', 'careerbuilder.com',
+    ]
+
+    // Derive company website from listing URL if it's on the company's own domain
+    let listingDomainUrl: string | null = null
+    try {
+      const listingHost = new URL(body.url).hostname.replace(/^www\./, '')
+      const isJobBoard = JOB_BOARDS.some(b => listingHost === b || listingHost.endsWith('.' + b))
+      if (!isJobBoard) {
+        listingDomainUrl = `https://${new URL(body.url).hostname}`
+      }
+    } catch { /* ignore */ }
+
     // Fetch the listing page content
     let pageContent: string
+    let scrapedLinkedIn: string | null = null
     try {
       const res = await fetch(body.url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DreamJob/1.0)' },
       })
       pageContent = await res.text()
-      // Truncate to avoid token limits — keep first 15k chars
+
+      // Extract LinkedIn company URL from full HTML before truncating (footer is often cut off)
+      // Match both /company/ and encoded variants, strip query params
+      const liMatch = pageContent.match(/https?:\/\/(?:www\.)?linkedin\.com\/company\/[a-zA-Z0-9_%-]+(?:\/[a-zA-Z0-9_/-]*)?/i)
+      if (liMatch) {
+        // Keep only up to the company slug, strip trailing paths like /jobs/ /about/ etc
+        const clean = liMatch[0].match(/https?:\/\/(?:www\.)?linkedin\.com\/company\/[a-zA-Z0-9_%-]+/)
+        if (clean) scrapedLinkedIn = clean[0]
+      }
+
+      // Truncate for AI — job details are almost always in the first portion
       if (pageContent.length > 15000) {
         pageContent = pageContent.substring(0, 15000)
       }
@@ -81,6 +110,13 @@ export async function POST(request: NextRequest) {
     }
 
     const parsed = JSON.parse(jsonMatch[0])
+    // Fill gaps from HTML/URL extraction when AI missed them
+    if (!parsed.company_linkedin_url && scrapedLinkedIn) {
+      parsed.company_linkedin_url = scrapedLinkedIn
+    }
+    if (!parsed.company_website_url && listingDomainUrl) {
+      parsed.company_website_url = listingDomainUrl
+    }
     return NextResponse.json(parsed)
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

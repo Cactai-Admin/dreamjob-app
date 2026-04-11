@@ -3,14 +3,16 @@
 // ============================================================
 
 export type ApplicationStatus =
-  | "draft"
-  | "saved"
+  | "ready"
   | "applied"
+  | "received"
   | "interviewing"
   | "offer"
+  | "negotiating"
   | "hired"
-  | "rejected"
-  | "withdrawn";
+  | "declined"
+  | "ghosted"
+  | "rejected";
 
 export type DocumentStatus =
   | "not_started"

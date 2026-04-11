@@ -8,13 +8,35 @@ export function deriveApplicationStatus(
   events: StatusEvent[] = []
 ): ApplicationStatus {
   const types = events.map((e) => e.event_type)
-  if (types.includes('hired')) return 'hired'
-  if (types.includes('rejected')) return 'rejected'
-  if (types.includes('withdrawn')) return 'withdrawn'
-  if (types.includes('offer_received')) return 'offer'
-  if (types.some((t) => t.startsWith('interview'))) return 'interviewing'
-  if (types.includes('submitted') || state === 'sent' || state === 'completed') return 'applied'
-  return 'draft'
+  if (types.includes('hired'))       return 'hired'
+  if (types.includes('declined'))    return 'declined'
+  if (types.includes('rejected'))    return 'rejected'
+  if (types.includes('ghosted'))     return 'ghosted'
+  if (types.includes('negotiation')) return 'negotiating'
+  if (types.includes('offer'))       return 'offer'
+  if (types.includes('interview'))   return 'interviewing'
+  if (types.includes('received'))    return 'received'
+  if (types.includes('sent') || state === 'sent' || state === 'completed') return 'applied'
+  return 'ready'
+}
+
+export function deriveAllStatuses(
+  state: string,
+  events: StatusEvent[] = []
+): ApplicationStatus[] {
+  const types = events.map((e) => e.event_type)
+  const statuses: ApplicationStatus[] = []
+  if (types.includes('ready')) statuses.push('ready')
+  if (types.includes('sent') || state === 'sent' || state === 'completed') statuses.push('applied')
+  if (types.includes('received'))    statuses.push('received')
+  if (types.includes('interview'))   statuses.push('interviewing')
+  if (types.includes('offer'))       statuses.push('offer')
+  if (types.includes('negotiation')) statuses.push('negotiating')
+  if (types.includes('hired'))       statuses.push('hired')
+  if (types.includes('declined'))    statuses.push('declined')
+  if (types.includes('ghosted'))     statuses.push('ghosted')
+  if (types.includes('rejected'))    statuses.push('rejected')
+  return statuses
 }
 
 export function deriveDocumentStatus(outputs: Output[] = [], type: string): DocumentStatus {

@@ -104,9 +104,13 @@ export async function POST(request: NextRequest) {
   if (profile) {
     userContext += `\n\nUSER PROFILE:`
     if (profile.first_name) userContext += `\nName: ${profile.first_name} ${profile.last_name || ''}`
+    if (profile.email) userContext += `\nEmail: ${profile.email}`
+    if (profile.phone) userContext += `\nPhone: ${profile.phone}`
+    if (profile.location) userContext += `\nLocation: ${profile.location}`
+    if (profile.linkedin_url) userContext += `\nLinkedIn: ${profile.linkedin_url}`
+    if (profile.portfolio_url) userContext += `\nPortfolio: ${profile.portfolio_url}`
     if (profile.headline) userContext += `\nHeadline: ${profile.headline}`
     if (profile.summary) userContext += `\nSummary: ${profile.summary}`
-    if (profile.location) userContext += `\nLocation: ${profile.location}`
   }
 
   if (employment && employment.length > 0) {

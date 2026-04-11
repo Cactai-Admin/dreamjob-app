@@ -50,7 +50,7 @@ export default function DashboardPage() {
       if (Array.isArray(listings)) setPendingListings(listings.slice(0, 3));
       if (Array.isArray(active)) {
         const jobs = active.map(workflowToJob);
-        const inProgress = jobs.filter(j => !["hired", "rejected", "withdrawn"].includes(j.status));
+        const inProgress = jobs.filter(j => !["hired", "declined", "rejected", "ghosted"].includes(j.status));
         setInProgressJobs(inProgress.slice(0, 3));
         setTotalJobs(inProgress.length);
       }

@@ -30,7 +30,10 @@ Return ONLY valid JSON in this exact shape:
     "github_url": "..." or null,
     "portfolio_url": "..." or null,
     "skills": ["skill1", "skill2", ...],
-    "keywords": ["keyword1", "keyword2", ...]
+    "keywords": ["keyword1", "keyword2", ...],
+    "tools": ["tool1", "tool2", ...],
+    "certifications": ["cert1", "cert2", ...],
+    "clearances": ["clearance1", ...]
   },
   "employment": [
     {
@@ -59,9 +62,12 @@ Return ONLY valid JSON in this exact shape:
 
 Rules:
 - Only include fields that are clearly present in the document. Use null for anything not found.
-- skills: concrete capabilities, tools, technologies (e.g. "React", "Python", "Project Management").
-- keywords: ATS/industry buzzwords, soft skills, domain terms that aren't concrete tools (e.g. "B2B SaaS", "cross-functional leadership", "agile methodology").
-- Both skills and keywords must be flat arrays of strings (no objects).
+- skills: concrete, named capabilities and competencies (e.g. "Financial Modeling", "Public Speaking", "Data Analysis", "Project Management"). Do NOT put software or platforms here.
+- tools: software applications, platforms, and technologies (e.g. "Salesforce", "Excel", "Python", "Tableau", "JIRA", "Slack").
+- keywords: ATS/industry buzzwords, domain terms, methodologies, soft skills (e.g. "B2B SaaS", "cross-functional leadership", "agile methodology", "go-to-market").
+- certifications: named credentials, licenses, or professional designations (e.g. "PMP", "CPA", "AWS Solutions Architect", "Series 7").
+- clearances: government or security clearances (e.g. "Secret", "Top Secret", "TS/SCI", "Public Trust").
+- All profile arrays must be flat arrays of strings (no objects).
 - employment and education must be arrays (empty array if none found).
 - For cover letters, extract name/contact info/summary only — employment/education will usually be absent.
 - Do not invent or guess information.`

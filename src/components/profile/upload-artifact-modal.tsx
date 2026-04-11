@@ -19,6 +19,9 @@ interface ParsedProfile {
   portfolio_url?: string | null;
   skills?: string[];
   keywords?: string[];
+  tools?: string[];
+  certifications?: string[];
+  clearances?: string[];
 }
 
 interface ParsedEmployment {
@@ -61,6 +64,7 @@ const PROFILE_FIELD_LABELS: Record<string, string> = {
   phone: "Phone", location: "Location", headline: "Headline",
   summary: "Summary", linkedin_url: "LinkedIn URL", github_url: "GitHub URL",
   portfolio_url: "Portfolio URL", skills: "Skills", keywords: "Keywords",
+  tools: "Tools", certifications: "Certifications", clearances: "Clearances",
 };
 
 export function UploadArtifactModal({ onClose, onApplied }: Props) {
@@ -188,6 +192,33 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
         ];
         if (merged.length > (existingProf.keywords ?? []).length) profilePayload.keywords = merged;
       }
+      // Merge tools
+      if (p.tools?.length) {
+        const have = new Set((existingProf.tools ?? []).map(norm));
+        const merged = [
+          ...(existingProf.tools ?? []),
+          ...p.tools.filter((t: string) => !have.has(norm(t))),
+        ];
+        if (merged.length > (existingProf.tools ?? []).length) profilePayload.tools = merged;
+      }
+      // Merge certifications
+      if (p.certifications?.length) {
+        const have = new Set((existingProf.certifications ?? []).map(norm));
+        const merged = [
+          ...(existingProf.certifications ?? []),
+          ...p.certifications.filter((c: string) => !have.has(norm(c))),
+        ];
+        if (merged.length > (existingProf.certifications ?? []).length) profilePayload.certifications = merged;
+      }
+      // Merge clearances
+      if (p.clearances?.length) {
+        const have = new Set((existingProf.clearances ?? []).map(norm));
+        const merged = [
+          ...(existingProf.clearances ?? []),
+          ...p.clearances.filter((c: string) => !have.has(norm(c))),
+        ];
+        if (merged.length > (existingProf.clearances ?? []).length) profilePayload.clearances = merged;
+      }
       if (Object.keys(profilePayload).length > 0) {
         tasks.push(
           fetch("/api/profile", {
@@ -302,10 +333,11 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
     onClose();
   };
 
+  const ARRAY_FIELDS = ["skills", "keywords", "tools", "certifications", "clearances"];
   // Count non-null profile fields
   const profileFieldCount = result
     ? Object.entries(result.profile ?? {}).filter(([k, v]) =>
-        ["skills", "keywords"].includes(k) ? (v as string[])?.length > 0 : v != null
+        ARRAY_FIELDS.includes(k) ? (v as string[])?.length > 0 : v != null
       ).length
     : 0;
 
@@ -434,19 +466,20 @@ export function UploadArtifactModal({ onClose, onApplied }: Props) {
                   {profileOpen && (
                     <div className="px-4 pb-3 border-t border-slate-100 space-y-1.5 pt-2">
                       {Object.entries(result!.profile ?? {}).map(([k, v]) => {
-                        if (["skills", "keywords"].includes(k)) {
+                        if (ARRAY_FIELDS.includes(k)) {
                           if (!Array.isArray(v) || v.length === 0) return null;
+                          const badgeClass =
+                            k === "keywords" ? "bg-violet-50 text-violet-700 border-violet-200" :
+                            k === "tools" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                            k === "certifications" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                            k === "clearances" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                            "bg-sky-50 text-sky-700 border-sky-200";
                           return (
                             <div key={k} className="flex gap-2 text-xs">
                               <span className="text-slate-400 w-28 flex-shrink-0 pt-0.5">{PROFILE_FIELD_LABELS[k] ?? k}</span>
                               <div className="flex flex-wrap gap-1">
                                 {(v as string[]).map(s => (
-                                  <span key={s} className={cn(
-                                    "px-1.5 py-0.5 rounded-full border",
-                                    k === "keywords"
-                                      ? "bg-violet-50 text-violet-700 border-violet-200"
-                                      : "bg-sky-50 text-sky-700 border-sky-200"
-                                  )}>{s}</span>
+                                  <span key={s} className={cn("px-1.5 py-0.5 rounded-full border", badgeClass)}>{s}</span>
                                 ))}
                               </div>
                             </div>

@@ -10,18 +10,52 @@ import {
   ChevronRight, StickyNote, Building2, Users, Calendar,
   CircleCheck as CheckCircle2, Trash2, MessageSquare, TrendingUp,
   PenLine, Save, X, Plus, Star, Link2, RefreshCw,
-  Globe,
+  Globe, Check, AlertCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { DocStatusPill } from "@/components/jobs/doc-status-pill";
 import { PageHeader } from "@/components/layout/page-header";
-import { workflowToJob, deriveApplicationStatus } from "@/lib/workflow-adapter";
+import { workflowToJob, deriveApplicationStatus, deriveAllStatuses } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const STATUS_FLOW: ApplicationStatus[] = [
-  "saved", "applied", "interviewing", "offer", "hired",
+const EXCLUSIVE_GROUP = new Set<ApplicationStatus>(["hired", "declined", "ghosted", "rejected"]);
+
+const PREREQUISITES: Partial<Record<ApplicationStatus, ApplicationStatus[]>> = {
+  received:     ["applied"],
+  interviewing: ["applied"],
+  offer:        ["applied"],
+  negotiating:  ["applied", "offer"],
+  hired:        ["applied", "offer"],
+  declined:     ["applied", "offer"],
+};
+
+// event_type values used in the DB status_event_type enum
+const EVENT_MAP: Partial<Record<ApplicationStatus, string>> = {
+  ready:        "ready",
+  applied:      "sent",
+  received:     "received",
+  interviewing: "interview",
+  offer:        "offer",
+  negotiating:  "negotiation",
+  hired:        "hired",
+  declined:     "declined",
+  ghosted:      "ghosted",
+  rejected:     "rejected",
+};
+
+const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: string }[] = [
+  { status: "ready",        label: "Ready",        activeClass: "border-blue-400 bg-blue-50 text-blue-700" },
+  { status: "applied",      label: "Applied",      activeClass: "border-sky-400 bg-sky-50 text-sky-700" },
+  { status: "received",     label: "Received",     activeClass: "border-violet-400 bg-violet-50 text-violet-700" },
+  { status: "interviewing", label: "Interviewing", activeClass: "border-amber-400 bg-amber-50 text-amber-700" },
+  { status: "offer",        label: "Offer",        activeClass: "border-emerald-400 bg-emerald-50 text-emerald-700" },
+  { status: "negotiating",  label: "Negotiating",  activeClass: "border-teal-400 bg-teal-50 text-teal-700" },
+  { status: "hired",        label: "Hired",        activeClass: "border-green-400 bg-green-50 text-green-700" },
+  { status: "declined",     label: "Declined",     activeClass: "border-orange-400 bg-orange-50 text-orange-700" },
+  { status: "ghosted",      label: "Ghosted",      activeClass: "border-slate-300 bg-slate-100 text-slate-500" },
+  { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
 ];
 
 function parseReqs(val: unknown): string[] {
@@ -35,6 +69,32 @@ function parseReqs(val: unknown): string[] {
     return t ? [t] : [];
   }
   return [];
+}
+
+type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
+
+function computeMatch(reqs: string[], skills: string[], keywords: string[], tools: string[], certs: string[], clearances: string[], tech: string[], manuallyMarked: string[] = []) {
+  const userTerms = [...new Set(
+    [...skills, ...keywords, ...tools, ...certs, ...clearances, ...tech].map(s => s.toLowerCase().trim()).filter(s => s.length > 2)
+  )];
+  if (userTerms.length === 0 && manuallyMarked.length === 0 || reqs.length === 0) return { score: 0, matched: [] as string[], missing: [] as string[] };
+  const termCoversReq = (u: string, rLow: string) => {
+    if (rLow.includes(u)) return true;
+    const words = u.split(/\s+/).filter(w => w.length >= 4);
+    return words.length > 0 && words.some(w => rLow.includes(w));
+  };
+  const matchedTerms: string[] = [];
+  for (const t of userTerms) {
+    if (reqs.some(req => termCoversReq(t, req.toLowerCase()))) matchedTerms.push(t);
+  }
+  const coveredReqs = reqs.map(req => {
+    if (manuallyMarked.includes(req)) return true;
+    const rLow = req.toLowerCase();
+    return userTerms.some(u => termCoversReq(u, rLow));
+  });
+  const score = Math.round((coveredReqs.filter(Boolean).length / reqs.length) * 100);
+  const missing = reqs.filter((_, i) => !coveredReqs[i]);
+  return { score, matched: matchedTerms.slice(0, 12), missing: missing.slice(0, 10) };
 }
 
 interface Props {
@@ -85,6 +145,17 @@ export default function JobDetailPage({ params }: Props) {
   const [connError, setConnError] = useState<string | null>(null);
   const [modalDegree, setModalDegree] = useState<"first" | "second" | "third" | null>(null);
 
+  // Profile match
+  const [profSkills, setProfSkills] = useState<string[]>([]);
+  const [profKeywords, setProfKeywords] = useState<string[]>([]);
+  const [profTools, setProfTools] = useState<string[]>([]);
+  const [profCerts, setProfCerts] = useState<string[]>([]);
+  const [profClearances, setProfClearances] = useState<string[]>([]);
+  const [empTech, setEmpTech] = useState<string[]>([]);
+  const [addModal, setAddModal] = useState<{ term: string; editedTerm: string } | null>(null);
+  const [addingSaving, setAddingSaving] = useState(false);
+  const [manuallyMarked, setManuallyMarked] = useState<string[]>([]);
+
   const loadWorkflow = () => {
     fetch(`/api/workflows/${id}`)
       .then(r => r.json())
@@ -111,15 +182,27 @@ export default function JobDetailPage({ params }: Props) {
         setEditAdditional(l.responsibilities ?? "");
         setNotes(wf.notes ?? "");
 
-        // Load stored connections + LinkedIn session in parallel
-        const [liRes, connRes] = await Promise.all([
+        // Load stored connections + LinkedIn session + profile in parallel
+        const [liRes, connRes, profRes, empRes] = await Promise.all([
           fetch("/api/linkedin/session").then(r => r.json()).catch(() => ({})),
           wf.listing_id
             ? fetch(`/api/linkedin/company?listing_id=${wf.listing_id}`).then(r => r.json()).catch(() => ({}))
             : Promise.resolve({}),
+          fetch("/api/profile").then(r => r.json()).catch(() => ({})),
+          fetch("/api/profile/employment").then(r => r.json()).catch(() => []),
         ]);
         if (liRes && !liRes.error) setLinkedInActive(liRes.isAuthenticated);
         if (connRes?.connections) setConnections(connRes.connections);
+        if (profRes && !profRes.error) {
+          setProfSkills(Array.isArray(profRes.skills) ? profRes.skills : []);
+          setProfKeywords(Array.isArray(profRes.keywords) ? profRes.keywords : []);
+          setProfTools(Array.isArray(profRes.tools) ? profRes.tools : []);
+          setProfCerts(Array.isArray(profRes.certifications) ? profRes.certifications : []);
+          setProfClearances(Array.isArray(profRes.clearances) ? profRes.clearances : []);
+        }
+        if (Array.isArray(empRes)) {
+          setEmpTech(empRes.flatMap((e: { technologies?: string[] }) => Array.isArray(e.technologies) ? e.technologies : []));
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -127,27 +210,73 @@ export default function JobDetailPage({ params }: Props) {
 
   useEffect(() => { loadWorkflow(); }, [id]);
 
-  const EVENT_MAP: Record<string, string> = {
-    applied: "submitted",
-    interviewing: "interview_scheduled",
-    offer: "offer_received",
-    hired: "hired",
-    rejected: "rejected",
-    withdrawn: "withdrawn",
+  const addToProfile = async (category: ProfileCategory, term: string) => {
+    if (!term.trim()) return;
+    setAddingSaving(true);
+    const currentMap: Record<ProfileCategory, string[]> = {
+      skills: profSkills, keywords: profKeywords, tools: profTools, certifications: profCerts, clearances: profClearances,
+    };
+    const existing = currentMap[category];
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const isDup = existing.some(e => norm(e) === norm(term.trim()));
+    if (!isDup) {
+      const updated = [...existing, term.trim()];
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [category]: updated }),
+      });
+      const data = await res.json();
+      if (!data.error) {
+        if (category === "skills") setProfSkills(updated);
+        else if (category === "keywords") setProfKeywords(updated);
+        else if (category === "tools") setProfTools(updated);
+        else if (category === "certifications") setProfCerts(updated);
+        else if (category === "clearances") setProfClearances(updated);
+      }
+    }
+    setAddingSaving(false);
+    setAddModal(null);
   };
 
-  const updateStatus = async (newStatus: ApplicationStatus) => {
-    if (!job) return;
-    const eventType = EVENT_MAP[newStatus];
+  const toggleStatus = async (status: ApplicationStatus) => {
+    if (!workflow) return;
+    const eventType = EVENT_MAP[status];
     if (!eventType) return;
-    if (job.status === newStatus) {
+
+    const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
+    const isActive = activeStatuses.includes(status);
+
+    if (isActive) {
       await fetch(`/api/workflows/${id}/status?event_type=${eventType}`, { method: "DELETE" });
+      // 'applied' also stamps workflow.state = 'sent' — reset it so deriveAllStatuses won't re-show it
+      if (status === "applied") {
+        await fetch(`/api/workflows/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ state: "active" }),
+        });
+      }
     } else {
-      await fetch(`/api/workflows/${id}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_type: eventType }),
-      });
+      // Remove mutually exclusive statuses first
+      const toRemove = EXCLUSIVE_GROUP.has(status)
+        ? [...EXCLUSIVE_GROUP].filter(s => s !== status && activeStatuses.includes(s))
+        : [];
+      await Promise.all(toRemove.map(s => {
+        const et = EVENT_MAP[s];
+        return et ? fetch(`/api/workflows/${id}/status?event_type=${et}`, { method: "DELETE" }) : Promise.resolve();
+      }));
+
+      // Add prerequisites not yet active, then add the selected status
+      const prereqs = (PREREQUISITES[status] ?? []).filter(p => !activeStatuses.includes(p));
+      await Promise.all([...prereqs, status].map(s => {
+        const et = EVENT_MAP[s];
+        return et ? fetch(`/api/workflows/${id}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event_type: et }),
+        }) : Promise.resolve();
+      }));
     }
     loadWorkflow();
   };
@@ -231,11 +360,12 @@ export default function JobDetailPage({ params }: Props) {
 
   if (!job || !workflow) return notFound();
 
-  const currentStepIdx = STATUS_FLOW.indexOf(job.status);
   const linkedInUrl = editLinkedIn || workflow.company?.linkedin_url || "";
+  const match = computeMatch(editReqs, profSkills, profKeywords, profTools, profCerts, profClearances, empTech, manuallyMarked);
+  const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
 
   return (
-    <div className="page-wrapper max-w-4xl">
+    <div className="page-wrapper max-w-1000px">
       <PageHeader
         title={job.title}
         subtitle={job.company}
@@ -243,40 +373,6 @@ export default function JobDetailPage({ params }: Props) {
         actions={<StatusBadge status={job.status} />}
       />
 
-      {/* Progress timeline */}
-      {currentStepIdx >= 0 && (
-        <div className="card-base p-4 mb-5 hidden sm:block">
-          <div className="flex items-center">
-            {STATUS_FLOW.map((s, idx) => {
-              const isCompleted = idx < currentStepIdx;
-              const isCurrent   = idx === currentStepIdx;
-              return (
-                <div key={s} className="flex-1 flex items-center">
-                  <div className="flex flex-col items-center">
-                    <div className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all",
-                      isCompleted ? "bg-emerald-500 border-emerald-500 text-white" :
-                      isCurrent   ? "bg-sky-600 border-sky-600 text-white" :
-                                    "bg-white border-slate-200 text-slate-400"
-                    )}>
-                      {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : idx + 1}
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-medium mt-1 capitalize",
-                      isCurrent ? "text-sky-700" : isCompleted ? "text-emerald-600" : "text-slate-400"
-                    )}>
-                      {s}
-                    </span>
-                  </div>
-                  {idx < STATUS_FLOW.length - 1 && (
-                    <div className={cn("flex-1 h-0.5 mx-2", isCompleted ? "bg-emerald-400" : "bg-slate-200")} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="grid lg:grid-cols-3 gap-5">
         {/* Main column */}
@@ -637,6 +733,83 @@ export default function JobDetailPage({ params }: Props) {
             </div>
           </div>
 
+          {/* Profile Match */}
+          {editReqs.length > 0 && (
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-sky-500" />
+                Profile Match
+              </h3>
+              {profSkills.length === 0 && profKeywords.length === 0 && profTools.length === 0 && empTech.length === 0 ? (
+                <Link href="/profile?tab=skills" className="text-sm text-sky-500 hover:underline">Add skills to your profile</Link>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className={cn(
+                      "w-[64px] h-[64px] rounded-full flex items-center justify-center text-xl font-bold border-4 flex-shrink-0",
+                      match.score >= 70 ? "border-emerald-400 text-emerald-700 bg-emerald-50" :
+                      match.score >= 40 ? "border-amber-400 text-amber-700 bg-amber-50" :
+                                          "border-red-300 text-red-600 bg-red-50"
+                    )}>
+                      {match.score}%
+                    </div>
+                    <div>
+                      <p className={cn(
+                        "font-semibold text-sm",
+                        match.score >= 70 ? "text-emerald-700" : match.score >= 40 ? "text-amber-700" : "text-red-600"
+                      )}>
+                        {match.score >= 70 ? "Strong match" : match.score >= 40 ? "Partial match" : "Low match"}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {match.matched.length} term{match.matched.length !== 1 ? "s" : ""} matched · {match.missing.length} gap{match.missing.length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  {(match.matched.length > 0 || manuallyMarked.length > 0) && (
+                    <div className="mb-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-1.5">You have</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {match.matched.map(s => (
+                          <span key={s} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Check className="w-2.5 h-2.5" />{s}
+                          </span>
+                        ))}
+                        {manuallyMarked.map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setManuallyMarked(prev => prev.filter(x => x !== s))}
+                            title="Click to undo"
+                            className="text-xs bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-slate-200 transition-colors"
+                          >
+                            <Check className="w-2.5 h-2.5" />{s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {match.missing.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1.5">Not yet covered</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {match.missing.map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setAddModal({ term: s, editedTerm: s })}
+                            className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-amber-100 transition-colors cursor-pointer"
+                          >
+                            <AlertCircle className="w-2.5 h-2.5" />{s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* LinkedIn Connections */}
           <div className="card-base p-5">
             <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
@@ -716,24 +889,30 @@ export default function JobDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Update Status */}
+          {/* Status */}
           <div className="card-base p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Update Status</h3>
-              <span className="text-xs text-slate-400">Click active to remove</span>
+              <h3 className="font-semibold text-slate-900">Status</h3>
+              <span className="text-xs text-slate-400">Click to toggle</span>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {(["applied", "interviewing", "offer", "hired", "rejected", "withdrawn"] as ApplicationStatus[]).map((s) => (
-                <button key={s} onClick={() => updateStatus(s)}
-                  className={cn(
-                    "text-xs font-medium py-2 px-3 rounded-lg border transition-all capitalize",
-                    job.status === s
-                      ? "border-sky-500 bg-sky-50 text-sky-700 ring-1 ring-sky-400"
-                      : "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                  )}>
-                  {s}
-                </button>
-              ))}
+              {STATUS_GRID.map(({ status, label, activeClass }) => {
+                const isActive = activeStatuses.includes(status);
+                return (
+                  <button
+                    key={status}
+                    onClick={() => toggleStatus(status)}
+                    className={cn(
+                      "text-xs font-medium py-2 px-3 rounded-lg border transition-all text-left",
+                      isActive
+                        ? activeClass
+                        : "border-slate-200 text-slate-500 bg-white hover:bg-slate-50",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -765,6 +944,67 @@ export default function JobDetailPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── Add to Profile Modal ── */}
+      {addModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setAddModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h3 className="font-semibold text-slate-900">Add to Profile</h3>
+              <button onClick={() => setAddModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-slate-500 mb-1 block">Term to add (edit if needed)</label>
+                <input
+                  value={addModal.editedTerm}
+                  onChange={e => setAddModal(m => m ? { ...m, editedTerm: e.target.value } : null)}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 mb-2 block">Add to category</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { key: "skills" as ProfileCategory,         label: "Skills",         color: "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100" },
+                    { key: "keywords" as ProfileCategory,       label: "Keywords",       color: "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100" },
+                    { key: "tools" as ProfileCategory,          label: "Tools",          color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+                    { key: "certifications" as ProfileCategory, label: "Certifications", color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+                    { key: "clearances" as ProfileCategory,     label: "Clearances",     color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
+                  ] as const).map(({ key, label, color }) => (
+                    <button
+                      key={key}
+                      onClick={() => addToProfile(key, addModal.editedTerm)}
+                      disabled={addingSaving || !addModal.editedTerm.trim()}
+                      className={cn(
+                        "text-sm font-medium border rounded-lg px-3 py-2 transition-colors disabled:opacity-40 text-left",
+                        color
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setManuallyMarked(prev => prev.includes(addModal!.term) ? prev : [...prev, addModal!.term]);
+                      setAddModal(null);
+                    }}
+                    className="col-span-2 text-sm font-medium border border-slate-200 rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors text-center"
+                  >
+                    Don&apos;t add to profile — mark as covered
+                  </button>
+                </div>
+              </div>
+              {addingSaving && <p className="text-xs text-slate-400 text-center">Saving…</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Connections Modal ── */}
       {modalDegree && connections && (

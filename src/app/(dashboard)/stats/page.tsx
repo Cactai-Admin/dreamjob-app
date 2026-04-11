@@ -10,25 +10,26 @@ import { workflowToJob } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Workflow, Job } from "@/lib/types";
 
 const STATUS_ORDER: ApplicationStatus[] = [
-  "draft", "saved", "applied", "interviewing", "offer", "hired",
+  "ready", "applied", "received", "interviewing", "offer", "negotiating",
+  "hired", "declined", "ghosted", "rejected",
 ];
 
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
-  draft: "Draft", saved: "Saved", applied: "Applied",
-  interviewing: "Interviewing", offer: "Offer", hired: "Hired",
-  rejected: "Rejected", withdrawn: "Withdrawn",
+  ready: "Ready", applied: "Applied", received: "Received",
+  interviewing: "Interviewing", offer: "Offer", negotiating: "Negotiating",
+  hired: "Hired", declined: "Declined", ghosted: "Ghosted", rejected: "Rejected",
 };
 
 const STATUS_COLORS: Record<ApplicationStatus, string> = {
-  draft: "bg-slate-200", saved: "bg-blue-400", applied: "bg-sky-500",
-  interviewing: "bg-amber-400", offer: "bg-emerald-500", hired: "bg-green-600",
-  rejected: "bg-red-400", withdrawn: "bg-slate-300",
+  ready: "bg-blue-400", applied: "bg-sky-500", received: "bg-violet-500",
+  interviewing: "bg-amber-400", offer: "bg-emerald-500", negotiating: "bg-teal-500",
+  hired: "bg-green-600", declined: "bg-orange-400", ghosted: "bg-slate-300", rejected: "bg-red-400",
 };
 
 const STATUS_TEXT: Record<ApplicationStatus, string> = {
-  draft: "text-slate-600", saved: "text-blue-700", applied: "text-sky-700",
-  interviewing: "text-amber-700", offer: "text-emerald-700", hired: "text-green-700",
-  rejected: "text-red-700", withdrawn: "text-slate-600",
+  ready: "text-blue-700", applied: "text-sky-700", received: "text-violet-700",
+  interviewing: "text-amber-700", offer: "text-emerald-700", negotiating: "text-teal-700",
+  hired: "text-green-700", declined: "text-orange-700", ghosted: "text-slate-500", rejected: "text-red-700",
 };
 
 export default function StatsPage() {
@@ -46,7 +47,7 @@ export default function StatsPage() {
   }, []);
 
   const total = jobs.length;
-  const active = jobs.filter(j => !["hired", "rejected", "withdrawn"].includes(j.status)).length;
+  const active = jobs.filter(j => !["hired", "declined", "rejected", "ghosted"].includes(j.status)).length;
   const interviews = jobs.filter(j => j.status === "interviewing").length;
   const offers = jobs.filter(j => j.status === "offer" || j.status === "hired").length;
   const successRate = total > 0 ? Math.round((offers / total) * 100) : 0;
