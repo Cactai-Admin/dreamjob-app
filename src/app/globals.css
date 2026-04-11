@@ -277,6 +277,8 @@
     max-width: 400px;
     padding: 24px 16px;
     gap: 20px;
+    isolation: isolate;
+    transform: translateZ(0);
   }
 
   .login-brand {
