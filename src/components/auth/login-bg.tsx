@@ -34,7 +34,6 @@ export function LoginBg() {
         height: ${size}px;
         border-radius: 50%;
         background: ${color};
-        box-shadow: 0 0 ${size}px ${color};
       `
       wrap.appendChild(dot)
       dots.push(dot)
@@ -60,11 +59,22 @@ export function LoginBg() {
     }
 
     // ── Desktop: mouse → perspective ────────────────────────────────────────
-    // Skip update when the cursor is over the login column so the card's
-    // compositing layer isn't invalidated by perspectiveOrigin changes.
+    // Skip update when cursor is geometrically inside the login column so
+    // perspectiveOrigin changes don't invalidate the card's compositing layer.
+    // Coordinate check is used instead of e.target.closest() because the
+    // hit-test target can resolve to document.body even inside the column.
+    let colRect: DOMRect | null = null
+    function getColRect() {
+      const col = document.querySelector('.login-column')
+      colRect = col ? col.getBoundingClientRect() : null
+    }
+    getColRect()
+    window.addEventListener('resize', getColRect, { passive: true })
+
     function handleMouse(e: MouseEvent) {
-      const target = e.target as Element | null
-      if (target && target.closest('.login-column')) return
+      if (colRect &&
+          e.clientX >= colRect.left && e.clientX <= colRect.right &&
+          e.clientY >= colRect.top  && e.clientY <= colRect.bottom) return
       setPerspective(e.clientX, e.clientY)
     }
 
@@ -138,10 +148,11 @@ export function LoginBg() {
     window.addEventListener('touchmove',  handleTouch, { passive: true })
 
     return () => {
-      window.removeEventListener('mousemove',        handleMouse)
-      window.removeEventListener('touchstart',       handleTouch)
-      window.removeEventListener('touchmove',        handleTouch)
+      window.removeEventListener('mousemove',         handleMouse)
+      window.removeEventListener('touchstart',        handleTouch)
+      window.removeEventListener('touchmove',         handleTouch)
       window.removeEventListener('deviceorientation', handleOrientation)
+      window.removeEventListener('resize',            getColRect)
       anims.forEach(a => a.cancel())
       dots.forEach(d => d.remove())
     }
