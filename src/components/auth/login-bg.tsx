@@ -107,8 +107,8 @@ export function LoginBg() {
         const r     = Math.max(0.3, (dot.size / 2) * scale)
         const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
 
-        // Glow — larger blur when far (small scale) for fog feel, tightens as dot approaches
-        ctx.shadowBlur  = Math.min(dot.size / Math.max(scale, 0.15), 80)
+        // Glow — base of dot.size px (matches original box-shadow) + grows with scale
+        ctx.shadowBlur  = dot.size * (scale + 1)
         ctx.shadowColor = color
 
         ctx.beginPath()
