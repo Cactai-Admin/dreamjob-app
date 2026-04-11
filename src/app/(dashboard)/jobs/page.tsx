@@ -96,11 +96,12 @@ export default function JobsPage() {
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-5">
         <button
           onClick={() => setActiveFilter("all")}
-          className={`flex-shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-full border transition-all ${
+          className={`flex-shrink-0 text-xs font-semibold px-4 py-2.5 rounded-full border ${
             activeFilter === "all"
               ? "bg-slate-900 text-white border-slate-900"
-              : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+              : "bg-white text-slate-600 border-slate-200"
           }`}
+          style={{ minHeight: 40 }}
         >
           All ({jobs.length})
         </button>
@@ -108,7 +109,7 @@ export default function JobsPage() {
           const count = jobs.filter((j) => j.status === status).length;
           if (count === 0) return null;
           return (
-            <button key={status} onClick={() => setActiveFilter(status === activeFilter ? "all" : status)} className="flex-shrink-0">
+            <button key={status} onClick={() => setActiveFilter(status === activeFilter ? "all" : status)} className="flex-shrink-0" style={{ minHeight: 40 }}>
               <StatusBadge status={status} size="sm" />
             </button>
           );

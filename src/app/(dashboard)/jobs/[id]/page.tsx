@@ -394,33 +394,33 @@ export default function JobDetailPage({ params }: Props) {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Job Title</label>
                     <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Company</label>
                     <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Location</label>
                     <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
                       placeholder="City, State or Remote"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Salary Range</label>
                     <input value={editSalary} onChange={e => setEditSalary(e.target.value)}
                       placeholder="e.g. $120k–$160k"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Employment Type</label>
                     <select value={editEmpType} onChange={e => setEditEmpType(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white">
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white" style={{ minHeight: 44 }}>
                       <option value="">Unknown</option>
                       <option value="full-time">Full-time</option>
                       <option value="part-time">Part-time</option>
@@ -432,7 +432,7 @@ export default function JobDetailPage({ params }: Props) {
                   <div>
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Experience Level</label>
                     <select value={editExpLevel} onChange={e => setEditExpLevel(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white">
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white" style={{ minHeight: 44 }}>
                       <option value="">Unknown</option>
                       <option value="entry">Entry level</option>
                       <option value="mid">Mid level</option>
@@ -442,31 +442,31 @@ export default function JobDetailPage({ params }: Props) {
                       <option value="director">Director+</option>
                     </select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Company Website</label>
                     <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)}
                       placeholder="https://company.com"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-medium text-slate-500 mb-1 block">Company LinkedIn URL</label>
                     <input value={editLinkedIn} onChange={e => setEditLinkedIn(e.target.value)}
                       placeholder="https://linkedin.com/company/…"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200" />
+                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
                   <button
                     onClick={saveListingEdits}
                     disabled={savingListing}
-                    className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 text-sm font-semibold px-4 py-3 rounded-xl bg-slate-900 text-white disabled:opacity-50" style={{ minHeight: 44 }}
                   >
                     {savingListing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     {savingListing ? "Saving…" : "Save Changes"}
                   </button>
                   <button
                     onClick={() => setEditingListing(false)}
-                    className="text-sm px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                    className="text-sm px-4 py-3 rounded-xl border border-slate-200 text-slate-600" style={{ minHeight: 44 }}
                   >
                     Cancel
                   </button>
@@ -902,11 +902,12 @@ export default function JobDetailPage({ params }: Props) {
                   <button
                     key={status}
                     onClick={() => toggleStatus(status)}
+                    style={{ minHeight: 44 }}
                     className={cn(
-                      "text-xs font-medium py-2 px-3 rounded-lg border transition-all text-left",
+                      "text-sm font-medium py-2.5 px-3 rounded-lg border text-left",
                       isActive
                         ? activeClass
-                        : "border-slate-200 text-slate-500 bg-white hover:bg-slate-50",
+                        : "border-slate-200 text-slate-500 bg-white",
                     )}
                   >
                     {label}
@@ -924,12 +925,12 @@ export default function JobDetailPage({ params }: Props) {
                 <p className="text-xs text-slate-500">You can restore it within 30 days from Trash.</p>
                 <div className="flex gap-2">
                   <button onClick={deleteWorkflow} disabled={deleting}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-sm py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50">
+                    className="flex-1 flex items-center justify-center gap-1.5 text-sm py-3 rounded-lg bg-red-600 text-white disabled:opacity-50" style={{ minHeight: 44 }}>
                     <Trash2 className="w-3.5 h-3.5" />
                     {deleting ? "Deleting…" : "Yes, delete"}
                   </button>
                   <button onClick={() => setConfirmDelete(false)}
-                    className="flex-1 text-sm py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                    className="flex-1 text-sm py-3 rounded-lg border border-slate-200 text-slate-600" style={{ minHeight: 44 }}>
                     Cancel
                   </button>
                 </div>

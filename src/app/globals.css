@@ -175,8 +175,16 @@
   }
 
   .page-wrapper {
-    @apply w-full mx-auto px-4 sm:px-6 lg:px-10 py-4 sm:py-8;
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-10 py-5 sm:py-8;
+    /* Extra bottom padding on mobile so content clears the fixed bottom nav */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
     max-width: 1280px;
+  }
+
+  @media (min-width: 768px) {
+    .page-wrapper {
+      padding-bottom: 2rem;
+    }
   }
 
   /* Ocean blue animated CTA button */
@@ -224,9 +232,10 @@
   }
 
   .form-input {
-    @apply w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-900;
+    @apply w-full px-3 py-3 border border-slate-200 rounded-xl text-sm text-slate-900;
     @apply focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-all;
     @apply placeholder:text-slate-400;
+    min-height: 44px;
   }
 
   .form-label {
