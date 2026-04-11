@@ -277,6 +277,7 @@
     max-width: 400px;
     padding: 24px 16px;
     gap: 20px;
+    background: green !important;
   }
 
   .login-brand {
@@ -314,9 +315,11 @@
     width: 100%;
     border-radius: 20px;
     padding: 32px;
-    background: rgba(20, 20, 20, 0.75);
+    background: green !important;
+    
     border: 1px solid rgba(255,255,255,0.12);
   }
+##background: ##rgba(20, 20, 20, 0.75);
 
   .login-card-header {
     margin-bottom: 24px;
