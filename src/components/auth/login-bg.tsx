@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 
-const TOTAL = 200
+const TOTAL   = 200
+const MAX_DEG = 8   // max tilt in degrees for mouse/tilt parallax
 
 function random(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -15,10 +16,12 @@ export function LoginBg() {
     const wrap = wrapRef.current
     if (!wrap) return
 
-    const w = window.innerWidth
-    const h = window.innerHeight
+    const w  = window.innerWidth
+    const h  = window.innerHeight
+    const cx = w / 2
+    const cy = h / 2
     const dots: HTMLDivElement[] = []
-    const anims: Animation[] = []
+    const anims: Animation[]     = []
 
     for (let i = 0; i < TOTAL; i++) {
       const x      = random(0, w)
@@ -53,35 +56,21 @@ export function LoginBg() {
       anims.push(anim)
     }
 
-    // ── Shared perspective setter ───────────────────────────────────────────
-    function setPerspective(x: number, y: number) {
-      if (wrap) wrap.style.perspectiveOrigin = `${x}px ${y}px`
+    // ── Parallax via transform (compositor-only — zero repaints) ────────────
+    // rotateX/Y on a will-change:transform element is handled entirely by the
+    // GPU compositor. Unlike perspectiveOrigin, it never triggers a repaint.
+    function setTilt(x: number, y: number) {
+      const rx = ((y - cy) / cy) * -MAX_DEG
+      const ry = ((x - cx) / cx) *  MAX_DEG
+      if (wrap) wrap.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`
     }
 
-    // ── Desktop: mouse → perspective ────────────────────────────────────────
-    // Skip update when cursor is geometrically inside the login column so
-    // perspectiveOrigin changes don't invalidate the card's compositing layer.
-    // Coordinate check is used instead of e.target.closest() because the
-    // hit-test target can resolve to document.body even inside the column.
-    let colRect: DOMRect | null = null
-    function getColRect() {
-      const col = document.querySelector('.login-column')
-      colRect = col ? col.getBoundingClientRect() : null
-    }
-    getColRect()
-    window.addEventListener('resize', getColRect, { passive: true })
-
+    // ── Desktop: mouse ───────────────────────────────────────────────────────
     function handleMouse(e: MouseEvent) {
-      if (colRect &&
-          e.clientX >= colRect.left && e.clientX <= colRect.right &&
-          e.clientY >= colRect.top  && e.clientY <= colRect.bottom) return
-      setPerspective(e.clientX, e.clientY)
+      setTilt(e.clientX, e.clientY)
     }
 
-    // ── Mobile: device orientation (tilt) → perspective ─────────────────────
-    // This is the primary parallax on mobile. Touch-position fallback is only
-    // used when no gyroscope / orientation API is available.
-    // ── Mobile: device orientation (tilt) → perspective ─────────────────────
+    // ── Mobile: device orientation (tilt) ───────────────────────────────────
     let orientationActive = false
     
     // Higher = more responsive to smaller physical movement
@@ -114,22 +103,20 @@ export function LoginBg() {
 
     // Touch fallback — only used when orientation hasn't fired yet
     function handleTouch(e: TouchEvent) {
-      if (orientationActive) return   // tilt is in control — ignore touch position
-      setPerspective(e.touches[0].clientX, e.touches[0].clientY)
+      if (orientationActive) return
+      setTilt(e.touches[0].clientX, e.touches[0].clientY)
     }
 
     function attachOrientation() {
       window.addEventListener('deviceorientation', handleOrientation)
     }
 
-    // Attach orientation listener —————————————————————————————————————————
     const DOE = DeviceOrientationEvent as unknown as {
       requestPermission?: () => Promise<'granted' | 'denied'>
     }
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
-        // iOS 13+: must be called from a user-gesture handler
         const requestOnTouch = async () => {
           try {
             const result = await DOE.requestPermission!()
@@ -138,7 +125,6 @@ export function LoginBg() {
         }
         window.addEventListener('touchstart', requestOnTouch, { once: true, passive: true })
       } else {
-        // Android and other non-gated browsers: attach immediately
         attachOrientation()
       }
     }
@@ -152,7 +138,6 @@ export function LoginBg() {
       window.removeEventListener('touchstart',        handleTouch)
       window.removeEventListener('touchmove',         handleTouch)
       window.removeEventListener('deviceorientation', handleOrientation)
-      window.removeEventListener('resize',            getColRect)
       anims.forEach(a => a.cancel())
       dots.forEach(d => d.remove())
     }
@@ -171,6 +156,7 @@ export function LoginBg() {
         transformStyle: 'preserve-3d',
         zIndex:         0,
         pointerEvents:  'none',
+        willChange:     'transform',
       }}
     />
   )
