@@ -2,14 +2,14 @@
 
 // ── Negotiation Guide — AI-generated salary/offer negotiation prep ──
 
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, useRef, useCallback, use } from "react";
 import { notFound } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Sparkles, Save, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
-import { DocSubheader, STATUS_OPTIONS } from "@/components/documents/doc-subheader";
-import { useMobileNavSlot } from "@/components/layout/mobile-nav-slot";
+import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
+import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
 import type { Workflow, Output } from "@/lib/types";
 import { deriveApplicationStatus } from "@/lib/workflow-adapter";
@@ -30,10 +30,11 @@ export default function NegotiationGuidePage({ params }: Props) {
   const [isDirty, setIsDirty] = useState(false);
   const [loading, setLoading] = useState(true);
   const [appStatus, setAppStatus] = useState("draft");
+  const [confirmDel, setConfirmDel] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialContent = useRef(true);
-  const { setSlot, clearSlot } = useMobileNavSlot();
+  const { setDocControls, clearDocControls } = useDocControls();
 
   const fetchWorkflow = async () => {
     try {
@@ -98,39 +99,17 @@ export default function NegotiationGuidePage({ params }: Props) {
     }, 2000);
   }, [content]);
 
-  // Inject status dropdown into mobile top bar
-  useEffect(() => {
-    if (!workflow) return;
-    setSlot(
-      <select
-        value={appStatus}
-        onChange={e => handleStatusChange(e.target.value)}
-        className="text-xs font-medium pl-2 pr-6 py-1.5 rounded-lg border border-slate-200 bg-white appearance-none cursor-pointer text-slate-600"
-        style={{ backgroundImage: 'none' }}
-      >
-        {STATUS_OPTIONS.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    );
-    return () => clearSlot();
-  }, [workflow, appStatus]);
-
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     const res = await fetch(`/api/workflows/${id}/outputs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "negotiation_guide", content }),
     });
-    if (res.ok) {
-      const out = await res.json();
-      setOutput(out);
-      setIsDirty(false);
-    }
-  };
+    if (res.ok) { const out = await res.json(); setOutput(out); setIsDirty(false); }
+  }, [id, content]);
 
-  const handleToggleLock = async () => {
+  const handleToggleLock = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     const newLocked = !docLocked;
     await fetch(`/api/workflows/${id}/outputs`, {
@@ -140,14 +119,9 @@ export default function NegotiationGuidePage({ params }: Props) {
     });
     setDocLocked(newLocked);
     setIsDirty(false);
-  };
+  }, [id, content, docLocked]);
 
-  const handleDelete = async () => {
-    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
-    router.push("/jobs");
-  };
-
-  const handleStatusChange = async (val: string) => {
+  const handleStatusChange = useCallback(async (val: string) => {
     const opt = STATUS_OPTIONS.find(o => o.value === val);
     if (!opt || !opt.event) { setAppStatus(val); return; }
     await fetch(`/api/workflows/${id}/status`, {
@@ -156,7 +130,29 @@ export default function NegotiationGuidePage({ params }: Props) {
       body: JSON.stringify({ event_type: opt.event }),
     });
     setAppStatus(val);
-  };
+  }, [id]);
+
+  const handleDelete = useCallback(async () => {
+    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+    router.push("/jobs");
+  }, [id, router]);
+
+  useEffect(() => {
+    if (!workflow) return;
+    setDocControls({
+      workflowId: id,
+      activeDoc: "negotiation-guide",
+      companyName: workflow.listing?.company_name ?? "",
+      appStatus,
+      isDirty,
+      docLocked,
+      onSave: handleSave,
+      onToggleLock: handleToggleLock,
+      onStatusChange: handleStatusChange,
+      onDelete: () => setConfirmDel(true),
+    });
+    return () => clearDocControls();
+  }, [workflow, appStatus, isDirty, docLocked, handleSave, handleToggleLock, handleStatusChange]);
 
   if (loading) {
     return (
@@ -170,20 +166,32 @@ export default function NegotiationGuidePage({ params }: Props) {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
-      <DocSubheader
-        workflowId={id}
-        companyName={workflow.listing?.company_name ?? ""}
-        activeDoc="negotiation-guide"
-        isDirty={isDirty}
-        onSave={handleSave}
-        docLocked={docLocked}
-        onToggleLock={handleToggleLock}
-        appStatus={appStatus}
-        onStatusChange={handleStatusChange}
-        chatOpen={chatOpen}
-        onChatToggle={() => setChatOpen(!chatOpen)}
-        onDelete={handleDelete}
-      />
+      {/* Delete confirmation modal */}
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.4)" }} onClick={() => setConfirmDel(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-slate-900 text-base mb-1">Delete application?</h3>
+            <p className="text-sm text-slate-500 mb-5">This will move the application to Trash. You can restore it within 30 days.</p>
+            <div className="flex gap-3">
+              <button onClick={handleDelete} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold"><Trash2 className="w-4 h-4" /> Delete</button>
+              <button onClick={() => setConfirmDel(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile doc controls bar */}
+      <div className="md:hidden flex-shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+        <button onClick={handleSave} className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600">
+          {isDirty ? <Save className="w-3.5 h-3.5" /> : <span className="text-emerald-600 font-semibold">Saved</span>}
+        </button>
+        <button onClick={handleToggleLock} className={cn("flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border", docLocked ? "border-slate-300 bg-slate-50 text-slate-700" : "border-sky-300 bg-sky-50 text-sky-700")}>
+          {docLocked ? "Locked" : "Editing"}
+        </button>
+        <button onClick={() => setConfirmDel(true)} className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400" title="Delete">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden">
@@ -195,7 +203,7 @@ export default function NegotiationGuidePage({ params }: Props) {
               </div>
               <h2 className="text-xl font-bold text-slate-900 mb-2 text-center">Building your negotiation guide…</h2>
               <p className="text-slate-500 text-sm text-center max-w-xs">
-                Analyzing market data and crafting your strategy for <span className="font-medium">{workflow.listing?.title}</span> at <span className="font-medium">{workflow.listing?.company_name}</span>
+                Crafting your strategy for <span className="font-medium">{workflow.listing?.title}</span> at <span className="font-medium">{workflow.listing?.company_name}</span>
               </p>
             </div>
           ) : (
@@ -206,7 +214,6 @@ export default function NegotiationGuidePage({ params }: Props) {
                     <h1 className="text-xl font-bold text-slate-900">Negotiation Guide</h1>
                     <p className="text-slate-500 text-sm mt-1">{workflow.listing?.title} · {workflow.listing?.company_name}</p>
                   </div>
-
                   {docLocked ? (
                     <MarkdownDoc content={content} />
                   ) : (
@@ -219,25 +226,26 @@ export default function NegotiationGuidePage({ params }: Props) {
                   )}
                 </div>
               </div>
-              <div className="text-right mt-2 text-xs text-slate-400">
-                {content.split(/\s+/).filter(Boolean).length} words
-              </div>
+              <div className="text-right mt-2 text-xs text-slate-400">{content.split(/\s+/).filter(Boolean).length} words</div>
             </div>
           )}
         </div>
 
-        {chatOpen && (
-          <div className="lg:w-[380px] lg:flex-shrink-0 fixed inset-0 z-50 lg:relative lg:inset-auto">
-            <AiChatPanel workflowId={id} surface="negotiation_guide" onClose={() => setChatOpen(false)} className="h-full" />
-          </div>
-        )}
-
-        {!chatOpen && (
-          <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
-            <AiChatPanel workflowId={id} surface="negotiation_guide" className="flex-1 h-full" />
-          </div>
-        )}
+        <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
+          <AiChatPanel workflowId={id} surface="negotiation_guide" className="flex-1 h-full" />
+        </div>
       </div>
+
+      <div className="md:hidden fixed z-30" style={{ bottom: "calc(64px + env(safe-area-inset-bottom))", right: "1rem" }}>
+        <button onClick={() => setChatOpen(!chatOpen)} className="w-12 h-12 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center">
+          <Sparkles className="w-5 h-5" />
+        </button>
+      </div>
+      {chatOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <AiChatPanel workflowId={id} surface="negotiation_guide" onClose={() => setChatOpen(false)} className="h-full" />
+        </div>
+      )}
     </div>
   );
 }
