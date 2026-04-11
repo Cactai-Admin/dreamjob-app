@@ -67,15 +67,33 @@ export function LoginBg() {
     // ── Mobile: device orientation (tilt) → perspective ─────────────────────
     // This is the primary parallax on mobile. Touch-position fallback is only
     // used when no gyroscope / orientation API is available.
+    // ── Mobile: device orientation (tilt) → perspective ─────────────────────
     let orientationActive = false
-
+    
+    // Higher = more responsive to smaller physical movement
+    const ORIENTATION_SENSITIVITY = 1.6
+    
+    // Smaller range = stronger effect from the same tilt
+    const GAMMA_RANGE = 35 // left-right
+    const BETA_RANGE = 35  // front-back
+    
+    function clamp(value: number, min: number, max: number) {
+      return Math.min(Math.max(value, min), max)
+    }
+    
     function handleOrientation(e: DeviceOrientationEvent) {
-      // gamma: left-right tilt  (-90 … 90)
-      // beta:  front-back tilt  (-180 … 180, clamped to -90 … 90)
-      const gamma = e.gamma ?? 0
-      const beta  = Math.min(Math.max(e.beta ?? 0, -90), 90)
-      const x = ((gamma + 90) / 180) * window.innerWidth
-      const y = ((beta  + 90) / 180) * window.innerHeight
+      // Raw input
+      const rawGamma = e.gamma ?? 0
+      const rawBeta = e.beta ?? 0
+    
+      // Clamp to a tighter usable range, then amplify
+      const gamma = clamp(rawGamma * ORIENTATION_SENSITIVITY, -GAMMA_RANGE, GAMMA_RANGE)
+      const beta = clamp(rawBeta * ORIENTATION_SENSITIVITY, -BETA_RANGE, BETA_RANGE)
+    
+      // Map tighter tilt range to full viewport
+      const x = ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * window.innerWidth
+      const y = ((beta + BETA_RANGE) / (BETA_RANGE * 2)) * window.innerHeight
+    
       setPerspective(x, y)
       orientationActive = true
     }
