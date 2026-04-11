@@ -3,19 +3,20 @@
 import { useEffect, useRef } from 'react'
 
 // ── Canvas-based starfield ────────────────────────────────────────────────────
-// All 200 dots are drawn into a single <canvas> element via requestAnimationFrame.
-// One canvas = one GPU texture = one compositor layer.
-// This eliminates the layer-thrashing caused by 200 individually promoted DOM
-// elements, which was the root cause of the login column flashing.
+// Single <canvas> = one GPU layer, no compositor conflicts with login column.
 //
-// The parallax tilt is applied as a CSS transform on the canvas element itself
-// (perspective() rotateX/Y) — compositor-only, zero repaints.
+// Mouse/tilt parallax: the vanishing point (vx, vy) tracks the cursor.
+// Dots radiate outward from that point — moving the mouse shifts the flow
+// direction, giving the same "camera panning" feel as the original DOM version.
 
-const TOTAL   = 200
-const MAX_DEG = 8    // max tilt degrees
-const FOV     = 200  // perspective distance for dot projection (px)
-const Z_MIN   = -1000
-const Z_NEAR  = FOV - 5  // clip just before the eye
+const TOTAL  = 200
+const FOV    = 200   // perspective distance (px)
+const Z_MIN  = -1000
+const Z_NEAR = FOV - 5
+const SPEED  = 4     // z units per frame (~3s to traverse full depth at 60fps)
+
+// How far the vanishing point drifts toward the cursor (0 = fixed center, 1 = full cursor)
+const PARALLAX_STRENGTH = 0.35
 
 function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -43,7 +44,14 @@ export function LoginBg() {
     canvas.width  = w
     canvas.height = h
 
-    // Stagger initial z so all depth layers are populated on first frame
+    // Vanishing point — starts at center, drifts toward cursor/tilt
+    let vx = cx
+    let vy = cy
+    // Smoothed target vanishing point
+    let tvx = cx
+    let tvy = cy
+
+    // Stagger initial z so all depth layers are populated immediately
     const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
       const zStart = rand(Z_MIN, -100)
       const range  = Z_NEAR - zStart
@@ -52,7 +60,7 @@ export function LoginBg() {
         y:      rand(0, h),
         z:      zStart + range * (i / TOTAL),
         zStart,
-        size:   rand(2, 20),
+        size:   rand(2, 18),
         hue:    i * 1.8,
       }
     })
@@ -60,11 +68,15 @@ export function LoginBg() {
     let animId = 0
 
     function draw() {
+      // Smoothly interpolate vanishing point toward target (ease = 0.06)
+      vx += (tvx - vx) * 0.06
+      vy += (tvy - vy) * 0.06
+
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
-        dot.z += 8
+        dot.z += SPEED
 
         if (dot.z >= Z_NEAR) {
           dot.z = dot.zStart
@@ -75,15 +87,14 @@ export function LoginBg() {
         const scale = FOV / (FOV - dot.z)
         if (scale <= 0) continue
 
-        const px = (dot.x - cx) * scale + cx
-        const py = (dot.y - cy) * scale + cy
+        // Project from vanishing point
+        const px = (dot.x - vx) * scale + vx
+        const py = (dot.y - vy) * scale + vy
 
-        // Cull dots that project off-screen (enormous near the eye)
         if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
 
-        const r = Math.max(0.5, dot.size * scale * 0.4)
+        const r = Math.max(0.5, dot.size * scale * 0.35)
 
-        // Fade in from back; fully opaque in the front half of the z range
         const progress = (dot.z - dot.zStart) / (Z_NEAR - dot.zStart)
         const alpha    = Math.min(1, progress * 2)
 
@@ -98,37 +109,32 @@ export function LoginBg() {
 
     draw()
 
-    // ── Compositor-only tilt ──────────────────────────────────────────────────
-    // perspective() inside transform applies to the element itself — no parent
-    // element needed, no repaints triggered.
-    function setTilt(x: number, y: number) {
-      const rx = ((y - cy) / cy) * -MAX_DEG
-      const ry = ((x - cx) / cx) *  MAX_DEG
-      canvas.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg)`
+    // ── Input handlers — update vanishing point target ────────────────────────
+    function setVanish(x: number, y: number) {
+      // Blend between screen center and cursor position
+      tvx = cx + (x - cx) * PARALLAX_STRENGTH
+      tvy = cy + (y - cy) * PARALLAX_STRENGTH
     }
 
-    // ── Desktop: mouse ────────────────────────────────────────────────────────
-    function handleMouse(e: MouseEvent) { setTilt(e.clientX, e.clientY) }
+    function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
 
     // ── Mobile: device orientation ────────────────────────────────────────────
     let orientationActive = false
-    const ORIENTATION_SENSITIVITY = 1.6
     const GAMMA_RANGE = 35
     const BETA_RANGE  = 35
 
     function handleOrientation(e: DeviceOrientationEvent) {
-      const gamma = Math.min(Math.max((e.gamma ?? 0) * ORIENTATION_SENSITIVITY, -GAMMA_RANGE), GAMMA_RANGE)
-      const beta  = Math.min(Math.max((e.beta  ?? 0) * ORIENTATION_SENSITIVITY, -BETA_RANGE),  BETA_RANGE)
+      const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
+      const beta  = Math.min(Math.max(e.beta  ?? 0, -BETA_RANGE),  BETA_RANGE)
       const x = ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w
       const y = ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h
-      setTilt(x, y)
+      setVanish(x, y)
       orientationActive = true
     }
 
-    // Touch fallback — only fires when orientation hasn't been granted
     function handleTouch(e: TouchEvent) {
       if (orientationActive) return
-      setTilt(e.touches[0].clientX, e.touches[0].clientY)
+      setVanish(e.touches[0].clientX, e.touches[0].clientY)
     }
 
     function attachOrientation() {
@@ -176,7 +182,6 @@ export function LoginBg() {
         background:    '#000',
         zIndex:        0,
         pointerEvents: 'none',
-        willChange:    'transform',
         display:       'block',
       }}
     />

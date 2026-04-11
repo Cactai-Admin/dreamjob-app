@@ -93,17 +93,26 @@ export async function DELETE(
   const { searchParams } = new URL(request.url)
   const eventType = searchParams.get('event_type')
 
-  if (!eventType) {
-    return NextResponse.json({ error: 'event_type is required' }, { status: 400 })
-  }
-
-  const { error } = await supabaseAdmin
+  // No event_type (or 'all') → clear all events, resetting to draft
+  const query = supabaseAdmin
     .from('status_events')
     .delete()
     .eq('workflow_id', id)
     .eq('account_id', accountId)
-    .eq('event_type', eventType)
+
+  if (eventType && eventType !== 'all') query.eq('event_type', eventType)
+
+  const { error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Also reset workflow state to draft when clearing all events
+  if (!eventType || eventType === 'all') {
+    await supabaseAdmin
+      .from('workflows')
+      .update({ state: 'draft' })
+      .eq('id', id)
+  }
+
   return NextResponse.json({ ok: true })
 }
