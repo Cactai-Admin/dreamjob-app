@@ -2,14 +2,14 @@
 
 // ── Resume Builder — AI-assisted resume editing with always-visible chat ──
 
-import { useState, useEffect, useRef, use } from "react";
+import { useState, useEffect, useRef, useCallback, use } from "react";
 import { notFound } from "next/navigation";
-import { Sparkles, CreditCard as Edit3, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { Sparkles, CreditCard as Edit3, Save, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
-import { DocSubheader, STATUS_OPTIONS } from "@/components/documents/doc-subheader";
-import { useMobileNavSlot } from "@/components/layout/mobile-nav-slot";
+import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
+import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
 import type { Workflow, Output, DocumentSection, ChatMessage } from "@/lib/types";
 import { deriveApplicationStatus } from "@/lib/workflow-adapter";
@@ -71,20 +71,19 @@ export default function ResumeBuilderPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
-  const [resumeOutput, setResumeOutput] = useState<Output | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
   const [docLocked, setDocLocked] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [sections, setSections] = useState<DocumentSection[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [appStatus, setAppStatus] = useState("draft");
+  const [confirmDel, setConfirmDel] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialSections = useRef(true);
-  const { setSlot, clearSlot } = useMobileNavSlot();
+  const { setDocControls, clearDocControls } = useDocControls();
 
   const fetchWorkflow = async () => {
     try {
@@ -101,7 +100,6 @@ export default function ResumeBuilderPage({ params }: Props) {
       setAppStatus(deriveApplicationStatus(wf.state, wf.status_events));
       const out = wf.outputs?.find(o => o.type === "resume" && o.is_current);
       if (out) {
-        setResumeOutput(out);
         setSections(parseSections(out));
         setDocLocked(out.status === "approved");
         setGenerating(false);
@@ -136,7 +134,6 @@ export default function ResumeBuilderPage({ params }: Props) {
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
   }, [generating]);
 
-  // Auto-save 2s after any section edit
   useEffect(() => {
     if (initialSections.current) { initialSections.current = false; return; }
     if (sections.length === 0) return;
@@ -152,29 +149,7 @@ export default function ResumeBuilderPage({ params }: Props) {
     }, 2000);
   }, [sections]);
 
-  // Inject status dropdown into mobile top bar
-  useEffect(() => {
-    if (!workflow) return;
-    setSlot(
-      <select
-        value={appStatus}
-        onChange={e => handleStatusChange(e.target.value)}
-        className="text-xs font-medium pl-2 pr-6 py-1.5 rounded-lg border border-slate-200 bg-white appearance-none cursor-pointer text-slate-600"
-        style={{ backgroundImage: 'none' }}
-      >
-        {STATUS_OPTIONS.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    );
-    return () => clearSlot();
-  }, [workflow, appStatus]);
-
-  const updateSection = (secId: string, content: string) => {
-    setSections(prev => prev.map(s => s.id === secId ? { ...s, content } : s));
-  };
-
-  const handleManualSave = async () => {
+  const handleManualSave = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     setEditingId(null);
     await fetch(`/api/workflows/${id}/outputs`, {
@@ -183,9 +158,9 @@ export default function ResumeBuilderPage({ params }: Props) {
       body: JSON.stringify({ type: "resume", content: JSON.stringify(sections) }),
     });
     setIsDirty(false);
-  };
+  }, [id, sections]);
 
-  const handleToggleLock = async () => {
+  const handleToggleLock = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     const newLocked = !docLocked;
     await fetch(`/api/workflows/${id}/outputs`, {
@@ -206,14 +181,9 @@ export default function ResumeBuilderPage({ params }: Props) {
     }
     setDocLocked(newLocked);
     setIsDirty(false);
-  };
+  }, [id, sections, docLocked]);
 
-  const handleDelete = async () => {
-    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
-    router.push("/jobs");
-  };
-
-  const handleStatusChange = async (val: string) => {
+  const handleStatusChange = useCallback(async (val: string) => {
     const opt = STATUS_OPTIONS.find(o => o.value === val);
     if (!opt || !opt.event) { setAppStatus(val); return; }
     await fetch(`/api/workflows/${id}/status`, {
@@ -222,6 +192,33 @@ export default function ResumeBuilderPage({ params }: Props) {
       body: JSON.stringify({ event_type: opt.event }),
     });
     setAppStatus(val);
+  }, [id]);
+
+  const handleDelete = useCallback(async () => {
+    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+    router.push("/jobs");
+  }, [id, router]);
+
+  // Register controls in TopNav
+  useEffect(() => {
+    if (!workflow) return;
+    setDocControls({
+      workflowId: id,
+      activeDoc: "resume",
+      companyName: workflow.listing?.company_name ?? "",
+      appStatus,
+      isDirty,
+      docLocked,
+      onSave: handleManualSave,
+      onToggleLock: handleToggleLock,
+      onStatusChange: handleStatusChange,
+      onDelete: () => setConfirmDel(true),
+    });
+    return () => clearDocControls();
+  }, [workflow, appStatus, isDirty, docLocked, handleManualSave, handleToggleLock, handleStatusChange]);
+
+  const updateSection = (secId: string, content: string) => {
+    setSections(prev => prev.map(s => s.id === secId ? { ...s, content } : s));
   };
 
   if (loading) {
@@ -253,20 +250,56 @@ export default function ResumeBuilderPage({ params }: Props) {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
-      <DocSubheader
-        workflowId={id}
-        companyName={company}
-        activeDoc="resume"
-        isDirty={isDirty}
-        onSave={handleManualSave}
-        docLocked={docLocked}
-        onToggleLock={handleToggleLock}
-        appStatus={appStatus}
-        onStatusChange={handleStatusChange}
-        chatOpen={chatOpen}
-        onChatToggle={() => setChatOpen(!chatOpen)}
-        onDelete={handleDelete}
-      />
+      {/* Delete confirmation modal */}
+      {confirmDel && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setConfirmDel(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-slate-900 text-base mb-1">Delete application?</h3>
+            <p className="text-sm text-slate-500 mb-5">This will move the application to Trash. You can restore it within 30 days.</p>
+            <div className="flex gap-3">
+              <button onClick={handleDelete} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold">
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <button onClick={() => setConfirmDel(false)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile doc controls bar */}
+      <div className="md:hidden flex-shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between gap-2">
+        <button
+          onClick={handleManualSave}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
+        >
+          {isDirty ? <Save className="w-3.5 h-3.5" /> : <span className="text-emerald-600 font-semibold">Saved</span>}
+        </button>
+        <button
+          onClick={handleToggleLock}
+          className={cn(
+            "flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border",
+            docLocked ? "border-slate-300 bg-slate-50 text-slate-700" : "border-sky-300 bg-sky-50 text-sky-700"
+          )}
+        >
+          {docLocked ? "Locked" : "Editing"}
+        </button>
+        <button
+          onClick={() => setConfirmDel(true)}
+          className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400"
+          title="Delete"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden">
@@ -286,7 +319,7 @@ export default function ResumeBuilderPage({ params }: Props) {
                         <h3 className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
                           {section.title}
                         </h3>
-                        {!previewMode && !docLocked && (
+                        {!docLocked && (
                           <button
                             onClick={() => setEditingId(editingId === section.id ? null : section.id)}
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-sky-600 flex items-center gap-1 hover:underline"
@@ -298,7 +331,7 @@ export default function ResumeBuilderPage({ params }: Props) {
                     )}
                     <div className={cn("px-6 sm:px-8", section.id === "sec-header" ? "pt-8 pb-4" : "pb-5")}>
                       {section.id === "sec-header" ? (
-                        previewMode || docLocked || editingId !== section.id ? (
+                        docLocked || editingId !== section.id ? (
                           <div>
                             <div className="text-2xl font-bold text-slate-900 tracking-tight mb-1">
                               {section.content.split("\n")[0]}
@@ -310,10 +343,10 @@ export default function ResumeBuilderPage({ params }: Props) {
                         ) : (
                           <SectionEditor section={section} onUpdate={updateSection} onSave={handleManualSave} />
                         )
-                      ) : previewMode || docLocked || editingId !== section.id ? (
+                      ) : docLocked || editingId !== section.id ? (
                         <div
                           className={cn("cursor-text", docLocked && "cursor-default")}
-                          onClick={() => !previewMode && !docLocked && setEditingId(section.id)}
+                          onClick={() => !docLocked && setEditingId(section.id)}
                         >
                           <MarkdownDoc content={section.content} />
                         </div>
@@ -329,17 +362,28 @@ export default function ResumeBuilderPage({ params }: Props) {
           )}
         </div>
 
+        {/* AI panel — mobile only (hidden on desktop per request) */}
         {chatOpen && (
-          <div className="lg:w-[380px] lg:flex-shrink-0 fixed inset-0 z-50 lg:relative lg:inset-auto">
+          <div className="md:hidden fixed inset-0 z-50">
             <AiChatPanel workflowId={id} surface="resume" initialMessages={initialMessages} onClose={() => setChatOpen(false)} className="h-full" />
           </div>
         )}
 
-        {!chatOpen && (
-          <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
-            <AiChatPanel workflowId={id} surface="resume" initialMessages={initialMessages} className="flex-1 h-full" />
-          </div>
-        )}
+        {/* AI panel — desktop always-visible sidebar */}
+        <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
+          <AiChatPanel workflowId={id} surface="resume" initialMessages={initialMessages} className="flex-1 h-full" />
+        </div>
+      </div>
+
+      {/* Mobile AI toggle */}
+      <div className="md:hidden fixed bottom-20 right-4 z-30" style={{ bottom: "calc(64px + env(safe-area-inset-bottom))" }}>
+        <button
+          onClick={() => setChatOpen(!chatOpen)}
+          className="w-12 h-12 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center"
+          title="AI assistant"
+        >
+          <Sparkles className="w-5 h-5" />
+        </button>
       </div>
     </div>
   );

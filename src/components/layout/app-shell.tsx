@@ -8,6 +8,7 @@ import { ReactNode, useState, useEffect } from "react";
 import { TopNav } from "./top-nav";
 import { PrivacyScreenProvider } from "@/components/privacy-screen/privacy-screen";
 import { MobileNavSlotProvider } from "@/components/layout/mobile-nav-slot";
+import { DocControlsProvider } from "@/components/layout/doc-controls-slot";
 
 interface Props {
   children: ReactNode;
@@ -22,6 +23,7 @@ export function AppShell({ children }: Props) {
 
   return (
     <PrivacyScreenProvider>
+    <DocControlsProvider>
     <MobileNavSlotProvider>
       <div className="h-dvh bg-slate-50 flex flex-col overflow-hidden">
         {/* Top navigation — placeholder during SSR to prevent hydration mismatch */}
@@ -40,6 +42,7 @@ export function AppShell({ children }: Props) {
         <div className="block md:hidden flex-shrink-0" style={{ height: 56 }} aria-hidden="true" />
       </div>
     </MobileNavSlotProvider>
+    </DocControlsProvider>
     </PrivacyScreenProvider>
   );
 }
