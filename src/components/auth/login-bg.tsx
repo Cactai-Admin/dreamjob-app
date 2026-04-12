@@ -1,15 +1,35 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from 'react'
-import gsap from 'gsap'
+import { useEffect, useRef } from 'react'
 
-const TOTAL = 160
-const Z_MIN = -1000
-const Z_MAX = -200
-const Z_END = 500
+// ── Canvas port of the original TweenMax starfield ────────────────────────────
+//
+// Original:
+//   TweenMax.fromTo(c, 3, { opacity:0, x, y, z: random(-1000,-200) },
+//                         { opacity:1, z:500, repeat:-1, delay: i*-.015 })
+//   boxShadow: `0 0 ${size}px hsla(i*1.8, 50%, 50%, 1)`
+//   perspectiveOrigin tracks mouse via TweenMax.to($wrap, 1, { perspectiveOrigin })
+//
+// Key fidelity points:
+//   - Each dot has its own speed = (500 - zStart) / 3  (z-units / sec)
+//   - Stagger via initial z offset  (equiv to delay: i * -.015)
+//   - shadowBlur = size * scale  (CSS box-shadow is in local space → scaled by perspective)
+//   - Mouse eases vanishing point over ~1s (matches TweenMax.to duration)
 
-function random(min: number, max: number) {
+const TOTAL = 200
+const FOV   = 200     // matches original CSS perspective: 200px
+const Z_END = 500     // same end z as original
+const DUR   = 3       // seconds per journey — matches TweenMax duration
+
+const PARALLAX_STRENGTH = 1.0
+
+function rand(min: number, max: number) {
   return Math.random() * (max - min) + min
+}
+
+interface Dot {
+  x: number; y: number; z: number
+  zStart: number; speed: number; size: number; hue: number
 }
 
 export function LoginBg() {
@@ -18,78 +38,104 @@ export function LoginBg() {
   const driftTweenRef = useRef<gsap.core.Tween | null>(null)
   const pauseTweenRef = useRef<gsap.core.Tween | null>(null)
 
-  const particles = useMemo(() => Array.from({ length: TOTAL }, (_, i) => i), [])
+  useEffect(() => {
+    const canvas = canvasRef.current!
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    if (!ctx) return
+
+    const w  = window.innerWidth
+    const h  = window.innerHeight
+    const cx = w / 2
+    const cy = h / 2
+
+    canvas.width  = w
+    canvas.height = h
+
+    // Vanishing point — starts centered, eases toward cursor (~1s, matches TweenMax.to)
+    let vx = cx, vy = cy
+    let tvx = cx, tvy = cy
+
+    // Each dot gets its own speed so it takes exactly DUR seconds (matches TweenMax duration)
+    // Stagger via initial z offset — equivalent to delay: i * -.015
+    const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
+      const zStart = rand(-1000, -200)
+      const range  = Z_END - zStart
+      return {
+        x:      rand(0, w),
+        y:      rand(0, h),
+        z:      zStart + range * (i / TOTAL),
+        zStart,
+        speed:  range / DUR,   // z-units/sec — each dot takes exactly 3s
+        size:   rand(2, 30),
+        hue:    i * 1.8,
+      }
+    })
 
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
 
-    const w = window.innerWidth
-    const h = window.innerHeight
+      // Exponential ease matching TweenMax.to($wrap, 1, { perspectiveOrigin })
+      const ease = 1 - Math.pow(1 - 0.06, dt * 60)
+      vx += (tvx - vx) * ease
+      vy += (tvy - vy) * ease
 
     const driftState = {
       x: w * 0.5,
       y: h * 0.5,
     }
 
-    gsap.set(wrap, {
-      perspective: 1000,
-      perspectiveOrigin: `${driftState.x}px ${driftState.y}px`,
-      transformStyle: 'preserve-3d',
-      force3D: true,
-    })
+      for (const dot of dots) {
+        dot.z += dot.speed * dt
 
-    particleRefs.current.forEach((node, i) => {
-      if (!node) return
-
-      const x = random(0, w)
-      const y = random(0, h)
-      const z = random(Z_MIN, Z_MAX)
-      const size = random(2, 30)
-      const hue = i * 1.8
-      const color = `hsla(${hue}, 50%, 58%, 0.85)`
-
-      gsap.set(node, {
-        x,
-        y,
-        z,
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        opacity: 0,
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        background: `radial-gradient(circle, hsla(${hue}, 55%, 68%, 0.30) 0%, hsla(${hue}, 55%, 54%, 0.20) 28%, hsla(${hue}, 55%, 50%, 0.10) 48%, transparent 72%)`,
-        boxShadow: `0 0 ${size * 0.9}px ${size * 0.22}px ${color}`,
-        willChange: 'transform, opacity',
-        force3D: true,
-      })
-
-      gsap.fromTo(
-        node,
-        {
-          opacity: 0,
-          x,
-          y,
-          z,
-        },
-        {
-          opacity: 1,
-          z: Z_END,
-          duration: 3,
-          repeat: -1,
-          ease: 'none',
-          delay: i * -0.015,
-          force3D: true,
+        // repeat: -1 — reset to start when reaching Z_END
+        if (dot.z >= Z_END) {
+          dot.z = dot.zStart
+          dot.x = rand(0, w)
+          dot.y = rand(0, h)
+          continue
         }
       )
     })
 
-    const setPerspectiveOrigin = () => {
-      wrap.style.perspectiveOrigin = `${driftState.x}px ${driftState.y}px`
-      ;(wrap.style as CSSStyleDeclaration).webkitPerspectiveOrigin =
-        `${driftState.x}px ${driftState.y}px`
+        if (dot.z >= FOV) continue
+
+        const scale = FOV / (FOV - dot.z)
+
+        // perspectiveOrigin projection — vanishing point at (vx, vy)
+        const px = (dot.x - vx) * scale + vx
+        const py = (dot.y - vy) * scale + vy
+
+        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
+
+        // opacity: 0 → 1 over the journey (matches TweenMax fromTo opacity)
+        const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
+
+        const r     = Math.max(0.3, (dot.size / 2) * scale)
+        const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
+
+        // box-shadow: 0 0 ${size}px color — CSS renders this in local space then
+        // scales it with the perspective transform, so rendered blur = size * scale
+        ctx.shadowBlur  = dot.size * scale
+        ctx.shadowColor = color
+
+        ctx.beginPath()
+        ctx.arc(px, py, r, 0, Math.PI * 2)
+        ctx.fillStyle = color
+        ctx.fill()
+      }
+
+      ctx.shadowBlur = 0
+      animId = requestAnimationFrame(draw as FrameRequestCallback)
+    }
+
+    animId = requestAnimationFrame(draw as FrameRequestCallback)
+
+    // ── Mouse / touch — perspectiveOrigin equivalent ──
+    function setVanish(x: number, y: number) {
+      tvx = cx + (x - cx) * PARALLAX_STRENGTH
+      tvy = cy + (y - cy) * PARALLAX_STRENGTH
     }
 
     const scheduleNextDrift = () => {
@@ -137,9 +183,19 @@ export function LoginBg() {
       driftState.x = nextW * 0.5
       driftState.y = nextH * 0.5
 
-      gsap.set(wrap, {
-        perspectiveOrigin: `${driftState.x}px ${driftState.y}px`,
-      })
+    if (typeof DeviceOrientationEvent !== 'undefined') {
+      if (typeof DOE.requestPermission === 'function') {
+        // iOS: call requestPermission() synchronously from gesture via .then()
+        const requestOnTouch = () => {
+          if (orientationAttached) return
+          DOE.requestPermission!()
+            .then(result => { if (result === 'granted') attachOrientation() })
+            .catch(() => {})
+        }
+        window.addEventListener('touchstart', requestOnTouch, { passive: true })
+      } else {
+        attachOrientation()
+      }
     }
 
     window.addEventListener('resize', handleResize)
