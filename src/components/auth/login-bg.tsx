@@ -33,7 +33,10 @@ interface Dot {
 }
 
 export function LoginBg() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const particleRefs = useRef<(HTMLDivElement | null)[]>([])
+  const driftTweenRef = useRef<gsap.core.Tween | null>(null)
+  const pauseTweenRef = useRef<gsap.core.Tween | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current!
@@ -69,20 +72,19 @@ export function LoginBg() {
       }
     })
 
-    let animId = 0
-    let lastTime = 0
-
-    function draw(now: number) {
-      const dt = lastTime === 0 ? 1 / 60 : Math.min((now - lastTime) / 1000, 0.1)
-      lastTime = now
+  useEffect(() => {
+    const wrap = wrapRef.current
+    if (!wrap) return
 
       // Exponential ease matching TweenMax.to($wrap, 1, { perspectiveOrigin })
       const ease = 1 - Math.pow(1 - 0.06, dt * 60)
       vx += (tvx - vx) * ease
       vy += (tvy - vy) * ease
 
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, w, h)
+    const driftState = {
+      x: w * 0.5,
+      y: h * 0.5,
+    }
 
       for (const dot of dots) {
         dot.z += dot.speed * dt
@@ -94,6 +96,8 @@ export function LoginBg() {
           dot.y = rand(0, h)
           continue
         }
+      )
+    })
 
         if (dot.z >= FOV) continue
 
@@ -134,33 +138,50 @@ export function LoginBg() {
       tvy = cy + (y - cy) * PARALLAX_STRENGTH
     }
 
-    function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
+    const scheduleNextDrift = () => {
+      const currentX = driftState.x
+      const currentY = driftState.y
 
-    const GAMMA_RANGE = 25, BETA_RANGE = 25
-    let orientationAttached = false
+      const bigMove = Math.random() < 0.16
 
-    function handleOrientation(e: DeviceOrientationEvent) {
-      const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
-      const beta  = Math.min(Math.max(e.beta  ?? 0, -BETA_RANGE),  BETA_RANGE)
-      setVanish(
-        ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w,
-        ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h,
-      )
+      const targetX = bigMove
+        ? random(w * 0.2, w * 0.8)
+        : random(
+            Math.max(w * 0.35, currentX - w * 0.12),
+            Math.min(w * 0.65, currentX + w * 0.12)
+          )
+
+      const targetY = bigMove
+        ? random(h * 0.2, h * 0.8)
+        : random(
+            Math.max(h * 0.35, currentY - h * 0.12),
+            Math.min(h * 0.65, currentY + h * 0.12)
+          )
+
+      const duration = random(6, 18)
+      const pause = random(2, 8)
+
+      pauseTweenRef.current = gsap.delayedCall(pause, () => {
+        driftTweenRef.current = gsap.to(driftState, {
+          x: targetX,
+          y: targetY,
+          duration,
+          ease: 'sine.inOut',
+          onUpdate: setPerspectiveOrigin,
+          onComplete: scheduleNextDrift,
+        })
+      })
     }
 
-    function handleTouch(e: TouchEvent) {
-      setVanish(e.touches[0].clientX, e.touches[0].clientY)
-    }
+    setPerspectiveOrigin()
+    scheduleNextDrift()
 
-    function attachOrientation() {
-      if (orientationAttached) return
-      orientationAttached = true
-      window.addEventListener('deviceorientation', handleOrientation)
-    }
+    const handleResize = () => {
+      const nextW = window.innerWidth
+      const nextH = window.innerHeight
 
-    const DOE = DeviceOrientationEvent as unknown as {
-      requestPermission?: () => Promise<'granted' | 'denied'>
-    }
+      driftState.x = nextW * 0.5
+      driftState.y = nextH * 0.5
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
@@ -177,31 +198,71 @@ export function LoginBg() {
       }
     }
 
-    window.addEventListener('mousemove',  handleMouse)
-    window.addEventListener('touchstart', handleTouch, { passive: true })
-    window.addEventListener('touchmove',  handleTouch, { passive: true })
+    window.addEventListener('resize', handleResize)
 
     return () => {
-      cancelAnimationFrame(animId)
-      window.removeEventListener('mousemove',         handleMouse)
-      window.removeEventListener('touchstart',        handleTouch)
-      window.removeEventListener('touchmove',         handleTouch)
-      window.removeEventListener('deviceorientation', handleOrientation)
+      window.removeEventListener('resize', handleResize)
+      driftTweenRef.current?.kill()
+      pauseTweenRef.current?.kill()
+      gsap.killTweensOf(particleRefs.current)
+      gsap.killTweensOf(driftState)
     }
   }, [])
 
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      style={{
-        position:      'fixed',
-        inset:         0,
-        background:    '#000',
-        zIndex:        0,
-        pointerEvents: 'none',
-        display:       'block',
-      }}
-    />
+    <>
+      <div
+        ref={wrapRef}
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          zIndex: 0,
+          isolation: 'isolate',
+          contain: 'layout paint style',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+          background:
+            'radial-gradient(circle at 50% 50%, rgba(18,26,44,0.34) 0%, rgba(6,10,20,0.74) 42%, rgba(0,0,0,0.96) 78%, rgba(0,0,0,1) 100%)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: '-10%',
+            background:
+              'radial-gradient(circle at 50% 50%, rgba(120,150,255,0.07) 0%, rgba(40,65,120,0.05) 24%, rgba(0,0,0,0) 62%)',
+            filter: 'blur(42px)',
+            opacity: 0.9,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transformStyle: 'preserve-3d',
+            willChange: 'transform',
+          }}
+        >
+          {particles.map((i) => (
+            <div
+              key={i}
+              ref={(el) => {
+                particleRefs.current[i] = el
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <style jsx>{`
+        div[aria-hidden='true'] :global(div) {
+          transform-style: preserve-3d;
+        }
+      `}</style>
+    </>
   )
 }
