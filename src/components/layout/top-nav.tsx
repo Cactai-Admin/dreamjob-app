@@ -220,35 +220,8 @@ export function TopNav() {
           {/* Right: doc controls (when on doc page) + lock screen + profile */}
           <div className="flex items-center gap-2 flex-shrink-0">
 
-            {/* Privacy screen */}
-            <button
-              onClick={lockScreen}
-              title="Lock screen (⌘⇧L)"
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
-            >
-              <HatGlasses className="w-6 h-6" />
-            </button>
-
             {controls && (
               <>
-                {/* Save — icon-only, matches mobile style */}
-                <button
-                  onClick={controls.onSave}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
-                  title="Save"
-                >
-                  {controls.isDirty ? (
-                    <Save className="w-5 h-5" />
-                  ) : (
-                    <div className="relative">
-                      <Save className="w-5 h-5 text-sky-500" />
-                      <div className="absolute -bottom-1 -right-1 bg-white rounded-full flex items-center justify-center w-3 h-3">
-                        <Check className="w-2.5 h-2.5 text-sky-500" strokeWidth={3} />
-                      </div>
-                    </div>
-                  )}
-                </button>
-
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
@@ -257,6 +230,33 @@ export function TopNav() {
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
+                
+                {/* Save */}
+                <button
+                  onClick={controls.onSave}
+                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
+                  title="Save"
+                >
+                  {controls.isDirty ? (
+                    <Save className="w-6 h-6" />
+                  ) : (
+                    <div className="relative">
+                      <Save className="w-6 h-6 text-sky-500" />
+                      <div className="absolute -bottom-1 -right-1 bg-white rounded-full flex items-center justify-center w-4 h-4">
+                        <Check className="w-3 h-3 text-sky-500" strokeWidth={3} />
+                      </div>
+                    </div>
+                  )}
+                </button>
+                
+              {/* Privacy screen */}
+              <button
+              onClick={lockScreen}
+              title="Privacy (⌘⇧L)"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
+              >
+              <HatGlasses className="w-6 h-6" />
+            </button>
               </>
             )}
 
