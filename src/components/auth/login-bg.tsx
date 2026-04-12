@@ -3,19 +3,23 @@
 import { useEffect, useRef } from 'react'
 
 // ── Canvas port of the original TweenMax starfield ────────────────────────────
-// Matches the original exactly:
-//   - 200 dots, hsla(i*1.8, 50%, 50%) colors, size 2–30 px
-//   - box-shadow glow via ctx.shadowBlur
-//   - z: random(-1000,-200) → 500 over 3 s (8.33 units/frame at 60 fps)
-//   - opacity 0→1 as z travels from start to 500
-//   - perspectiveOrigin parallax = vanishing-point shift in projection math
 //
-// Canvas keeps it all in one GPU texture so the login column never flashes.
+// Original:
+//   TweenMax.fromTo(c, 3, { opacity:0, x, y, z: random(-1000,-200) },
+//                         { opacity:1, z:500, repeat:-1, delay: i*-.015 })
+//   boxShadow: `0 0 ${size}px hsla(i*1.8, 50%, 50%, 1)`
+//   perspectiveOrigin tracks mouse via TweenMax.to($wrap, 1, { perspectiveOrigin })
+//
+// Key fidelity points:
+//   - Each dot has its own speed = (500 - zStart) / 3  (z-units / sec)
+//   - Stagger via initial z offset  (equiv to delay: i * -.015)
+//   - shadowBlur = size * scale  (CSS box-shadow is in local space → scaled by perspective)
+//   - Mouse eases vanishing point over ~1s (matches TweenMax.to duration)
 
 const TOTAL = 200
-const FOV   = 200                     // perspective: 200px
-const SPEED = 1500 / 6               // 1500 z-units / 6 s — per second, frame-rate independent
-const Z_END = 500                     // same end point as original
+const FOV   = 200     // matches original CSS perspective: 200px
+const Z_END = 500     // same end z as original
+const DUR   = 3       // seconds per journey — matches TweenMax duration
 
 const PARALLAX_STRENGTH = 1.0
 
@@ -25,7 +29,7 @@ function rand(min: number, max: number) {
 
 interface Dot {
   x: number; y: number; z: number
-  zStart: number; size: number; hue: number
+  zStart: number; speed: number; size: number; hue: number
 }
 
 export function LoginBg() {
@@ -45,19 +49,21 @@ export function LoginBg() {
     canvas.width  = w
     canvas.height = h
 
-    // Vanishing point — starts at center, eases toward cursor
+    // Vanishing point — starts centered, eases toward cursor (~1s, matches TweenMax.to)
     let vx = cx, vy = cy
     let tvx = cx, tvy = cy
 
-    // Build dots and stagger their initial z so all depths are full on frame 1
+    // Each dot gets its own speed so it takes exactly DUR seconds (matches TweenMax duration)
+    // Stagger via initial z offset — equivalent to delay: i * -.015
     const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
       const zStart = rand(-1000, -200)
       const range  = Z_END - zStart
       return {
         x:      rand(0, w),
         y:      rand(0, h),
-        z:      zStart + range * (i / TOTAL),   // staggered like delay: i * -.015
+        z:      zStart + range * (i / TOTAL),
         zStart,
+        speed:  range / DUR,   // z-units/sec — each dot takes exactly 3s
         size:   rand(2, 30),
         hue:    i * 1.8,
       }
@@ -70,7 +76,7 @@ export function LoginBg() {
       const dt = lastTime === 0 ? 1 / 60 : Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
 
-      // Ease vanishing point toward target (frame-rate independent at ~60 fps feel)
+      // Exponential ease matching TweenMax.to($wrap, 1, { perspectiveOrigin })
       const ease = 1 - Math.pow(1 - 0.06, dt * 60)
       vx += (tvx - vx) * ease
       vy += (tvy - vy) * ease
@@ -79,9 +85,9 @@ export function LoginBg() {
       ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
-        dot.z += SPEED * dt
+        dot.z += dot.speed * dt
 
-        // Reset — same as TweenMax repeat: -1
+        // repeat: -1 — reset to start when reaching Z_END
         if (dot.z >= Z_END) {
           dot.z = dot.zStart
           dot.x = rand(0, w)
@@ -89,26 +95,25 @@ export function LoginBg() {
           continue
         }
 
-        // Skip dots past the eye (would produce negative/infinite scale)
         if (dot.z >= FOV) continue
 
         const scale = FOV / (FOV - dot.z)
 
-        // Project from vanishing point (perspectiveOrigin equivalent)
+        // perspectiveOrigin projection — vanishing point at (vx, vy)
         const px = (dot.x - vx) * scale + vx
         const py = (dot.y - vy) * scale + vy
 
-        // Cull off-screen
         if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
 
-        // Opacity 0→1 over the journey, matching TweenMax fromTo opacity
+        // opacity: 0 → 1 over the journey (matches TweenMax fromTo opacity)
         const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
 
         const r     = Math.max(0.3, (dot.size / 2) * scale)
         const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
 
-        // Glow — base of dot.size px (matches original box-shadow) + grows with scale
-        ctx.shadowBlur  = dot.size * (scale + 1)
+        // box-shadow: 0 0 ${size}px color — CSS renders this in local space then
+        // scales it with the perspective transform, so rendered blur = size * scale
+        ctx.shadowBlur  = dot.size * scale
         ctx.shadowColor = color
 
         ctx.beginPath()
@@ -117,15 +122,13 @@ export function LoginBg() {
         ctx.fill()
       }
 
-      // Reset shadow so it doesn't bleed into the next fillRect
       ctx.shadowBlur = 0
-
       animId = requestAnimationFrame(draw as FrameRequestCallback)
     }
 
     animId = requestAnimationFrame(draw as FrameRequestCallback)
 
-    // ── Mouse / touch — moves the vanishing point (perspectiveOrigin equiv) ──
+    // ── Mouse / touch — perspectiveOrigin equivalent ──
     function setVanish(x: number, y: number) {
       tvx = cx + (x - cx) * PARALLAX_STRENGTH
       tvy = cy + (y - cy) * PARALLAX_STRENGTH
@@ -161,18 +164,15 @@ export function LoginBg() {
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
-        // iOS: must call requestPermission() synchronously from a user gesture.
-        // Use .then() (not async/await) to keep the call in the gesture stack.
-        // Re-attempt on each touch until granted so tapping any element works.
+        // iOS: call requestPermission() synchronously from gesture via .then()
         const requestOnTouch = () => {
           if (orientationAttached) return
           DOE.requestPermission!()
             .then(result => { if (result === 'granted') attachOrientation() })
-            .catch(() => { /* denied or unavailable */ })
+            .catch(() => {})
         }
         window.addEventListener('touchstart', requestOnTouch, { passive: true })
       } else {
-        // Android / non-gated browsers — attach immediately
         attachOrientation()
       }
     }
