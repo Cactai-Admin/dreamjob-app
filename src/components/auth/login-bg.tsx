@@ -13,7 +13,7 @@ import { useEffect, useRef } from 'react'
 // Key fidelity points:
 //   - Each dot has its own speed = (500 - zStart) / 3  (z-units / sec)
 //   - Stagger via initial z offset  (equiv to delay: i * -.015)
-//   - shadowBlur = size * scale  (CSS box-shadow is in local space → scaled by perspective)
+//   - shadowBlur = size * scale  (CSS box-shadow is in local space, scaled by perspective)
 //   - Mouse eases vanishing point over ~1s (matches TweenMax.to duration)
 
 const TOTAL = 200
@@ -66,7 +66,7 @@ export function LoginBg() {
         y:      rand(0, h),
         z:      zStart + range * (i / TOTAL),
         zStart,
-        speed:  range / DUR,   // z-units/sec — each dot takes exactly 3s
+        speed:  range / DUR,
         size:   rand(2, 30),
         hue:    i * 1.8,
       }
@@ -89,41 +89,30 @@ export function LoginBg() {
       for (const dot of dots) {
         dot.z += dot.speed * dt
 
-        // repeat: -1 — reset to start when reaching Z_END
         if (dot.z >= Z_END) {
           dot.z = dot.zStart
           dot.x = rand(0, w)
           dot.y = rand(0, h)
-          continue
+        } else if (dot.z < FOV) {
+          const scale = FOV / (FOV - dot.z)
+          const px    = (dot.x - vx) * scale + vx
+          const py    = (dot.y - vy) * scale + vy
+
+          if (px >= -w && px <= 2 * w && py >= -h && py <= 2 * h) {
+            const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
+            const r     = Math.max(0.3, (dot.size / 2) * scale)
+            const color = 'hsla(' + dot.hue + ', 50%, 50%, ' + alpha + ')'
+
+            // box-shadow: 0 0 ${size}px — local space, scaled by CSS perspective
+            ctx.shadowBlur  = dot.size * scale
+            ctx.shadowColor = color
+
+            ctx.beginPath()
+            ctx.arc(px, py, r, 0, Math.PI * 2)
+            ctx.fillStyle = color
+            ctx.fill()
+          }
         }
-      )
-    })
-
-        if (dot.z >= FOV) continue
-
-        const scale = FOV / (FOV - dot.z)
-
-        // perspectiveOrigin projection — vanishing point at (vx, vy)
-        const px = (dot.x - vx) * scale + vx
-        const py = (dot.y - vy) * scale + vy
-
-        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
-
-        // opacity: 0 → 1 over the journey (matches TweenMax fromTo opacity)
-        const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
-
-        const r     = Math.max(0.3, (dot.size / 2) * scale)
-        const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
-
-        // box-shadow: 0 0 ${size}px color — CSS renders this in local space then
-        // scales it with the perspective transform, so rendered blur = size * scale
-        ctx.shadowBlur  = dot.size * scale
-        ctx.shadowColor = color
-
-        ctx.beginPath()
-        ctx.arc(px, py, r, 0, Math.PI * 2)
-        ctx.fillStyle = color
-        ctx.fill()
       }
 
       ctx.shadowBlur = 0
@@ -185,7 +174,6 @@ export function LoginBg() {
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
-        // iOS: call requestPermission() synchronously from gesture via .then()
         const requestOnTouch = () => {
           if (orientationAttached) return
           DOE.requestPermission!()
