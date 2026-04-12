@@ -105,7 +105,7 @@ export function TopNav() {
 
   // Profile button — shared across desktop and mobile
   const ProfileButton = ({ sizePx }: { sizePx?: number }) => (
-    <div className="relative">
+    <div className="relative" style={userMenuOpen ? { zIndex: 191 } : undefined}>
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
         className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-150 shadow-[0_4px_10px_rgba(0,0,0,0.18)] active:shadow-[0_1px_4px_rgba(0,0,0,0.32)] active:translate-y-0.5"
@@ -163,8 +163,8 @@ export function TopNav() {
 
           {/* Left: brand always */}
           <div className="flex items-center flex-shrink-0">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 transition-all duration-150 active:translate-y-0.5 [&>div]:shadow-[0_4px_10px_rgba(0,0,0,0.28)] [&>div]:active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] [&>div]:transition-shadow [&>div]:duration-150">
-              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center">
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shadow-[0_4px_10px_rgba(0,0,0,0.28)] transition-all duration-150 active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] active:translate-y-0.5">
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="font-bold text-slate-900 text-[20px] tracking-tight">DreamJob</span>
@@ -296,9 +296,9 @@ export function TopNav() {
         ) : (
           /* On all other pages: brand + profile */
           <>
-            <Link href="/" className="flex items-center gap-2 flex-shrink-0 active:translate-y-0.5 transition-all duration-150 [&>div]:shadow-[0_4px_10px_rgba(0,0,0,0.28)] [&>div]:active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] [&>div]:transition-shadow [&>div]:duration-150">
+            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <div
-                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300"
+                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300 shadow-[0_4px_10px_rgba(0,0,0,0.28)] active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] active:translate-y-0.5"
                 style={{ width: scrolled ? 21 : 42, height: scrolled ? 21 : 42 }}
               >
                 <Zap style={{ width: scrolled ? 12 : 24, height: scrolled ? 12 : 24 }} className="text-white transition-all duration-300" />
