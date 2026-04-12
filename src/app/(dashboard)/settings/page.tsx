@@ -67,7 +67,16 @@ export default function SettingsPage() {
 
   // Load on mount
   useEffect(() => {
-    fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
+    fetch("/api/profile").then(r => r.json()).then(d => {
+      if (!d.error) {
+        setProfile(d);
+        // Profile icon is authoritative from DB; seed localStorage so nav picks it up immediately
+        if (d.profile_icon) {
+          setProfileIcon(d.profile_icon);
+          saveSettings({ profileIcon: d.profile_icon });
+        }
+      }
+    }).catch(() => {});
     fetch("/api/settings/providers").then(r => r.json()).then(d => { if (!d.error) setProviders(d); }).catch(() => {});
     fetch("/api/linkedin/session").then(r => r.json()).then(d => { if (!d.error) setLinkedIn(d); }).catch(() => {});
 
@@ -78,10 +87,19 @@ export default function SettingsPage() {
     if (stored.privacy) setPrivacy(stored.privacy);
     if (stored.privacyScreenTimeout) setPrivacyScreenTimeout(stored.privacyScreenTimeout);
     if (typeof stored.privacyScreenEnabled === 'boolean') setPrivacyScreenEnabled(stored.privacyScreenEnabled);
-    if (stored.profileIcon) setProfileIcon(stored.profileIcon);
+    // profileIcon set from DB above; localStorage is a fallback for mid-session responsiveness
+    if (!stored.profileIcon) { /* will be set once profile loads */ }
+    else setProfileIcon(stored.profileIcon);
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Persist to DB so it survives sessions and syncs across devices
+    await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_icon: profileIcon ?? null }),
+    }).catch(() => {});
+    // Also write remaining settings to localStorage
     saveSettings({ theme, aiProvider, notifications, privacy, privacyScreenTimeout, privacyScreenEnabled, profileIcon });
     // Notify the PrivacyScreenProvider (same tab won't fire StorageEvent)
     window.dispatchEvent(new Event('dreamjob:settings-saved'));

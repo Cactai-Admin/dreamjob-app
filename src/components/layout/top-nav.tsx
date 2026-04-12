@@ -55,7 +55,17 @@ export function TopNav() {
   const { controls } = useDocControls();
 
   useEffect(() => {
-    fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
+    fetch("/api/profile").then(r => r.json()).then(d => {
+      if (!d.error) {
+        setProfile(d);
+        // DB is authoritative for profile_icon — use it if present
+        if (d.profile_icon !== undefined) {
+          setProfileIcon(d.profile_icon ?? null);
+        }
+      }
+    }).catch(() => {});
+
+    // Also read from localStorage as immediate fallback (populated by settings page on save)
     const loadIcon = () => {
       try {
         const stored = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
