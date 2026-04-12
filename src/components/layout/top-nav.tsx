@@ -351,42 +351,44 @@ export function TopNav() {
 
       {/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
 {!mobileWorkflowId && (
-          <nav
-            className="mobile-bottom-nav md:hidden flex"
-            style={{
-              height: `calc(56px + env(safe-area-inset-bottom))`,
-              paddingBottom: "env(safe-area-inset-bottom)",
-            }}
+  <nav
+    className="mobile-bottom-nav md:hidden flex"
+    style={{
+      height: `calc(56px + env(safe-area-inset-bottom))`,
+      paddingBottom: "env(safe-area-inset-bottom)",
+    }}
+  >
+    <div className="flex items-stretch w-full">
+      {MOBILE_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        const active = isActive(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-colors",
+              active ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
+            )}
           >
-        <div className="flex items-stretch w-full">
-          {MOBILE_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-            const active = isActive(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-colors",
-                  active ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
-                )}
-              >
-                <div className={cn(
-                  "w-10 h-6 flex items-center justify-center rounded-full transition-all",
-                  active && "bg-slate-100"
-                )}>
-                  <Icon className={cn("w-[18px] h-[18px]", active && "stroke-[2.2px]")} />
-                </div>
-                <span className={cn(
-                  "text-[10px] font-medium leading-none",
-                  active ? "text-slate-900" : "text-slate-400"
-                )}>
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </>
-  );
-}
+            <div
+              className={cn(
+                "w-10 h-6 flex items-center justify-center rounded-full transition-all",
+                active && "bg-slate-100"
+              )}
+            >
+              <Icon className={cn("w-[18px] h-[18px]", active && "stroke-[2.2px]")} />
+            </div>
+            <span
+              className={cn(
+                "text-[10px] font-medium leading-none",
+                active ? "text-slate-900" : "text-slate-400"
+              )}
+            >
+              {label}
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  </nav>
+)}
