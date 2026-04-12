@@ -225,7 +225,7 @@ export default function InterviewGuidePage({ params }: Props) {
       <button
         onClick={() => setChatOpen(!chatOpen)}
         className="md:hidden fixed z-30 btn-ocean w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center"
-        style={{ top: "72px", right: "1rem" }}
+        style={{ top: "var(--mobile-nav-height, 88px)", right: "1rem" }}
       >
         <Sparkles className="w-4 h-4" />
       </button>
