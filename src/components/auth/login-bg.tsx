@@ -9,9 +9,9 @@ import { useEffect, useRef } from 'react'
 //   perspectiveOrigin tracks mouse via TweenMax.to($wrap, 1, { perspectiveOrigin })
 
 const TOTAL = 200
-const FOV   = 200   // CSS perspective: 200px
+const FOV   = 200
 const Z_END = 500
-const DUR   = 3     // seconds — matches TweenMax duration
+const DUR   = 3
 const PARALLAX_STRENGTH = 1.0
 
 function rand(min: number, max: number) {
@@ -24,10 +24,7 @@ interface Dot {
 }
 
 export function LoginBg() {
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const particleRefs = useRef<(HTMLDivElement | null)[]>([])
-  const driftTweenRef = useRef<gsap.core.Tween | null>(null)
-  const pauseTweenRef = useRef<gsap.core.Tween | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -70,10 +67,8 @@ export function LoginBg() {
       vx += (tvx - vx) * ease
       vy += (tvy - vy) * ease
 
-    const driftState = {
-      x: w * 0.5,
-      y: h * 0.5,
-    }
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, w, h)
 
       for (const dot of dots) {
         dot.z += dot.speed * dt
@@ -137,8 +132,9 @@ export function LoginBg() {
       window.addEventListener('deviceorientation', handleOrientation)
     }
 
-      driftState.x = nextW * 0.5
-      driftState.y = nextH * 0.5
+    const DOE = DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<'granted' | 'denied'>
+    }
 
     if (typeof DeviceOrientationEvent !== 'undefined') {
       if (typeof DOE.requestPermission === 'function') {
@@ -154,71 +150,31 @@ export function LoginBg() {
       }
     }
 
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('mousemove',  handleMouse)
+    window.addEventListener('touchstart', handleTouch, { passive: true })
+    window.addEventListener('touchmove',  handleTouch, { passive: true })
 
     return () => {
-      window.removeEventListener('resize', handleResize)
-      driftTweenRef.current?.kill()
-      pauseTweenRef.current?.kill()
-      gsap.killTweensOf(particleRefs.current)
-      gsap.killTweensOf(driftState)
+      cancelAnimationFrame(animId)
+      window.removeEventListener('mousemove',         handleMouse)
+      window.removeEventListener('touchstart',        handleTouch)
+      window.removeEventListener('touchmove',         handleTouch)
+      window.removeEventListener('deviceorientation', handleOrientation)
     }
   }, [])
 
   return (
-    <>
-      <div
-        ref={wrapRef}
-        aria-hidden="true"
-        style={{
-          position: 'fixed',
-          inset: 0,
-          overflow: 'hidden',
-          pointerEvents: 'none',
-          zIndex: 0,
-          isolation: 'isolate',
-          contain: 'layout paint style',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden',
-          WebkitBackfaceVisibility: 'hidden',
-          background:
-            'radial-gradient(circle at 50% 50%, rgba(18,26,44,0.34) 0%, rgba(6,10,20,0.74) 42%, rgba(0,0,0,0.96) 78%, rgba(0,0,0,1) 100%)',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            inset: '-10%',
-            background:
-              'radial-gradient(circle at 50% 50%, rgba(120,150,255,0.07) 0%, rgba(40,65,120,0.05) 24%, rgba(0,0,0,0) 62%)',
-            filter: 'blur(42px)',
-            opacity: 0.9,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            transformStyle: 'preserve-3d',
-            willChange: 'transform',
-          }}
-        >
-          {particles.map((i) => (
-            <div
-              key={i}
-              ref={(el) => {
-                particleRefs.current[i] = el
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <style jsx>{`
-        div[aria-hidden='true'] :global(div) {
-          transform-style: preserve-3d;
-        }
-      `}</style>
-    </>
+    <canvas
+      ref={canvasRef}
+      aria-hidden="true"
+      style={{
+        position:      'fixed',
+        inset:         0,
+        background:    '#000',
+        zIndex:        0,
+        pointerEvents: 'none',
+        display:       'block',
+      }}
+    />
   )
 }
