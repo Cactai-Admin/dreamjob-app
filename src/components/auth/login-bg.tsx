@@ -87,39 +87,36 @@ export function LoginBg() {
       for (const dot of dots) {
         dot.z += dot.speed * dt
 
-        // repeat: -1 — reset to start when reaching Z_END
         if (dot.z >= Z_END) {
+          // repeat: -1 — reset to start
           dot.z = dot.zStart
           dot.x = rand(0, w)
           dot.y = rand(0, h)
-          continue
+        } else if (dot.z < FOV) {
+          const scale = FOV / (FOV - dot.z)
+
+          // perspectiveOrigin projection — vanishing point at (vx, vy)
+          const px = (dot.x - vx) * scale + vx
+          const py = (dot.y - vy) * scale + vy
+
+          const inBounds = px >= -w && px <= 2 * w && py >= -h && py <= 2 * h
+          if (inBounds) {
+            // opacity: 0 → 1 over the journey (matches TweenMax fromTo opacity)
+            const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
+            const r     = Math.max(0.3, (dot.size / 2) * scale)
+            const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
+
+            // box-shadow: 0 0 ${size}px color — CSS renders in local space then
+            // scales with perspective, so rendered blur = size * scale
+            ctx.shadowBlur  = dot.size * scale
+            ctx.shadowColor = color
+
+            ctx.beginPath()
+            ctx.arc(px, py, r, 0, Math.PI * 2)
+            ctx.fillStyle = color
+            ctx.fill()
+          }
         }
-
-        if (dot.z >= FOV) continue
-
-        const scale = FOV / (FOV - dot.z)
-
-        // perspectiveOrigin projection — vanishing point at (vx, vy)
-        const px = (dot.x - vx) * scale + vx
-        const py = (dot.y - vy) * scale + vy
-
-        if (px < -w || px > 2 * w || py < -h || py > 2 * h) continue
-
-        // opacity: 0 → 1 over the journey (matches TweenMax fromTo opacity)
-        const alpha = Math.min(1, (dot.z - dot.zStart) / (Z_END - dot.zStart))
-
-        const r     = Math.max(0.3, (dot.size / 2) * scale)
-        const color = `hsla(${dot.hue}, 50%, 50%, ${alpha})`
-
-        // box-shadow: 0 0 ${size}px color — CSS renders this in local space then
-        // scales it with the perspective transform, so rendered blur = size * scale
-        ctx.shadowBlur  = dot.size * scale
-        ctx.shadowColor = color
-
-        ctx.beginPath()
-        ctx.arc(px, py, r, 0, Math.PI * 2)
-        ctx.fillStyle = color
-        ctx.fill()
       }
 
       ctx.shadowBlur = 0
