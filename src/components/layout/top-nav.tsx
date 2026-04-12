@@ -4,7 +4,7 @@
 // Desktop: sticky top bar with brand + links + (doc tabs when on doc page) + right controls
 // Mobile: top bar (brand / doc-dropdown / avatar) + fixed bottom tab bar
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -47,11 +47,25 @@ export function TopNav() {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
+  const [scrolled, setScrolled] = useState(false);
   const { activate: lockScreen } = usePrivacyScreen();
   const { controls } = useDocControls();
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
+  }, []);
+
+  // Scroll-to-minify — capture phase catches scroll from any element (incl. doc-scroll div)
+  useEffect(() => {
+    const onScroll = (e: Event) => {
+      const el = e.target as Element
+      const top = el === document.documentElement || el === document.body
+        ? window.scrollY
+        : el.scrollTop
+      setScrolled(top > 10)
+    }
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
   }, []);
 
   const isActive = (href: string) => {
@@ -75,20 +89,18 @@ export function TopNav() {
   const isDocPage = !!mobileDocMatch;
 
   // Profile button — shared across desktop and mobile
-  const ProfileButton = ({ mobile = false }: { mobile?: boolean }) => (
+  const ProfileButton = ({ sizePx }: { sizePx?: number }) => (
     <div className="relative">
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className={cn(
-          "rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0",
-          mobile ? "w-9 h-9" : "w-11 h-11"
-        )}
+        className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-300"
+        style={sizePx ? { width: sizePx, height: sizePx } : { width: 44, height: 44 }}
         title="Account"
       >
         {profile.avatar_url ? (
           <img src={profile.avatar_url} alt={profile.first_name ?? ""} className="w-full h-full object-cover" />
         ) : (
-          <span className={cn("font-bold text-slate-600", mobile ? "text-xs" : "text-sm")}>{profile.first_name?.[0] ?? "?"}</span>
+          <span className="font-bold text-slate-600" style={{ fontSize: sizePx ? sizePx * 0.35 : 14 }}>{profile.first_name?.[0] ?? "?"}</span>
         )}
       </button>
 
@@ -221,7 +233,7 @@ export function TopNav() {
       </nav>
 
       {/* ── Mobile top bar ─────────────────────────────── */}
-      <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3" style={{ height: 74 }}>
+      <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3 overflow-hidden transition-all duration-300" style={{ height: scrolled ? 44 : 88 }}>
 
         {mobileWorkflowId ? (
           /* On doc page: back arrow + centered doc controls + profile */
@@ -259,26 +271,34 @@ export function TopNav() {
               </>
             )}
 
-            <ProfileButton mobile />
+            <ProfileButton sizePx={scrolled ? 27 : 54} />
           </>
         ) : (
           /* On all other pages: brand + profile */
           <>
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-              <div className="w-7 h-7 rounded-md bg-slate-900 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-white" />
+              <div
+                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300"
+                style={{ width: scrolled ? 21 : 42, height: scrolled ? 21 : 42 }}
+              >
+                <Zap style={{ width: scrolled ? 12 : 24, height: scrolled ? 12 : 24 }} className="text-white transition-all duration-300" />
               </div>
-              <span className="font-bold text-slate-900 text-base tracking-tight">DreamJob</span>
+              <span
+                className="font-bold text-slate-900 tracking-tight transition-all duration-300"
+                style={{ fontSize: scrolled ? 14 : 28 }}
+              >
+                DreamJob
+              </span>
             </Link>
             <div className="flex-1" />
-            <ProfileButton mobile />
+            <ProfileButton sizePx={scrolled ? 27 : 54} />
           </>
         )}
       </div>
 
-      {/* ── Mobile bottom tab bar — hidden on doc pages ── */}
-      <nav
-        className={cn("mobile-bottom-nav md:hidden", mobileWorkflowId ? "hidden" : "flex")}
+      {/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
+      {!mobileWorkflowId && <nav
+        className="mobile-bottom-nav md:hidden flex"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-stretch w-full">
@@ -309,7 +329,7 @@ export function TopNav() {
             );
           })}
         </div>
-      </nav>
+      </nav>}
     </>
   );
 }
