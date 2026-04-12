@@ -276,9 +276,9 @@ export function TopNav() {
         )}
       </div>
 
-      {/* ── Mobile bottom tab bar — hidden on doc pages ── */}
-      <nav
-        className={cn("mobile-bottom-nav md:hidden", mobileWorkflowId ? "hidden" : "flex")}
+      {/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
+      {!mobileWorkflowId && <nav
+        className="mobile-bottom-nav md:hidden flex"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-stretch w-full">
@@ -309,7 +309,7 @@ export function TopNav() {
             );
           })}
         </div>
-      </nav>
+      </nav>}
     </>
   );
 }
