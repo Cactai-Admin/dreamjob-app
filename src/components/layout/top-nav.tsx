@@ -349,7 +349,7 @@ export function TopNav() {
         )}
       </div>
 
-      {/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
+{/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
 {!mobileWorkflowId && (
   <nav
     className="mobile-bottom-nav md:hidden flex"
@@ -392,3 +392,6 @@ export function TopNav() {
     </div>
   </nav>
 )}
+    </>
+  );
+}
