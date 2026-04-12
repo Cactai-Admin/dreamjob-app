@@ -130,6 +130,19 @@
     letter-spacing: -0.015em;
   }
 
+  /* Pointer cursor on all interactive elements (except disabled & contenteditable) */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  a[href],
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
   /* Prevent 16px tap font jump on mobile */
   @media (max-width: 768px) {
     input, select, textarea {

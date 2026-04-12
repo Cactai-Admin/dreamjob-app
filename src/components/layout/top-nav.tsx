@@ -108,7 +108,7 @@ export function TopNav() {
     <div className="relative">
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-300"
+        className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-150 shadow-[0_4px_10px_rgba(0,0,0,0.18)] active:shadow-[0_1px_4px_rgba(0,0,0,0.32)] active:translate-y-0.5"
         style={sizePx ? { width: sizePx, height: sizePx } : { width: 44, height: 44 }}
         title="Account"
       >
@@ -163,7 +163,7 @@ export function TopNav() {
 
           {/* Left: brand always */}
           <div className="flex items-center flex-shrink-0">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 transition-all duration-150 active:translate-y-0.5 [&>div]:shadow-[0_4px_10px_rgba(0,0,0,0.28)] [&>div]:active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] [&>div]:transition-shadow [&>div]:duration-150">
               <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center">
                 <Zap className="w-5 h-5 text-white" />
               </div>
@@ -296,7 +296,7 @@ export function TopNav() {
         ) : (
           /* On all other pages: brand + profile */
           <>
-            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            <Link href="/" className="flex items-center gap-2 flex-shrink-0 active:translate-y-0.5 transition-all duration-150 [&>div]:shadow-[0_4px_10px_rgba(0,0,0,0.28)] [&>div]:active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] [&>div]:transition-shadow [&>div]:duration-150">
               <div
                 className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300"
                 style={{ width: scrolled ? 21 : 42, height: scrolled ? 21 : 42 }}
