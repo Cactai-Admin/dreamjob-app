@@ -29,8 +29,7 @@ export function LoginBg() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    const ctx = canvas.getContext('2d')!
 
     const w  = window.innerWidth
     const h  = window.innerHeight
