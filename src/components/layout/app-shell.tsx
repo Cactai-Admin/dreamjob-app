@@ -38,6 +38,7 @@ export function AppShell({ children }: Props) {
           {children}
         </main>
     </MobileNavSlotProvider>
+    </>
     </DocControlsProvider>
     </PrivacyScreenProvider>
   );
