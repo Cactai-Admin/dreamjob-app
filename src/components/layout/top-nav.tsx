@@ -386,7 +386,7 @@ export function TopNav() {
             );
           })}
         </div>
-      </nav>}
+      </nav>
     </>
   );
 }
