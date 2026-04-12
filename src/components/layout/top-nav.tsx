@@ -289,16 +289,16 @@ export function TopNav() {
                   {/* Trash */}
                   <button
                     onClick={controls.onDelete}
-                    className="flex items-center justify-center text-slate-400 transition-all duration-300"
+                    className="flex items-center justify-center text-slate-400 transition-all duration-300 mr-2"
                     style={{ width: scrolled ? 38 : 62, height: scrolled ? 38 : 62 }}
                   >
                     <Trash2 style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="transition-all duration-300" />
                   </button>
 
-                  {/* Save — icon-only, same size as trash icon */}
+                  {/* Save */}
                   <button
                     onClick={controls.onSave}
-                    className="flex items-center justify-center text-slate-500 transition-all duration-300"
+                    className="flex items-center justify-center text-slate-400 transition-all duration-300 mr-2"
                   >
                     {controls.isDirty ? (
                       <Save style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="transition-all duration-300" />
@@ -311,6 +311,15 @@ export function TopNav() {
                       </div>
                     )}
                   </button>
+              {/* Privacy screen */}
+              <button
+              onClick={lockScreen}
+              title="Privacy (⌘⇧L)"
+              className="flex items-center justify-center text-slate-400 transition-all duration-300 mr-2"
+              style={{ width: scrolled ? 38 : 62, height: scrolled ? 38 : 62 }}
+              >
+              <HatGlasses style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="transition-all duration-300" />
+            </button>
                 </>
               )}
 
