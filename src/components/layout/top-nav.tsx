@@ -213,9 +213,9 @@ export function TopNav() {
             <button
               onClick={lockScreen}
               title="Lock screen (⌘⇧L)"
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors mr-2"
             >
-              <HatGlasses className="w-5 h-5" />
+              <HatGlasses className="w-6 h-6" />
             </button>
 
             {controls && (

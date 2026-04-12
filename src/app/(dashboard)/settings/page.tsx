@@ -180,7 +180,23 @@ export default function SettingsPage() {
 
   return (
     <div className="page-wrapper max-w-1000px">
-      <PageHeader title="Settings" subtitle="Preferences and account" />
+      <PageHeader
+        title="Settings"
+        subtitle="Preferences and account"
+        actions={
+          <button
+            onClick={handleSave}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all",
+              saved
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
+                : "bg-sky-600 text-white hover:bg-sky-700"
+            )}
+          >
+            {saved ? <><Check className="w-4 h-4" /> Saved!</> : "Save Preferences"}
+          </button>
+        }
+      />
 
       {/* Account */}
       <section className="card-base p-5 mb-5">
@@ -585,19 +601,8 @@ export default function SettingsPage() {
         </button>
       </section>
 
-      {/* Save + Sign out */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <button
-          onClick={handleSave}
-          className={cn(
-            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all",
-            saved
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
-              : "bg-sky-600 text-white hover:bg-sky-700"
-          )}
-        >
-          {saved ? <><Check className="w-4 h-4" /> Saved!</> : "Save Preferences"}
-        </button>
+      {/* Sign out */}
+      <div className="flex gap-3">
         <button
           onClick={handleSignOut}
           className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
