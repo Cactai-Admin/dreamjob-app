@@ -62,8 +62,12 @@ export function TopNav() {
       const top = el === document.documentElement || el === document.body
         ? window.scrollY
         : el.scrollTop
-      setScrolled(top > 10)
+      const isScrolled = top > 10
+      setScrolled(isScrolled)
+      // CSS variable so AI button and other elements can track header height without prop drilling
+      document.documentElement.style.setProperty('--mobile-nav-height', isScrolled ? '44px' : '88px')
     }
+    document.documentElement.style.setProperty('--mobile-nav-height', '88px')
     document.addEventListener('scroll', onScroll, { capture: true, passive: true })
     return () => document.removeEventListener('scroll', onScroll, { capture: true })
   }, []);
@@ -106,8 +110,8 @@ export function TopNav() {
 
       {userMenuOpen && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
-          <div className="absolute right-0 top-full mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 overflow-hidden">
+          <div className="fixed inset-0 z-[190]" onClick={() => setUserMenuOpen(false)} />
+          <div className="absolute right-0 top-full mt-1.5 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-[200] py-1 overflow-hidden">
             <div className="px-3 py-2 border-b border-slate-100">
               <div className="text-xs font-semibold text-slate-900 truncate">{profile.first_name} {profile.last_name}</div>
               <div className="text-xs text-slate-400 truncate">{profile.email ?? ""}</div>
@@ -240,7 +244,8 @@ export function TopNav() {
           <>
             <button
               onClick={() => router.push(`/jobs/${mobileWorkflowId}`)}
-              className="text-slate-500 flex-shrink-0 text-lg leading-none w-8 text-center"
+              className="text-slate-500 flex-shrink-0 leading-none text-center transition-all duration-300"
+              style={{ fontSize: scrolled ? 14 : 22, width: scrolled ? 24 : 40 }}
               aria-label="Back"
             >
               ←
@@ -253,10 +258,11 @@ export function TopNav() {
                 {/* Save */}
                 <button
                   onClick={controls.onSave}
-                  className="flex items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600"
+                  className="flex items-center gap-1.5 font-medium rounded-xl border border-slate-200 bg-white text-slate-600 transition-all duration-300"
+                  style={{ fontSize: scrolled ? 11 : 14, padding: scrolled ? '4px 8px' : '8px 12px' }}
                 >
                   {controls.isDirty
-                    ? <Save className="w-4 h-4" />
+                    ? <Save style={{ width: scrolled ? 12 : 16, height: scrolled ? 12 : 16 }} className="transition-all duration-300" />
                     : <span className="text-sky-500 font-semibold">Saved</span>
                   }
                 </button>
@@ -264,9 +270,10 @@ export function TopNav() {
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
-                  className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400"
+                  className="flex items-center justify-center rounded-xl text-slate-400 transition-all duration-300"
+                  style={{ width: scrolled ? 27 : 44, height: scrolled ? 27 : 44 }}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 style={{ width: scrolled ? 12 : 18, height: scrolled ? 12 : 18 }} className="transition-all duration-300" />
                 </button>
               </>
             )}
