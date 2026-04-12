@@ -225,7 +225,7 @@ export function TopNav() {
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors mr-2"
                   title="Delete application"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -234,7 +234,7 @@ export function TopNav() {
                 {/* Save */}
                 <button
                   onClick={controls.onSave}
-                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
+                  className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
                   title="Save"
                 >
                   {controls.isDirty ? (
@@ -253,7 +253,7 @@ export function TopNav() {
               <button
               onClick={lockScreen}
               title="Privacy (⌘⇧L)"
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors mr-2"
               >
               <HatGlasses className="w-6 h-6" />
             </button>
