@@ -66,10 +66,13 @@ export function TopNav() {
     window.location.href = "/login";
   };
 
-  // Mobile doc page detection from pathname (for back button + doc dropdown)
+  // Doc page detection from pathname — used for both mobile and desktop nav hiding.
+  // Derived from pathname (not controls) so it's accurate during page transitions
+  // before the new page has called setDocControls.
   const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|interview-guide|negotiation-guide)$/);
   const mobileWorkflowId = mobileDocMatch?.[1];
   const mobileActiveDoc = mobileDocMatch?.[2] as typeof DOC_TABS[number]['type'] | undefined;
+  const isDocPage = !!mobileDocMatch;
 
   // Profile button — shared across desktop and mobile
   const ProfileButton = ({ mobile = false }: { mobile?: boolean }) => (
@@ -140,7 +143,7 @@ export function TopNav() {
           </div>
 
           {/* Center: nav links (non-doc) or doc tabs — absolutely centered */}
-          {!controls && (
+          {!isDocPage && (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
               {NAV_ITEMS.map(({ href, label }) => (
                 <Link
