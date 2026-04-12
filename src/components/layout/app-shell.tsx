@@ -37,8 +37,8 @@ export function AppShell({ children }: Props) {
         <main className="flex-1 min-w-0 flex flex-col overflow-y-auto">
           {children}
         </main>
+      </div>
     </MobileNavSlotProvider>
-    </div>
     </DocControlsProvider>
     </PrivacyScreenProvider>
   );
