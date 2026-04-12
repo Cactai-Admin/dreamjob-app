@@ -231,16 +231,22 @@ export function TopNav() {
 
             {controls && (
               <>
-                {/* Save */}
+                {/* Save — icon-only, matches mobile style */}
                 <button
                   onClick={controls.onSave}
-                  className="flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600"
+                  className="flex items-center justify-center w-10 h-10 text-slate-500 hover:text-slate-700 transition-colors"
                   title="Save"
                 >
-                  {controls.isDirty
-                    ? <Save className="w-4 h-4" />
-                    : <span className="text-sky-500 font-semibold">Saved</span>
-                  }
+                  {controls.isDirty ? (
+                    <Save className="w-5 h-5" />
+                  ) : (
+                    <div className="relative">
+                      <Save className="w-5 h-5 text-sky-500" />
+                      <div className="absolute -bottom-1 -right-1 bg-white rounded-full flex items-center justify-center w-3 h-3">
+                        <Check className="w-2.5 h-2.5 text-sky-500" strokeWidth={3} />
+                      </div>
+                    </div>
+                  )}
                 </button>
 
                 {/* Trash */}
@@ -280,7 +286,7 @@ export function TopNav() {
             <div className="flex items-center gap-5">
               {controls && (
                 <>
-                  {/* Trash — 30% smaller */}
+                  {/* Trash */}
                   <button
                     onClick={controls.onDelete}
                     className="flex items-center justify-center text-slate-400 transition-all duration-300"
@@ -289,16 +295,16 @@ export function TopNav() {
                     <Trash2 style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="transition-all duration-300" />
                   </button>
 
-                  {/* Save — icon-only, no border, 30% smaller */}
+                  {/* Save — icon-only, same size as trash icon */}
                   <button
                     onClick={controls.onSave}
                     className="flex items-center justify-center text-slate-500 transition-all duration-300"
                   >
                     {controls.isDirty ? (
-                      <Save style={{ width: scrolled ? 13 : 17, height: scrolled ? 13 : 17 }} className="transition-all duration-300" />
+                      <Save style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="transition-all duration-300" />
                     ) : (
                       <div className="relative">
-                        <Save style={{ width: scrolled ? 13 : 17, height: scrolled ? 13 : 17 }} className="text-sky-500 transition-all duration-300" />
+                        <Save style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="text-sky-500 transition-all duration-300" />
                         <div className="absolute -bottom-1 -right-1 bg-white rounded-full flex items-center justify-center" style={{ width: scrolled ? 9 : 11, height: scrolled ? 9 : 11 }}>
                           <Check style={{ width: scrolled ? 7 : 9, height: scrolled ? 7 : 9 }} className="text-sky-500" strokeWidth={3} />
                         </div>
