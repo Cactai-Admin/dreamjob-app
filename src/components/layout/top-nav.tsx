@@ -19,6 +19,7 @@ import {
   Briefcase,
   HatGlasses,
   Save,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
@@ -105,10 +106,10 @@ export function TopNav() {
 
   // Profile button — shared across desktop and mobile
   const ProfileButton = ({ sizePx }: { sizePx?: number }) => (
-    <div className="relative">
+    <div className="relative" style={userMenuOpen ? { zIndex: 191 } : undefined}>
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-300"
+        className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-150 shadow-[0_4px_10px_rgba(0,0,0,0.18)] active:shadow-[0_1px_4px_rgba(0,0,0,0.32)] active:translate-y-0.5"
         style={sizePx ? { width: sizePx, height: sizePx } : { width: 44, height: 44 }}
         title="Account"
       >
@@ -164,7 +165,7 @@ export function TopNav() {
           {/* Left: brand always */}
           <div className="flex items-center flex-shrink-0">
             <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
-              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shadow-[0_4px_10px_rgba(0,0,0,0.28)] transition-all duration-150 active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] active:translate-y-0.5">
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="font-bold text-slate-900 text-[20px] tracking-tight">DreamJob</span>
@@ -213,9 +214,9 @@ export function TopNav() {
             <button
               onClick={lockScreen}
               title="Lock screen (⌘⇧L)"
-              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="flex items-center justify-center w-10 h-10 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors mr-2"
             >
-              <HatGlasses className="w-5 h-5" />
+              <HatGlasses className="w-6 h-6" />
             </button>
 
             {controls && (
@@ -253,12 +254,12 @@ export function TopNav() {
       <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3 overflow-hidden transition-all duration-300" style={{ height: scrolled ? 44 : 88 }}>
 
         {mobileWorkflowId ? (
-          /* On doc page: back arrow + centered doc controls + profile */
+          /* On doc page: back arrow + right-side controls */
           <>
             <button
               onClick={() => router.push(`/jobs/${mobileWorkflowId}`)}
               className="text-slate-500 flex-shrink-0 leading-none text-center transition-all duration-300"
-              style={{ fontSize: scrolled ? 28 : 44, width: scrolled ? 48 : 80 }}
+              style={{ fontSize: scrolled ? 20 : 31, width: scrolled ? 34 : 56 }}
               aria-label="Back"
             >
               ←
@@ -266,39 +267,46 @@ export function TopNav() {
 
             <div className="flex-1" />
 
-            {controls && (
-              <>
-                {/* Trash */}
-                <button
-                  onClick={controls.onDelete}
-                  className="flex items-center justify-center rounded-xl text-slate-400 transition-all duration-300"
-                  style={{ width: scrolled ? 54 : 88, height: scrolled ? 54 : 88 }}
-                >
-                  <Trash2 style={{ width: scrolled ? 24 : 36, height: scrolled ? 24 : 36 }} className="transition-all duration-300" />
-                </button>
+            <div className="flex items-center gap-5">
+              {controls && (
+                <>
+                  {/* Trash — 30% smaller */}
+                  <button
+                    onClick={controls.onDelete}
+                    className="flex items-center justify-center text-slate-400 transition-all duration-300"
+                    style={{ width: scrolled ? 38 : 62, height: scrolled ? 38 : 62 }}
+                  >
+                    <Trash2 style={{ width: scrolled ? 17 : 25, height: scrolled ? 17 : 25 }} className="transition-all duration-300" />
+                  </button>
 
-                {/* Save */}
-                <button
-                  onClick={controls.onSave}
-                  className="flex items-center gap-1.5 font-medium rounded-xl border border-slate-200 bg-white text-slate-600 transition-all duration-300"
-                  style={{ fontSize: scrolled ? 17 : 21, padding: scrolled ? '6px 12px' : '12px 18px' }}
-                >
-                  {controls.isDirty
-                    ? <Save style={{ width: scrolled ? 18 : 24, height: scrolled ? 18 : 24 }} className="transition-all duration-300" />
-                    : <span className="text-sky-500 font-semibold">Saved</span>
-                  }
-                </button>
-              </>
-            )}
+                  {/* Save — icon-only, no border, 30% smaller */}
+                  <button
+                    onClick={controls.onSave}
+                    className="flex items-center justify-center text-slate-500 transition-all duration-300"
+                  >
+                    {controls.isDirty ? (
+                      <Save style={{ width: scrolled ? 13 : 17, height: scrolled ? 13 : 17 }} className="transition-all duration-300" />
+                    ) : (
+                      <div className="relative">
+                        <Save style={{ width: scrolled ? 13 : 17, height: scrolled ? 13 : 17 }} className="text-sky-500 transition-all duration-300" />
+                        <div className="absolute -bottom-1 -right-1 bg-white rounded-full flex items-center justify-center" style={{ width: scrolled ? 9 : 11, height: scrolled ? 9 : 11 }}>
+                          <Check style={{ width: scrolled ? 7 : 9, height: scrolled ? 7 : 9 }} className="text-sky-500" strokeWidth={3} />
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                </>
+              )}
 
-            <ProfileButton sizePx={scrolled ? 27 : 54} />
+              <ProfileButton sizePx={scrolled ? 27 : 54} />
+            </div>
           </>
         ) : (
           /* On all other pages: brand + profile */
           <>
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <div
-                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300"
+                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300 shadow-[0_4px_10px_rgba(0,0,0,0.28)] active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] active:translate-y-0.5"
                 style={{ width: scrolled ? 21 : 42, height: scrolled ? 21 : 42 }}
               >
                 <Zap style={{ width: scrolled ? 12 : 24, height: scrolled ? 12 : 24 }} className="text-white transition-all duration-300" />
