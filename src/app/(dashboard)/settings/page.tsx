@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import {
   Sun, Moon, Monitor, Bell, Shield, Trash2, Zap, Link2,
-  LogOut, ChevronRight, Eye, EyeOff, Check, AlertCircle as AlertTriangle,
+  LogOut, ChevronRight, ChevronDown, ChevronUp, Eye, EyeOff, Check, AlertCircle as AlertTriangle,
   RefreshCw, WifiOff, Lock,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -63,6 +63,7 @@ export default function SettingsPage() {
   const [showEmail, setShowEmail] = useState(false);
   const [saved, setSaved] = useState(false);
   const [profileIcon, setProfileIcon] = useState<string | null>(null);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   // Load on mount
   useEffect(() => {
@@ -229,53 +230,64 @@ export default function SettingsPage() {
 
           {/* Profile Icon Picker */}
           <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-200">
-              <div className="text-sm font-medium text-slate-700">Profile icon</div>
-              <div className="text-xs text-slate-400 mt-0.5">Choose an icon to use instead of your initials</div>
-            </div>
-            <div className="p-3 space-y-3 max-h-72 overflow-y-auto">
-              {/* None option */}
-              <div>
-                <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">None</div>
-                <button
-                  onClick={() => setProfileIcon(null)}
-                  className={cn(
-                    "w-10 h-10 rounded-xl border-2 flex items-center justify-center text-slate-500 font-bold transition-all",
-                    !profileIcon ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-200 hover:border-slate-300"
-                  )}
-                  title="Use initials"
-                >
-                  {profile.first_name?.[0] ?? "?"}
-                </button>
+            <button
+              onClick={() => setIconPickerOpen(o => !o)}
+              className="w-full flex items-center justify-between px-3 py-2.5 bg-slate-50 hover:bg-slate-100 transition-colors"
+            >
+              <div className="text-left">
+                <div className="text-sm font-medium text-slate-700">Profile icon</div>
+                <div className="text-xs text-slate-400 mt-0.5">Choose an icon to use instead of your initials</div>
               </div>
-              {ICON_CATEGORIES.map(({ label, icons }) => (
-                <div key={label}>
-                  <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">{label}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {icons.map(name => {
-                      const Icon = ICON_MAP[name];
-                      if (!Icon) return null;
-                      const selected = profileIcon === name;
-                      return (
-                        <button
-                          key={name}
-                          onClick={() => setProfileIcon(name)}
-                          title={name}
-                          className={cn(
-                            "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all",
-                            selected
-                              ? "border-sky-500 bg-sky-50 text-sky-700"
-                              : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
-                          )}
-                        >
-                          <Icon className="w-5 h-5" />
-                        </button>
-                      );
-                    })}
-                  </div>
+              {iconPickerOpen
+                ? <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                : <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+              }
+            </button>
+            {iconPickerOpen && (
+              <div className="p-3 space-y-3 max-h-72 overflow-y-auto border-t border-slate-200">
+                {/* None option */}
+                <div>
+                  <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">None</div>
+                  <button
+                    onClick={() => setProfileIcon(null)}
+                    className={cn(
+                      "w-10 h-10 rounded-xl border-2 flex items-center justify-center text-slate-500 font-bold transition-all",
+                      !profileIcon ? "border-sky-500 bg-sky-50 text-sky-700" : "border-slate-200 hover:border-slate-300"
+                    )}
+                    title="Use initials"
+                  >
+                    {profile.first_name?.[0] ?? "?"}
+                  </button>
                 </div>
-              ))}
-            </div>
+                {ICON_CATEGORIES.map(({ label, icons }) => (
+                  <div key={label}>
+                    <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1.5">{label}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {icons.map(name => {
+                        const Icon = ICON_MAP[name];
+                        if (!Icon) return null;
+                        const selected = profileIcon === name;
+                        return (
+                          <button
+                            key={name}
+                            onClick={() => setProfileIcon(name)}
+                            title={name}
+                            className={cn(
+                              "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all",
+                              selected
+                                ? "border-sky-500 bg-sky-50 text-sky-700"
+                                : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                            )}
+                          >
+                            <Icon className="w-5 h-5" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {[
