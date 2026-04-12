@@ -601,16 +601,6 @@ export default function SettingsPage() {
         </button>
       </section>
 
-      {/* Sign out */}
-      <div className="flex gap-3">
-        <button
-          onClick={handleSignOut}
-          className="flex items-center justify-center gap-2 py-3 px-5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
-      </div>
     </div>
   );
 }
