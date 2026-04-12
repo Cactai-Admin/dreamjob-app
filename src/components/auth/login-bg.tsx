@@ -2,25 +2,16 @@
 
 import { useEffect, useRef } from 'react'
 
-// ── Canvas port of the original TweenMax starfield ────────────────────────────
-//
-// Original:
+// Canvas port of the original TweenMax starfield:
 //   TweenMax.fromTo(c, 3, { opacity:0, x, y, z: random(-1000,-200) },
 //                         { opacity:1, z:500, repeat:-1, delay: i*-.015 })
 //   boxShadow: `0 0 ${size}px hsla(i*1.8, 50%, 50%, 1)`
 //   perspectiveOrigin tracks mouse via TweenMax.to($wrap, 1, { perspectiveOrigin })
-//
-// Key fidelity points:
-//   - Each dot has its own speed = (500 - zStart) / 3  (z-units / sec)
-//   - Stagger via initial z offset  (equiv to delay: i * -.015)
-//   - shadowBlur = size * scale  (CSS box-shadow is in local space, scaled by perspective)
-//   - Mouse eases vanishing point over ~1s (matches TweenMax.to duration)
 
 const TOTAL = 200
-const FOV   = 200     // matches original CSS perspective: 200px
-const Z_END = 500     // same end z as original
-const DUR   = 3       // seconds per journey — matches TweenMax duration
-
+const FOV   = 200   // CSS perspective: 200px
+const Z_END = 500
+const DUR   = 3     // seconds — matches TweenMax duration
 const PARALLAX_STRENGTH = 1.0
 
 function rand(min: number, max: number) {
@@ -39,9 +30,9 @@ export function LoginBg() {
   const pauseTweenRef = useRef<gsap.core.Tween | null>(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current!
+    const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')!
+    const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     const w  = window.innerWidth
@@ -52,12 +43,10 @@ export function LoginBg() {
     canvas.width  = w
     canvas.height = h
 
-    // Vanishing point — starts centered, eases toward cursor (~1s, matches TweenMax.to)
-    let vx = cx, vy = cy
-    let tvx = cx, tvy = cy
+    let vx = cx, vy = cy, tvx = cx, tvy = cy
+    let lastTime = 0
+    let animId   = 0
 
-    // Each dot gets its own speed so it takes exactly DUR seconds (matches TweenMax duration)
-    // Stagger via initial z offset — equivalent to delay: i * -.015
     const dots: Dot[] = Array.from({ length: TOTAL }, (_, i) => {
       const zStart = rand(-1000, -200)
       const range  = Z_END - zStart
@@ -72,11 +61,11 @@ export function LoginBg() {
       }
     })
 
-  useEffect(() => {
-    const wrap = wrapRef.current
-    if (!wrap) return
+    function draw() {
+      const now = performance.now()
+      const dt  = lastTime === 0 ? 1 / 60 : Math.min((now - lastTime) / 1000, 0.1)
+      lastTime  = now
 
-      // Exponential ease matching TweenMax.to($wrap, 1, { perspectiveOrigin })
       const ease = 1 - Math.pow(1 - 0.06, dt * 60)
       vx += (tvx - vx) * ease
       vy += (tvy - vy) * ease
@@ -103,10 +92,8 @@ export function LoginBg() {
             const r     = Math.max(0.3, (dot.size / 2) * scale)
             const color = 'hsla(' + dot.hue + ', 50%, 50%, ' + alpha + ')'
 
-            // box-shadow: 0 0 ${size}px — local space, scaled by CSS perspective
             ctx.shadowBlur  = dot.size * scale
             ctx.shadowColor = color
-
             ctx.beginPath()
             ctx.arc(px, py, r, 0, Math.PI * 2)
             ctx.fillStyle = color
@@ -116,58 +103,39 @@ export function LoginBg() {
       }
 
       ctx.shadowBlur = 0
-      animId = requestAnimationFrame(draw as FrameRequestCallback)
+      animId = requestAnimationFrame(draw)
     }
 
-    animId = requestAnimationFrame(draw as FrameRequestCallback)
+    animId = requestAnimationFrame(draw)
 
-    // ── Mouse / touch — perspectiveOrigin equivalent ──
     function setVanish(x: number, y: number) {
       tvx = cx + (x - cx) * PARALLAX_STRENGTH
       tvy = cy + (y - cy) * PARALLAX_STRENGTH
     }
 
-    const scheduleNextDrift = () => {
-      const currentX = driftState.x
-      const currentY = driftState.y
+    function handleMouse(e: MouseEvent) { setVanish(e.clientX, e.clientY) }
 
-      const bigMove = Math.random() < 0.16
-
-      const targetX = bigMove
-        ? random(w * 0.2, w * 0.8)
-        : random(
-            Math.max(w * 0.35, currentX - w * 0.12),
-            Math.min(w * 0.65, currentX + w * 0.12)
-          )
-
-      const targetY = bigMove
-        ? random(h * 0.2, h * 0.8)
-        : random(
-            Math.max(h * 0.35, currentY - h * 0.12),
-            Math.min(h * 0.65, currentY + h * 0.12)
-          )
-
-      const duration = random(6, 18)
-      const pause = random(2, 8)
-
-      pauseTweenRef.current = gsap.delayedCall(pause, () => {
-        driftTweenRef.current = gsap.to(driftState, {
-          x: targetX,
-          y: targetY,
-          duration,
-          ease: 'sine.inOut',
-          onUpdate: setPerspectiveOrigin,
-          onComplete: scheduleNextDrift,
-        })
-      })
+    function handleTouch(e: TouchEvent) {
+      setVanish(e.touches[0].clientX, e.touches[0].clientY)
     }
 
-    setPerspectiveOrigin()
-    scheduleNextDrift()
+    const GAMMA_RANGE = 25, BETA_RANGE = 25
+    let orientationAttached = false
 
-    const handleResize = () => {
-      const nextW = window.innerWidth
-      const nextH = window.innerHeight
+    function handleOrientation(e: DeviceOrientationEvent) {
+      const gamma = Math.min(Math.max(e.gamma ?? 0, -GAMMA_RANGE), GAMMA_RANGE)
+      const beta  = Math.min(Math.max(e.beta  ?? 0, -BETA_RANGE),  BETA_RANGE)
+      setVanish(
+        ((gamma + GAMMA_RANGE) / (GAMMA_RANGE * 2)) * w,
+        ((beta  + BETA_RANGE)  / (BETA_RANGE  * 2)) * h,
+      )
+    }
+
+    function attachOrientation() {
+      if (orientationAttached) return
+      orientationAttached = true
+      window.addEventListener('deviceorientation', handleOrientation)
+    }
 
       driftState.x = nextW * 0.5
       driftState.y = nextH * 0.5
