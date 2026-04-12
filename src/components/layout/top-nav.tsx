@@ -109,7 +109,7 @@ export function TopNav() {
     <div className="relative" style={userMenuOpen ? { zIndex: 191 } : undefined}>
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className="rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-150 shadow-[0_4px_10px_rgba(0,0,0,0.18)] active:shadow-[0_1px_4px_rgba(0,0,0,0.32)] active:translate-y-0.5"
+        className="relative z-[195] rounded-full bg-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0 transition-all duration-150 shadow-[0_2px_6px_rgba(0,0,0,0.38)] active:shadow-[0_1px_3px_rgba(0,0,0,0.55)] active:translate-y-0.5"
         style={sizePx ? { width: sizePx, height: sizePx } : { width: 44, height: 44 }}
         title="Account"
       >
@@ -165,7 +165,7 @@ export function TopNav() {
           {/* Left: brand always */}
           <div className="flex items-center flex-shrink-0">
             <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
-              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shadow-[0_4px_10px_rgba(0,0,0,0.28)] transition-all duration-150 active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] active:translate-y-0.5">
+              <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shadow-[0_2px_6px_rgba(0,0,0,0.48)] transition-all duration-150 active:shadow-[0_1px_3px_rgba(0,0,0,0.65)] active:translate-y-0.5">
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="font-bold text-slate-900 text-[20px] tracking-tight">DreamJob</span>
@@ -251,7 +251,7 @@ export function TopNav() {
       </nav>
 
       {/* ── Mobile top bar ─────────────────────────────── */}
-      <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3 overflow-hidden transition-all duration-300" style={{ height: scrolled ? 44 : 88 }}>
+      <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3 transition-all duration-300" style={{ height: scrolled ? 44 : 88 }}>
 
         {mobileWorkflowId ? (
           /* On doc page: back arrow + right-side controls */
@@ -306,7 +306,7 @@ export function TopNav() {
           <>
             <Link href="/" className="flex items-center gap-2 flex-shrink-0">
               <div
-                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300 shadow-[0_4px_10px_rgba(0,0,0,0.28)] active:shadow-[0_1px_4px_rgba(0,0,0,0.5)] active:translate-y-0.5"
+                className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300 shadow-[0_2px_6px_rgba(0,0,0,0.48)] active:shadow-[0_1px_3px_rgba(0,0,0,0.65)] active:translate-y-0.5"
                 style={{ width: scrolled ? 21 : 42, height: scrolled ? 21 : 42 }}
               >
                 <Zap style={{ width: scrolled ? 12 : 24, height: scrolled ? 12 : 24 }} className="text-white transition-all duration-300" />
