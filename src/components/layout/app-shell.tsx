@@ -37,10 +37,6 @@ export function AppShell({ children }: Props) {
         <main className="flex-1 min-w-0 flex flex-col overflow-y-auto">
           {children}
         </main>
-
-        {/* Spacer pushes content above the fixed mobile bottom nav — desktop: hidden */}
-        <div className="block md:hidden flex-shrink-0" style={{ height: 56 }} aria-hidden="true" />
-      </div>
     </MobileNavSlotProvider>
     </DocControlsProvider>
     </PrivacyScreenProvider>
