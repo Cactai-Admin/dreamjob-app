@@ -329,7 +329,7 @@ export default function ResumeBuilderPage({ params }: Props) {
       <button
         onClick={() => setChatOpen(!chatOpen)}
         className="md:hidden fixed z-30 btn-ocean w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center"
-        style={{ top: "var(--mobile-nav-height, 88px)", right: "1rem" }}
+        style={{ top: "calc(var(--mobile-nav-height, 88px) + 6px)", right: "1rem" }}
         title="AI assistant"
       >
         <Sparkles className="w-4 h-4" />

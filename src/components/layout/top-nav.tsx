@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { DOC_TABS, STATUS_OPTIONS, statusColor } from "@/components/documents/doc-subheader";
+import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
 
 /* Desktop nav links */
 const NAV_ITEMS = [
@@ -47,12 +48,22 @@ export function TopNav() {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
+  const [profileIcon, setProfileIcon] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const { activate: lockScreen } = usePrivacyScreen();
   const { controls } = useDocControls();
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(d => { if (!d.error) setProfile(d); }).catch(() => {});
+    const loadIcon = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
+        setProfileIcon(stored.profileIcon ?? null);
+      } catch { /* ignore */ }
+    };
+    loadIcon();
+    window.addEventListener("dreamjob:settings-saved", loadIcon);
+    return () => window.removeEventListener("dreamjob:settings-saved", loadIcon);
   }, []);
 
   // Scroll-to-minify — capture phase catches scroll from any element (incl. doc-scroll div)
@@ -103,8 +114,10 @@ export function TopNav() {
       >
         {profile.avatar_url ? (
           <img src={profile.avatar_url} alt={profile.first_name ?? ""} className="w-full h-full object-cover" />
+        ) : profileIcon && ICON_MAP[profileIcon] ? (
+          <ProfileIcon name={profileIcon} style={{ width: sizePx ? sizePx * 0.5 : 22, height: sizePx ? sizePx * 0.5 : 22 }} className="text-slate-600" />
         ) : (
-          <span className="font-bold text-slate-600" style={{ fontSize: sizePx ? sizePx * 0.35 : 14 }}>{profile.first_name?.[0] ?? "?"}</span>
+          <span className="font-bold text-slate-600" style={{ fontSize: sizePx ? sizePx * 0.525 : 14 }}>{profile.first_name?.[0] ?? "?"}</span>
         )}
       </button>
 
@@ -245,7 +258,7 @@ export function TopNav() {
             <button
               onClick={() => router.push(`/jobs/${mobileWorkflowId}`)}
               className="text-slate-500 flex-shrink-0 leading-none text-center transition-all duration-300"
-              style={{ fontSize: scrolled ? 14 : 22, width: scrolled ? 24 : 40 }}
+              style={{ fontSize: scrolled ? 28 : 44, width: scrolled ? 48 : 80 }}
               aria-label="Back"
             >
               ←
@@ -255,25 +268,25 @@ export function TopNav() {
 
             {controls && (
               <>
-                {/* Save */}
-                <button
-                  onClick={controls.onSave}
-                  className="flex items-center gap-1.5 font-medium rounded-xl border border-slate-200 bg-white text-slate-600 transition-all duration-300"
-                  style={{ fontSize: scrolled ? 11 : 14, padding: scrolled ? '4px 8px' : '8px 12px' }}
-                >
-                  {controls.isDirty
-                    ? <Save style={{ width: scrolled ? 12 : 16, height: scrolled ? 12 : 16 }} className="transition-all duration-300" />
-                    : <span className="text-sky-500 font-semibold">Saved</span>
-                  }
-                </button>
-
                 {/* Trash */}
                 <button
                   onClick={controls.onDelete}
                   className="flex items-center justify-center rounded-xl text-slate-400 transition-all duration-300"
-                  style={{ width: scrolled ? 27 : 44, height: scrolled ? 27 : 44 }}
+                  style={{ width: scrolled ? 54 : 88, height: scrolled ? 54 : 88 }}
                 >
-                  <Trash2 style={{ width: scrolled ? 12 : 18, height: scrolled ? 12 : 18 }} className="transition-all duration-300" />
+                  <Trash2 style={{ width: scrolled ? 24 : 36, height: scrolled ? 24 : 36 }} className="transition-all duration-300" />
+                </button>
+
+                {/* Save */}
+                <button
+                  onClick={controls.onSave}
+                  className="flex items-center gap-1.5 font-medium rounded-xl border border-slate-200 bg-white text-slate-600 transition-all duration-300"
+                  style={{ fontSize: scrolled ? 17 : 21, padding: scrolled ? '6px 12px' : '12px 18px' }}
+                >
+                  {controls.isDirty
+                    ? <Save style={{ width: scrolled ? 18 : 24, height: scrolled ? 18 : 24 }} className="transition-all duration-300" />
+                    : <span className="text-sky-500 font-semibold">Saved</span>
+                  }
                 </button>
               </>
             )}
