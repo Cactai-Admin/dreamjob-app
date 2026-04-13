@@ -10,15 +10,16 @@ export type AuthProvider = 'internal' | 'google'
 
 export type WorkflowState =
   | 'listing_review' | 'qa_intake' | 'generating' | 'review'
-  | 'ready' | 'active' | 'ready_to_send' | 'sent' | 'completed' | 'archived'
+  | 'ready' | 'active' | 'ready_to_send' | 'sent' | 'completed' | 'archived' | 'draft'
 
 export type OutputType = 'resume' | 'cover_letter' | 'interview_guide' | 'negotiation_guide'
 
-export type OutputState = 'draft' | 'active' | 'ready' | 'sent'
+export type OutputState = 'draft' | 'active' | 'ready' | 'sent' | 'approved'
 
 export type StatusEventType =
   | 'sent' | 'received' | 'interview' | 'offer'
   | 'negotiation' | 'hired' | 'rejected' | 'ghosted' | 'declined'
+  | 'ready' | 'submitted' | 'interview_scheduled' | 'offer_received' | 'withdrawn'
 
 export type EvidenceType =
   | 'artifact' | 'keyword' | 'numeric_data_point' | 'descriptive_string'
@@ -89,6 +90,12 @@ export interface Session {
   account_id: string
   supabase_session_id: string | null
   ip_address: string | null
+  skills: string[]
+  keywords: string[]
+  tools: string[]
+  certifications: string[]
+  clearances: string[]
+  profile_icon: string | null
   user_agent: string | null
   active_role: UserRole
   is_active: boolean
@@ -115,6 +122,12 @@ export interface Profile {
   desired_location: string | null
   willing_to_relocate: boolean
   remote_preference: string | null
+  skills: string[]
+  keywords: string[]
+  tools: string[]
+  certifications: string[]
+  clearances: string[]
+  profile_icon: string | null
   created_at: string
   updated_at: string
 }
@@ -211,6 +224,7 @@ export interface Artifact {
   updated_at: string
 }
 
+  company_website_url: string | null
 export interface Company {
   id: string
   name: string
@@ -240,6 +254,7 @@ export interface JobListing {
   requirements: string | null
   responsibilities: string | null
   benefits: string | null
+  company_website_url: string | null
   raw_html: string | null
   parsed_data: Record<string, unknown> | null
   is_available: boolean
@@ -263,6 +278,8 @@ export interface Workflow {
   qa_completed_at: string | null
   generation_started_at: string | null
   generation_completed_at: string | null
+  // `status` (TEXT) exists alongside enum `state`; preserve both until unified.
+  status: string | null
   marked_ready_at: string | null
   sent_at: string | null
   archived_at: string | null
@@ -296,6 +313,8 @@ export interface Output {
   content: string
   html_content: string | null
   state: OutputState
+  // `status` (TEXT) exists alongside enum `state`; preserve both until unified.
+  status: string | null
   version: number
   is_current: boolean
   approved_at: string | null

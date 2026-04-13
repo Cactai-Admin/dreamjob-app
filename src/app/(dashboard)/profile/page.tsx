@@ -43,6 +43,7 @@ interface Profile {
   summary?: string;
   avatar_url?: string;
   linkedin_url?: string;
+  website_url?: string;
   portfolio_url?: string;
   github_url?: string;
   skills?: string[];
@@ -258,8 +259,8 @@ export default function ProfilePage() {
   const [editingHeadline, setEditingHeadline] = useState(false);
   const [headline, setHeadline] = useState("");
 
-  // Summary
-  const [editingSummary, setEditingSummary] = useState(false);
+  const [heroForm, setHeroForm] = useState<Pick<Profile, "location" | "phone" | "linkedin_url" | "website_url" | "github_url">>({});
+          website_url: prof.website_url ?? prof.portfolio_url,
   const [summary, setSummary] = useState("");
   const [savingSummary, setSavingSummary] = useState(false);
 
@@ -283,7 +284,7 @@ export default function ProfilePage() {
 
   // Hero edit
   const [editingHero, setEditingHero] = useState(false);
-  const [heroForm, setHeroForm] = useState<Pick<Profile, "location" | "phone" | "linkedin_url" | "portfolio_url" | "github_url">>({});
+  const [heroForm, setHeroForm] = useState<Pick<Profile, "location" | "phone" | "linkedin_url" | "website_url" | "github_url">>({});
   const [savingHero, setSavingHero] = useState(false);
 
   useEffect(() => {
@@ -302,7 +303,7 @@ export default function ProfilePage() {
           location: prof.location,
           phone: prof.phone,
           linkedin_url: prof.linkedin_url,
-          portfolio_url: prof.portfolio_url,
+          website_url: prof.website_url ?? prof.portfolio_url,
           github_url: prof.github_url,
         });
       }
@@ -615,10 +616,10 @@ export default function ProfilePage() {
               >
                 {profile.headline ?? "Click to add headline"}
                 <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-            )}
+                    value={heroForm.website_url ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, website_url: e.target.value }))}
 
-            {/* Contact info — view or edit */}
+            { icon: Globe,        label: "Website", href: profile.website_url ?? profile.portfolio_url },
             {editingHero ? (
               <div className="mt-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -641,8 +642,8 @@ export default function ProfilePage() {
                     className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
                   />
                   <input
-                    value={heroForm.portfolio_url ?? ""}
-                    onChange={e => setHeroForm(f => ({ ...f, portfolio_url: e.target.value }))}
+                    value={heroForm.website_url ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, website_url: e.target.value }))}
                     placeholder="Portfolio URL"
                     className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-200"
                   />
@@ -691,7 +692,7 @@ export default function ProfilePage() {
         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">
           {[
             { icon: ExternalLink, label: "LinkedIn",  href: profile.linkedin_url },
-            { icon: Globe,        label: "Portfolio", href: profile.portfolio_url },
+            { icon: Globe,        label: "Website", href: profile.website_url ?? profile.portfolio_url },
             { icon: ExternalLink, label: "GitHub",    href: profile.github_url },
           ].filter(l => l.href).map(({ icon: Icon, label, href }) => (
             <a key={label} href={href} target="_blank" rel="noreferrer"
@@ -1454,7 +1455,7 @@ export default function ProfilePage() {
                     <div className="flex-shrink-0">
                       <StatusBadge status={job.status} size="sm" />
                     </div>
-                  </Link>
+                  website_url: prof.website_url ?? prof.portfolio_url,
                 ))}
               </div>
             </div>
@@ -1480,7 +1481,7 @@ export default function ProfilePage() {
                   location: prof.location,
                   phone: prof.phone,
                   linkedin_url: prof.linkedin_url,
-                  portfolio_url: prof.portfolio_url,
+                  website_url: prof.website_url ?? prof.portfolio_url,
                   github_url: prof.github_url,
                 });
               }

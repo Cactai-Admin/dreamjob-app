@@ -13,69 +13,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
+import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
 type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
-
-// Parse requirements from DB TEXT field (stored as JSON string or plain)
-function parseReqs(val: unknown): string[] {
-  if (!val) return [];
-  if (Array.isArray(val)) return val;
-  if (typeof val === "string") {
-    const t = val.trim();
-    if (t.startsWith("[")) { try { return JSON.parse(t); } catch { /* fall */ } }
-    if (t.startsWith("{") && t.endsWith("}")) return t.slice(1, -1).split(",").map(s => s.trim()).filter(Boolean);
-    if (t.includes("\n")) return t.split("\n").map(s => s.trim()).filter(Boolean);
-    return t ? [t] : [];
-  }
-  return [];
-}
-
-function computeMatch(
-  reqs: string[],
-  skills: string[], keywords: string[], tools: string[], certs: string[], clearances: string[], tech: string[],
-  manuallyMarked: string[] = []
-) {
-  const userTerms = [...new Set(
-    [...skills, ...keywords, ...tools, ...certs, ...clearances, ...tech].map(s => s.toLowerCase().trim()).filter(s => s.length > 2)
-  )];
-
-  if (userTerms.length === 0 && manuallyMarked.length === 0) return { score: 0, matched: [] as string[], missing: reqs.slice(0, 10) };
-  if (reqs.length === 0) return { score: 0, matched: [], missing: [] };
-
-  const reqsText = reqs.join(' ').toLowerCase();
-
-  // Check if a user term covers a requirement (full substring OR any significant word ≥4 chars)
-  const termCoversReq = (u: string, rLow: string): boolean => {
-    if (rLow.includes(u)) return true;
-    const words = u.split(/\s+/).filter(w => w.length >= 4);
-    return words.length > 0 && words.some(w => rLow.includes(w));
-  };
-
-  // "You have": user terms that cover at least one requirement
-  const matchedTerms: string[] = [];
-  for (const t of userTerms) {
-    if (reqs.some(req => termCoversReq(t, req.toLowerCase()))) {
-      matchedTerms.push(t);
-    }
-  }
-
-  // Score + missing: use the same coverage logic so score matches what's shown
-  const coveredReqs: boolean[] = reqs.map(req => {
-    if (manuallyMarked.includes(req)) return true;
-    const rLow = req.toLowerCase();
-    return userTerms.some(u => termCoversReq(u, rLow));
-  });
-
-  const coveredCount = coveredReqs.filter(Boolean).length;
-  const score = Math.round((coveredCount / reqs.length) * 100);
-  const missingReqs = reqs.filter((req, i) => !coveredReqs[i]);
-
-  return { score, matched: matchedTerms.slice(0, 12), missing: missingReqs.slice(0, 10) };
-}
 
 export default function ListingReviewPage({ params }: Props) {
   const { id } = use(params);
@@ -149,7 +93,7 @@ export default function ListingReviewPage({ params }: Props) {
         // Prefer the listing row (always linked), fall back to company join
         setCompanyWebsite(wf.listing?.company_website_url ?? wf.company?.website_url ?? "");
         setDescription(l.description ?? "");
-        setReqs(parseReqs(l.requirements));
+        setReqs(parseRequirements(l.requirements));
         setAdditionalDetails(l.responsibilities ?? "");
         setLinkedInUrl(wf.company?.linkedin_url ?? "");
       }
@@ -180,7 +124,7 @@ export default function ListingReviewPage({ params }: Props) {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
     const isDup = existing.some(e => norm(e) === norm(term.trim()));
     if (!isDup) {
-      const updated = [...existing, term.trim()];
+        setReqs(parseRequirements(l.requirements));
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -287,7 +231,19 @@ export default function ListingReviewPage({ params }: Props) {
     router.push("/listings");
   };
 
-  const match = computeMatch(reqs, skills, keywords, profileTools, profileCerts, profileClearances, tech, manuallyMarked);
+  const match = computeRequirementMatch(
+    {
+      requirements: reqs,
+      skills,
+      keywords,
+      tools: profileTools,
+      certifications: profileCerts,
+      clearances: profileClearances,
+      technologies: tech,
+      manuallyMarked,
+    },
+    { includeAllMissingWhenNoProfileTerms: true }
+  );
 
   if (loading) {
     return (
@@ -306,7 +262,19 @@ export default function ListingReviewPage({ params }: Props) {
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
           <Link href="/listings" className="flex-shrink-0 w-8 h-8 mt-0.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm">
-            <ArrowLeft className="w-4 h-4" />
+  const match = computeRequirementMatch(
+    {
+      requirements: reqs,
+      skills,
+      keywords,
+      tools: profileTools,
+      certifications: profileCerts,
+      clearances: profileClearances,
+      technologies: tech,
+      manuallyMarked,
+    },
+    { includeAllMissingWhenNoProfileTerms: true }
+  );
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{title || "Untitled Listing"}</h1>
