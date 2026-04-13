@@ -88,9 +88,15 @@ export default function DashboardPage() {
       }
 
       const preferencesConfirmed = hasConfirmedOnboardingPreferences(storedPreferences);
-      const preferencesForForm = preferencesConfirmed
-        ? storedPreferences
-        : DEFAULT_ONBOARDING_CONTACT_PREFERENCES;
+      const normalizePreferences = (
+        value: Partial<OnboardingDraft["preferences"]> | null
+      ): OnboardingDraft["preferences"] => ({
+        ...DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
+        ...(value ?? {}),
+      });
+      const preferencesForForm = normalizePreferences(
+        preferencesConfirmed ? storedPreferences : null
+      );
 
       const draft: OnboardingDraft = {
         firstName: profile?.first_name ?? "",
