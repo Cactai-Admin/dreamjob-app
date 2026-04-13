@@ -20,6 +20,42 @@ import { workflowToJob, deriveApplicationStatus, deriveAllStatuses } from "@/lib
 import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
+
+const EXCLUSIVE_GROUP = new Set<ApplicationStatus>(["hired", "declined", "ghosted", "rejected"]);
+
+const PREREQUISITES: Partial<Record<ApplicationStatus, ApplicationStatus[]>> = {
+  received:     ["applied"],
+  interviewing: ["applied"],
+  offer:        ["applied"],
+  negotiating:  ["applied", "offer"],
+  hired:        ["applied", "offer"],
+  declined:     ["applied", "offer"],
+};
+
+// event_type values used in the DB status_event_type enum
+const EVENT_MAP: Partial<Record<ApplicationStatus, string>> = {
+  ready:        "ready",
+  applied:      "sent",
+  received:     "received",
+  interviewing: "interview",
+  offer:        "offer",
+  negotiating:  "negotiation",
+  hired:        "hired",
+  declined:     "declined",
+  ghosted:      "ghosted",
+  rejected:     "rejected",
+};
+
+const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: string }[] = [
+  { status: "ready",        label: "Ready",        activeClass: "border-blue-400 bg-blue-50 text-blue-700" },
+  { status: "applied",      label: "Applied",      activeClass: "border-sky-400 bg-sky-50 text-sky-700" },
+  { status: "received",     label: "Received",     activeClass: "border-violet-400 bg-violet-50 text-violet-700" },
+  { status: "interviewing", label: "Interviewing", activeClass: "border-amber-400 bg-amber-50 text-amber-700" },
+  { status: "offer",        label: "Offer",        activeClass: "border-emerald-400 bg-emerald-50 text-emerald-700" },
+  { status: "negotiating",  label: "Negotiating",  activeClass: "border-teal-400 bg-teal-50 text-teal-700" },
+  { status: "hired",        label: "Hired",        activeClass: "border-green-400 bg-green-50 text-green-700" },
+  { status: "declined",     label: "Declined",     activeClass: "border-orange-400 bg-orange-50 text-orange-700" },
+  { status: "ghosted",      label: "Ghosted",      activeClass: "border-slate-300 bg-slate-100 text-slate-500" },
   { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
 ];
 

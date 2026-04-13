@@ -36,33 +36,7 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  const { data: accountRecord } = await supabaseAdmin
-    .from('accounts')
-    .select('email')
-    .eq('id', accountId)
-    .single()
-
-  return NextResponse.json({
-    ...data,
-    email: accountRecord?.email ?? null,
-    // Backward-compatible alias for legacy consumers.
-    portfolio_url: data.website_url ?? null,
-  })
-  if (body.portfolio_url !== undefined && body.website_url === undefined) {
-    body.website_url = body.portfolio_url
-  }
-
-  const { data: accountRecord } = await supabaseAdmin
-    .from('accounts')
-    .select('email')
-    .eq('id', accountId)
-    .single()
-
-  return NextResponse.json({
-    ...data,
-    email: accountRecord?.email ?? null,
-    portfolio_url: data.website_url ?? null,
-  })
+  const { data: account } = await supabaseAdmin
     .from('accounts')
     .select('email')
     .eq('id', accountId)

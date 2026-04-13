@@ -20,7 +20,6 @@ export type StatusEventType =
   | 'sent' | 'received' | 'interview' | 'offer'
   | 'negotiation' | 'hired' | 'rejected' | 'ghosted' | 'declined'
   | 'ready' | 'submitted' | 'interview_scheduled' | 'offer_received' | 'withdrawn'
-  | 'ready' | 'submitted' | 'interview_scheduled' | 'offer_received' | 'withdrawn'
 
 export type EvidenceType =
   | 'artifact' | 'keyword' | 'numeric_data_point' | 'descriptive_string'

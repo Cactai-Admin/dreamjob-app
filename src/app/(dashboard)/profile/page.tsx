@@ -44,7 +44,6 @@ interface Profile {
   avatar_url?: string;
   linkedin_url?: string;
   website_url?: string;
-  website_url?: string;
   portfolio_url?: string;
   github_url?: string;
   skills?: string[];
