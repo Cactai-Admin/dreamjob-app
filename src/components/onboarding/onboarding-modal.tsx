@@ -75,54 +75,54 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-[640px]" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Welcome to DreamJob</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="sm:max-w-[640px] p-5 sm:p-6" showCloseButton={false}>
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="text-xl font-bold tracking-tight text-slate-900">Welcome to DreamJob</DialogTitle>
+          <DialogDescription className="text-sm text-slate-500">
             Let&apos;s do quick required onboarding through a short guided chat.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3 text-sm text-slate-700 max-h-[360px] overflow-y-auto">
-            <div className="bg-white border border-slate-200 rounded-lg p-2.5">
+        <div className="mt-4 space-y-4">
+          <div className="card-base bg-slate-50 p-4 space-y-3 text-sm text-slate-700 max-h-[360px] overflow-y-auto">
+            <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5">
               Hi — I&apos;m DreamJob. I&apos;ll collect a few foundations, then we&apos;ll start Stage 1.
             </div>
             {draft.firstName && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
+              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
                 First name: {draft.firstName}
               </div>
             )}
             {draft.lastName && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
+              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
                 Last name: {draft.lastName}
               </div>
             )}
             {(draft.email || draft.phone) && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
+              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
                 Email: {draft.email || "(missing)"} · Phone: {draft.phone || "(missing)"}
               </div>
             )}
             {draft.location && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
+              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
                 Location: {draft.location}
               </div>
             )}
             {draft.linkedinUrl && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
+              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
                 LinkedIn: {draft.linkedinUrl}
               </div>
             )}
             {draft.websiteUrl && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
+              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
                 Website: {draft.websiteUrl}
               </div>
             )}
           </div>
 
           {activeStep !== "preferences" && activeStep !== "review" && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-600">
+            <div className="space-y-2.5">
+              <p className="section-label">
                 {{
                   firstName: "What first name should I use?",
                   lastName: "Great. And your last name?",
@@ -157,7 +157,7 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
                   }}
                 />
                 <button
-                  className="btn-ocean px-3 py-2"
+                  className="btn-ocean px-4 py-2.5 text-sm"
                   onClick={() => {
                     if (activeStep === "firstName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, firstName: v }));
                     else if (activeStep === "lastName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, lastName: v }));
@@ -180,7 +180,7 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
               </div>
               {(activeStep === "linkedin" || activeStep === "website") && requiredStep === null && (
                 <button
-                  className="text-xs text-slate-500 hover:text-slate-700"
+                  className="text-xs text-slate-500 hover:text-slate-700 font-medium"
                   onClick={() => {
                     setInput("");
                     setStep(activeStep === "linkedin" ? "website" : "preferences");
@@ -193,27 +193,27 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
           )}
 
           {activeStep === "preferences" && (
-            <div className="rounded-xl border border-slate-200 p-3">
-              <p className="text-xs font-semibold text-slate-600 mb-2">What should DreamJob include in application materials?</p>
+            <div className="card-base p-4">
+              <p className="section-label mb-2">What should DreamJob include in application materials?</p>
               <div className="grid sm:grid-cols-2 gap-2 text-sm text-slate-700">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={draft.preferences.includeEmail} onChange={(e) => updatePreference("includeEmail", e.target.checked)} />
+                <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                  <input className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" type="checkbox" checked={draft.preferences.includeEmail} onChange={(e) => updatePreference("includeEmail", e.target.checked)} />
                   Email
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={draft.preferences.includePhone} onChange={(e) => updatePreference("includePhone", e.target.checked)} />
+                <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                  <input className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" type="checkbox" checked={draft.preferences.includePhone} onChange={(e) => updatePreference("includePhone", e.target.checked)} />
                   Phone
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={draft.preferences.includeLinkedin} onChange={(e) => updatePreference("includeLinkedin", e.target.checked)} />
+                <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                  <input className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" type="checkbox" checked={draft.preferences.includeLinkedin} onChange={(e) => updatePreference("includeLinkedin", e.target.checked)} />
                   LinkedIn
                 </label>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={draft.preferences.includeWebsite} onChange={(e) => updatePreference("includeWebsite", e.target.checked)} />
+                <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                  <input className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" type="checkbox" checked={draft.preferences.includeWebsite} onChange={(e) => updatePreference("includeWebsite", e.target.checked)} />
                   Website
                 </label>
-                <label className="flex items-center gap-2 sm:col-span-2">
-                  <input type="checkbox" checked={draft.preferences.includeLocation} onChange={(e) => updatePreference("includeLocation", e.target.checked)} />
+                <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50 sm:col-span-2">
+                  <input className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" type="checkbox" checked={draft.preferences.includeLocation} onChange={(e) => updatePreference("includeLocation", e.target.checked)} />
                   Location
                 </label>
               </div>
