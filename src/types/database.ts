@@ -90,6 +90,12 @@ export interface Session {
   account_id: string
   supabase_session_id: string | null
   ip_address: string | null
+  skills: string[]
+  keywords: string[]
+  tools: string[]
+  certifications: string[]
+  clearances: string[]
+  profile_icon: string | null
   user_agent: string | null
   active_role: UserRole
   is_active: boolean
@@ -218,6 +224,7 @@ export interface Artifact {
   updated_at: string
 }
 
+  company_website_url: string | null
 export interface Company {
   id: string
   name: string
@@ -271,6 +278,8 @@ export interface Workflow {
   qa_completed_at: string | null
   generation_started_at: string | null
   generation_completed_at: string | null
+  // `status` (TEXT) exists alongside enum `state`; preserve both until unified.
+  status: string | null
   marked_ready_at: string | null
   sent_at: string | null
   archived_at: string | null
