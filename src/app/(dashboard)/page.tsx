@@ -38,6 +38,25 @@ const greetingHour = () => {
   if (h < 17) return "Good afternoon";
   return "Good evening";
 };
+const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
+const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
+  const [listingText, setListingText] = useState("");
+  const [profileContextKnown, setProfileContextKnown] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "stage1-intro",
+      role: "assistant",
+      content:
+        "Welcome to Stage 1. Share a job listing URL or paste listing text, and I’ll guide the analysis conversation step by step.",
+    },
+  ]);
+      fetch("/api/workflows?state=listing_review").then((r) => r.json()).catch(() => []),
+      fetch("/api/workflows?state=!listing_review").then((r) => r.json()).catch(() => []),
+    ]).then(([profile, session, listings, active]) => {
+      if (profile?.first_name) setFirstName(profile.first_name);
+      setProfileContextKnown(Boolean(
+        profile?.headline || profile?.location || profile?.summary || profile?.skills?.length
+      ));
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -221,13 +240,61 @@ export default function DashboardPage() {
       let provider: string | undefined;
       try { const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}"); if (s.aiProvider) provider = s.aiProvider; } catch { /* ignore */ }
 
+        <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+          {chatMessages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "max-w-[90%] rounded-lg px-3 py-2 text-sm",
+                message.role === "assistant"
+                  ? "bg-white border border-slate-200 text-slate-800"
+                  : "ml-auto bg-sky-600 text-white"
+              )}
+            >
+              {message.content}
+            </div>
+          ))}
+  const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string) => {
+    const wfRes = await fetch("/api/workflows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        listing_url: sourceUrl ?? null,
+        company_name: (parsed.company_name as string) ?? (parsed.company as string) ?? "",
+        title: (parsed.title as string) ?? "",
+        description: (parsed.description as string) ?? null,
+        requirements: (parsed.requirements as string[] | string | null | undefined) ?? null,
+        location: (parsed.location as string) ?? null,
+        salary_range: (parsed.salary_range as string) ?? null,
+        employment_type: (parsed.employment_type as string) ?? null,
+        experience_level: (parsed.experience_level as string) ?? null,
+        responsibilities: (parsed.responsibilities as string) ?? null,
+        benefits: (parsed.benefits as string) ?? null,
+        company_website_url: (parsed.company_website_url as string) ?? null,
+        company_linkedin_url: (parsed.company_linkedin_url as string) ?? null,
+      }),
+    });
+    const wf = await wfRes.json();
+    if (!wfRes.ok) throw new Error(wf.error ?? "Failed to save listing");
+    router.push(`/listings/${wf.id}`);
+  };
+
+      await createWorkflowFromParsed(parsed, url);
+
+  // Parse pasted listing text and continue through listing review
+  const handleAnalyzeText = async () => {
+    if (!listingText.trim() || busy) return;
+    setStep("parsing");
+      const lines = listingText.trim().split("\n").map((line) => line.trim()).filter(Boolean);
+      const fallbackTitle = lines[0] ?? "Untitled Position";
       const parseRes = await fetch("/api/listings/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, provider }),
-      });
+          manual: {
+            title: fallbackTitle,
+            description: listingText.trim(),
+            requirements: lines.slice(1, 9),
+          },
       const parsed = await parseRes.json();
-      if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to parse listing");
+      if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to intake listing text");
 
       setStep("saving");
       await createWorkflowFromParsed(parsed, url);
@@ -270,6 +337,13 @@ export default function DashboardPage() {
 
   return (
     <div className="page-wrapper max-w-1000px">
+      <OnboardingModal
+        open={onboardingOpen}
+        draft={onboardingDraft}
+        saving={onboardingSaving}
+        onDraftChange={setOnboardingDraft}
+        onSubmit={handleOnboardingSave}
+      />
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>
