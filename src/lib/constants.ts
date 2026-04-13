@@ -55,6 +55,15 @@ export const WORKFLOW_STATES: Record<
     label: 'Draft',
     description: 'Application has started and is currently in progress.',
   },
+  ready: { label: 'Ready', dependencies: [] },
+  submitted: { label: 'Submitted', dependencies: ['sent'] },
+  interview_scheduled: { label: 'Interview Scheduled', dependencies: ['sent'] },
+  offer_received: { label: 'Offer Received', dependencies: ['interview'] },
+  withdrawn: { label: 'Withdrawn', dependencies: ['sent'] },
+  draft: {
+    label: 'Draft',
+    description: 'Application has started and is currently in progress.',
+  },
 }
 
 export const OUTPUT_TYPES: Record<OutputType, { label: string }> = {

@@ -98,14 +98,9 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
                 Last name: {draft.lastName}
               </div>
             )}
-            {draft.email && (
+            {(draft.email || draft.phone) && (
               <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
-                Email: {draft.email}
-              </div>
-            )}
-            {draft.phone && (
-              <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
-                Phone: {draft.phone}
+                Email: {draft.email || "(missing)"} · Phone: {draft.phone || "(missing)"}
               </div>
             )}
             {draft.location && (
@@ -152,10 +147,10 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
                   }
                   onKeyDown={(e) => {
                     if (e.key !== "Enter") return;
-                    if (activeStep === "firstName") addTurn(input, "lastName", (v) => onDraftChange({ ...draft, firstName: v }));
-                    else if (activeStep === "lastName") addTurn(input, "email", (v) => onDraftChange({ ...draft, lastName: v }));
-                    else if (activeStep === "email") addTurn(input, "phone", (v) => onDraftChange({ ...draft, email: v }));
-                    else if (activeStep === "phone") addTurn(input, "location", (v) => onDraftChange({ ...draft, phone: v }));
+                    if (activeStep === "firstName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, firstName: v }));
+                    else if (activeStep === "lastName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, lastName: v }));
+                    else if (activeStep === "email") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, email: v }));
+                    else if (activeStep === "phone") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, phone: v }));
                     else if (activeStep === "location") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, location: v }));
                     else if (activeStep === "linkedin") addTurn(input, "website", (v) => onDraftChange({ ...draft, linkedinUrl: v }));
                     else if (activeStep === "website") addTurn(input, "preferences", (v) => onDraftChange({ ...draft, websiteUrl: v }));
@@ -164,10 +159,10 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
                 <button
                   className="btn-ocean px-3 py-2"
                   onClick={() => {
-                    if (activeStep === "firstName") addTurn(input, "lastName", (v) => onDraftChange({ ...draft, firstName: v }));
-                    else if (activeStep === "lastName") addTurn(input, "email", (v) => onDraftChange({ ...draft, lastName: v }));
-                    else if (activeStep === "email") addTurn(input, "phone", (v) => onDraftChange({ ...draft, email: v }));
-                    else if (activeStep === "phone") addTurn(input, "location", (v) => onDraftChange({ ...draft, phone: v }));
+                    if (activeStep === "firstName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, firstName: v }));
+                    else if (activeStep === "lastName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, lastName: v }));
+                    else if (activeStep === "email") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, email: v }));
+                    else if (activeStep === "phone") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, phone: v }));
                     else if (activeStep === "location") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, location: v }));
                     else if (activeStep === "linkedin") {
                       if (input.trim()) onDraftChange({ ...draft, linkedinUrl: input.trim() });

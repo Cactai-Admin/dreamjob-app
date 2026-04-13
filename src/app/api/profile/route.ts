@@ -48,6 +48,32 @@ export async function GET() {
     // Backward-compatible alias for legacy consumers.
     portfolio_url: data.website_url ?? null,
   })
+  if (body.portfolio_url !== undefined && body.website_url === undefined) {
+    body.website_url = body.portfolio_url
+  }
+
+  const { data: account } = await supabaseAdmin
+    .from('accounts')
+    .select('email')
+    .eq('id', accountId)
+    .single()
+
+  return NextResponse.json({
+    ...data,
+    email: account?.email ?? null,
+    portfolio_url: data.website_url ?? null,
+  })
+    .from('accounts')
+    .select('email')
+    .eq('id', accountId)
+    .single()
+
+  return NextResponse.json({
+    ...data,
+    email: account?.email ?? null,
+    // Backward-compatible alias for legacy consumers.
+    portfolio_url: data.website_url ?? null,
+  })
 }
 
 export async function PATCH(request: NextRequest) {

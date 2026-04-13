@@ -10,6 +10,8 @@ import { PrivacyScreenProvider } from "@/components/privacy-screen/privacy-scree
 import { MobileNavSlotProvider } from "@/components/layout/mobile-nav-slot";
 import { DocControlsProvider } from "@/components/layout/doc-controls-slot";
 import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
+        <OnboardingGate />
+import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
 
 interface Props {
   children: ReactNode;

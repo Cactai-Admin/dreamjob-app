@@ -44,6 +44,7 @@ interface Profile {
   avatar_url?: string;
   linkedin_url?: string;
   website_url?: string;
+  website_url?: string;
   portfolio_url?: string;
   github_url?: string;
   skills?: string[];
@@ -259,8 +260,8 @@ export default function ProfilePage() {
   const [editingHeadline, setEditingHeadline] = useState(false);
   const [headline, setHeadline] = useState("");
 
-  // Summary
-  const [editingSummary, setEditingSummary] = useState(false);
+  const [heroForm, setHeroForm] = useState<Pick<Profile, "location" | "phone" | "linkedin_url" | "website_url" | "github_url">>({});
+          website_url: prof.website_url ?? prof.portfolio_url,
   const [summary, setSummary] = useState("");
   const [savingSummary, setSavingSummary] = useState(false);
 
@@ -616,10 +617,10 @@ export default function ProfilePage() {
               >
                 {profile.headline ?? "Click to add headline"}
                 <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-            )}
+                    value={heroForm.website_url ?? ""}
+                    onChange={e => setHeroForm(f => ({ ...f, website_url: e.target.value }))}
 
-            {/* Contact info — view or edit */}
+            { icon: Globe,        label: "Website", href: profile.website_url ?? profile.portfolio_url },
             {editingHero ? (
               <div className="mt-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
@@ -1455,7 +1456,7 @@ export default function ProfilePage() {
                     <div className="flex-shrink-0">
                       <StatusBadge status={job.status} size="sm" />
                     </div>
-                  </Link>
+                  website_url: prof.website_url ?? prof.portfolio_url,
                 ))}
               </div>
             </div>

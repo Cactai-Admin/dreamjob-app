@@ -59,6 +59,15 @@ export const STATUS_DEPENDENCIES: StatusDependency = {
   interview_scheduled: ['sent'],
   offer_received: ['interview'],
   withdrawn: ['sent'],
+  ['hired', 'withdrawn'],
+  ['rejected', 'withdrawn'],
+  ['declined', 'withdrawn'],
+  ['ghosted', 'withdrawn'],
+  ready: [],
+  submitted: ['sent'],
+  interview_scheduled: ['sent'],
+  offer_received: ['interview'],
+  withdrawn: ['sent'],
 }
 
 /**

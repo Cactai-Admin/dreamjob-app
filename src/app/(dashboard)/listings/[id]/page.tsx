@@ -14,62 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
 import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
-
-interface Props {
-  params: Promise<{ id: string }>;
-}
-
-type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
-
-export default function ListingReviewPage({ params }: Props) {
-  const { id } = use(params);
-  const router = useRouter();
-
-  const [workflow, setWorkflow] = useState<Workflow | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  // Listing fields
-  const [title, setTitle] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [location, setLocation] = useState("");
-  const [salary, setSalary] = useState("");
-  const [empType, setEmpType] = useState("");
-  const [expLevel, setExpLevel] = useState("");
-  const [companyWebsite, setCompanyWebsite] = useState("");
-  const [description, setDescription] = useState("");
-  const [reqs, setReqs] = useState<string[]>([]);
-  const [newReq, setNewReq] = useState("");
-  const [additionalDetails, setAdditionalDetails] = useState("");
-
-  // Profile for match
-  const [skills, setSkills] = useState<string[]>([]);
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const [profileTools, setProfileTools] = useState<string[]>([]);
-  const [profileCerts, setProfileCerts] = useState<string[]>([]);
-  const [profileClearances, setProfileClearances] = useState<string[]>([]);
-  const [tech, setTech] = useState<string[]>([]);
-
-  // Add-to-profile modal
-  const [addModal, setAddModal] = useState<{ term: string; editedTerm: string } | null>(null);
-  const [addingSaving, setAddingSaving] = useState(false);
-  const [manuallyMarked, setManuallyMarked] = useState<string[]>([]);
-
-  // LinkedIn
-  const [linkedInActive, setLinkedInActive] = useState(false);
-  const [linkedInUrl, setLinkedInUrl] = useState("");
-  const [fetchingConns, setFetchingConns] = useState(false);
-  type ConnPerson = { name: string; profileUrl: string };
-  type Connections = {
-    first: ConnPerson[];
-    second: ConnPerson[];
-    third: ConnPerson[];
-    counts: { first: number; second: number; third: number; total: number };
-  };
   const [connections, setConnections] = useState<Connections | null>(null);
   const [connError, setConnError] = useState<string | null>(null);
   const [modalDegree, setModalDegree] = useState<'first' | 'second' | 'third' | null>(null);
@@ -124,7 +68,7 @@ export default function ListingReviewPage({ params }: Props) {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
     const isDup = existing.some(e => norm(e) === norm(term.trim()));
     if (!isDup) {
-      const updated = [...existing, term.trim()];
+        setReqs(parseRequirements(l.requirements));
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -262,7 +206,19 @@ export default function ListingReviewPage({ params }: Props) {
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
           <Link href="/listings" className="flex-shrink-0 w-8 h-8 mt-0.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm">
-            <ArrowLeft className="w-4 h-4" />
+  const match = computeRequirementMatch(
+    {
+      requirements: reqs,
+      skills,
+      keywords,
+      tools: profileTools,
+      certifications: profileCerts,
+      clearances: profileClearances,
+      technologies: tech,
+      manuallyMarked,
+    },
+    { includeAllMissingWhenNoProfileTerms: true }
+  );
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{title || "Untitled Listing"}</h1>
