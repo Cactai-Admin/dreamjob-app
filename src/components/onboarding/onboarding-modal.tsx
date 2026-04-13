@@ -53,11 +53,11 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
 
   return (
     <Dialog open={open}>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent className="sm:max-w-[640px]" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Welcome to DreamJob</DialogTitle>
           <DialogDescription>
-            Quick onboarding before we guide your first opportunity analysis.
+            Quick required onboarding before we guide your first opportunity analysis.
           </DialogDescription>
         </DialogHeader>
 

@@ -112,6 +112,13 @@ export default function DashboardPage() {
   }, [router]);
 
   const busy = step !== "idle";
+  const selectGuidedPath = (nextMode: Mode) => {
+    setMode(nextMode);
+    setError(null);
+    if (nextMode === "url") {
+      setTimeout(() => urlInputRef.current?.focus(), 80);
+    }
+  };
 
   // Parse URL → create workflow → navigate to listing review
   const handleAnalyzeUrl = async () => {
@@ -187,7 +194,45 @@ export default function DashboardPage() {
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">What are you applying for?</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Let&apos;s analyze your next opportunity</h1>
+      </div>
+
+      {/* Stage 1 guided chat-first transition surface */}
+      <div className="card-base p-5 mb-6">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-bold">
+            AI
+          </div>
+          <div className="flex-1">
+            <p className="text-sm text-slate-800">
+              I can guide Stage 1 for you. Share a listing URL to start analysis, or begin with title + company and we&apos;ll fill details together.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                onClick={() => selectGuidedPath("url")}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  mode === "url"
+                    ? "border-sky-300 bg-sky-50 text-sky-700"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                )}
+              >
+                Analyze a URL
+              </button>
+              <button
+                onClick={() => selectGuidedPath("manual")}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  mode === "manual"
+                    ? "border-slate-400 bg-slate-100 text-slate-800"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                )}
+              >
+                Start manually
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Entry cards ──────────────────────────────────────────────────────── */}
