@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Link2, PenLine, Sparkles, RefreshCw, ArrowRight,
+  Link2, Sparkles, RefreshCw, ArrowRight, MessageSquare,
   ChevronRight, Clock, Briefcase, Layers, AlertCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/jobs/status-badge";
@@ -16,16 +16,15 @@ import type { Workflow, Job } from "@/lib/types";
 import type { WorkflowState } from "@/types/database";
 import { resolveAppEntry } from "@/lib/entry-routing";
 import {
-  hasConfirmedOnboardingPreferences,
+  DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
   isOnboardingComplete,
-  type OnboardingContactPreferences,
   type OnboardingProfileDraft,
 } from "@/lib/onboarding-memory";
+import { OnboardingModal, type OnboardingDraft } from "@/components/onboarding/onboarding-modal";
 
 type Mode = "url" | "manual";
 type Step = "idle" | "parsing" | "saving";
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
-const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
 
 const greetingHour = () => {
   const h = new Date().getHours();
@@ -33,6 +32,25 @@ const greetingHour = () => {
   if (h < 17) return "Good afternoon";
   return "Good evening";
 };
+const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
+const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
+  const [listingText, setListingText] = useState("");
+  const [profileContextKnown, setProfileContextKnown] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "stage1-intro",
+      role: "assistant",
+      content:
+        "Welcome to Stage 1. Share a job listing URL or paste listing text, and I’ll guide the analysis conversation step by step.",
+    },
+  ]);
+      fetch("/api/workflows?state=listing_review").then((r) => r.json()).catch(() => []),
+      fetch("/api/workflows?state=!listing_review").then((r) => r.json()).catch(() => []),
+    ]).then(([profile, session, listings, active]) => {
+      if (profile?.first_name) setFirstName(profile.first_name);
+      setProfileContextKnown(Boolean(
+        profile?.headline || profile?.location || profile?.summary || profile?.skills?.length
+      ));
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -46,6 +64,18 @@ export default function DashboardPage() {
   const [pendingListings, setPendingListings] = useState<Workflow[]>([]);
   const [inProgressJobs, setInProgressJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [onboardingDraft, setOnboardingDraft] = useState<OnboardingDraft>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    location: "",
+    linkedinUrl: "",
+    websiteUrl: "",
+    preferences: DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
+  });
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -66,13 +96,62 @@ export default function DashboardPage() {
       setInProgressJobs(inProgress.slice(0, 3));
       setTotalJobs(inProgress.length);
 
-      let storedPreferences: Partial<OnboardingContactPreferences> | null = null;
+      let storedPreferences = DEFAULT_ONBOARDING_CONTACT_PREFERENCES;
       try {
-        const storedRaw = localStorage.getItem(ONBOARDING_STORAGE_KEY);
-        storedPreferences = storedRaw ? JSON.parse(storedRaw) : null;
+        const stored = JSON.parse(localStorage.getItem(ONBOARDING_STORAGE_KEY) ?? "{}");
+        storedPreferences = {
+          ...DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
+          ...stored,
+        };
       } catch {
         // ignore malformed local storage
       }
+
+      const draft: OnboardingDraft = {
+        firstName: profile?.first_name ?? "",
+        lastName: profile?.last_name ?? "",
+        email: session?.user?.account?.email ?? "",
+        phone: profile?.phone ?? "",
+        location: profile?.location ?? "",
+        linkedinUrl: profile?.linkedin_url ?? "",
+        websiteUrl: profile?.website_url ?? "",
+        preferences: storedPreferences,
+      };
+      setOnboardingDraft(draft);
+
+      const onboardingProfile: OnboardingProfileDraft = {
+        firstName: draft.firstName || null,
+        lastName: draft.lastName || null,
+        email: draft.email || null,
+        phone: draft.phone || null,
+        location: draft.location || null,
+        contactPreferences: draft.preferences,
+      };
+
+      const activeWorkflow = activeWorkflows.find((wf) =>
+        !["listing_review", "completed", "archived"].includes(wf.state)
+      );
+      const hasAlerts = activeWorkflows.some((wf) => ["ready", "ready_to_send"].includes(wf.state));
+      const resolution = resolveAppEntry({
+        onboardingComplete: isOnboardingComplete(onboardingProfile),
+        activeWorkflowId: activeWorkflow?.id,
+        activeWorkflowState: (activeWorkflow?.state as WorkflowState | undefined) ?? null,
+        hasAlerts,
+      });
+
+      if (resolution.destination === "onboarding_modal") {
+        setOnboardingOpen(true);
+        return;
+      }
+      if (resolution.destination === "resume_active_action" && resolution.workflowId) {
+        router.replace(`/jobs/${resolution.workflowId}`);
+        return;
+      }
+      if (resolution.destination === "dashboard_alerts") {
+        router.replace("/jobs");
+      }
+    }).catch(() => {});
+  }, [router]);
 
       const preferencesConfirmed = hasConfirmedOnboardingPreferences(storedPreferences);
 
@@ -98,82 +177,238 @@ export default function DashboardPage() {
         hasAlerts,
       });
 
-      if (resolution.destination === "onboarding_modal") {
-        return;
-      }
-      if (resolution.destination === "resume_active_action" && resolution.workflowId) {
-        router.replace(`/jobs/${resolution.workflowId}`);
-        return;
-      }
-      if (resolution.destination === "dashboard_alerts") {
-        router.replace("/jobs");
-      }
-    }).catch(() => {});
-  }, [router]);
-
-  const busy = step !== "idle";
-  const selectGuidedPath = (nextMode: Mode) => {
-    setMode(nextMode);
-    setError(null);
-    if (nextMode === "url") {
-      setTimeout(() => urlInputRef.current?.focus(), 80);
+  const handleOnboardingSave = async () => {
+    setOnboardingSaving(true);
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_name: onboardingDraft.firstName.trim() || null,
+        last_name: onboardingDraft.lastName.trim() || null,
+        phone: onboardingDraft.phone.trim() || null,
+        location: onboardingDraft.location.trim() || null,
+        linkedin_url: onboardingDraft.linkedinUrl.trim() || null,
+        website_url: onboardingDraft.websiteUrl.trim() || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      setOnboardingSaving(false);
+      throw new Error(data?.error ?? "Unable to save onboarding data.");
     }
+
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(onboardingDraft.preferences));
+    setOnboardingOpen(false);
+    setOnboardingSaving(false);
   };
 
   // Parse URL → create workflow → navigate to listing review
   const handleAnalyzeUrl = async () => {
     if (!url.trim() || busy) return;
     setError(null);
-    setStep("parsing");
-    try {
-      let provider: string | undefined;
-      try { const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}"); if (s.aiProvider) provider = s.aiProvider; } catch { /* ignore */ }
-
-      const parseRes = await fetch("/api/listings/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, provider }),
-      });
-      const parsed = await parseRes.json();
-      if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to parse listing");
-
-      setStep("saving");
-      const wfRes = await fetch("/api/workflows", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          listing_url: url,
-          company_name: parsed.company_name ?? parsed.company ?? "",
-          title: parsed.title ?? "",
-          description: parsed.description ?? null,
-          requirements: parsed.requirements ?? null,
-          location: parsed.location ?? null,
-          salary_range: parsed.salary_range ?? null,
-          employment_type: parsed.employment_type ?? null,
-          experience_level: parsed.experience_level ?? null,
-          responsibilities: parsed.responsibilities ?? null,
-          benefits: parsed.benefits ?? null,
-          company_website_url: parsed.company_website_url ?? null,
-          company_linkedin_url: parsed.company_linkedin_url ?? null,
-        }),
-      });
-      const wf = await wfRes.json();
-      if (!wfRes.ok) throw new Error(wf.error ?? "Failed to save listing");
-      router.push(`/listings/${wf.id}`);
-    } catch (e) {
-      setStep("idle");
-      setError(e instanceof Error ? e.message : "Something went wrong");
+    if (nextMode === "url") {
+      setTimeout(() => urlInputRef.current?.focus(), 80);
     }
+  const appendChat = (message: ChatMessage) => {
+    setChatMessages((prev) => [...prev, message]);
   };
 
-  // Create stub workflow manually → navigate to listing review
-  const handleAddManual = async () => {
-    if (!manualTitle.trim() || !manualCompany.trim() || busy) return;
-    setError(null);
-    setStep("saving");
-    try {
-      const res = await fetch("/api/workflows", {
-        method: "POST",
+  const runIntakeSequence = (intakeSource: "url" | "text", inputPreview: string) => {
+    appendChat({
+      id: `user-intake-${Date.now()}`,
+      role: "user",
+      content: intakeSource === "url" ? `Analyze this URL: ${inputPreview}` : `I pasted the listing text.`,
+    });
+    appendChat({
+      id: `assistant-ack-${Date.now()}`,
+      role: "assistant",
+      content: "Got it — I’m parsing the opportunity now.",
+    });
+    appendChat({
+      id: `assistant-listing-${Date.now()}`,
+      role: "assistant",
+      content:
+        "Next, I’ll prepare the listing understanding bundle: role, company, level, key requirements, and notable constraints.",
+    });
+    appendChat({
+      id: `assistant-context-${Date.now()}`,
+      role: "assistant",
+      content: profileContextKnown
+        ? "Then I’ll map your known approved context to the role and call out only what is still uncertain."
+        : "Then I’ll map what we already know about you and highlight only the missing context that could block trusted positioning.",
+    });
+    appendChat({
+      id: `assistant-validation-${Date.now()}`,
+      role: "assistant",
+      content:
+        "Before positioning, I’ll give you a validation bundle so you can approve or correct the trusted working set.",
+    });
+    appendChat({
+      id: `assistant-positioning-${Date.now()}`,
+      role: "assistant",
+      content:
+        "After validation, I’ll provide a positioning outcome and guide the next choice: proceed to Stage 2, save as Future Role Target, or start over.",
+    });
+  };
+
+    appendChat({
+      id: `mode-${nextMode}-${Date.now()}`,
+      role: "assistant",
+      content:
+        nextMode === "url"
+          ? "Great — paste the listing URL and I’ll start with opportunity intake."
+          : "Great — paste the listing text and I’ll start with opportunity intake.",
+    });
+  };
+      runIntakeSequence("url", url.trim());
+      runIntakeSequence("text", listingText.trim());
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <MessageSquare className="w-3.5 h-3.5" />
+          Stage 1 guided chat
+        </div>
+
+        <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+          {chatMessages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "max-w-[90%] rounded-lg px-3 py-2 text-sm",
+                message.role === "assistant"
+                  ? "bg-white border border-slate-200 text-slate-800"
+                  : "ml-auto bg-sky-600 text-white"
+              )}
+            >
+              {message.content}
+            </div>
+          ))}
+  const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string) => {
+    const wfRes = await fetch("/api/workflows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        listing_url: sourceUrl ?? null,
+        company_name: (parsed.company_name as string) ?? (parsed.company as string) ?? "",
+        title: (parsed.title as string) ?? "",
+        description: (parsed.description as string) ?? null,
+        requirements: (parsed.requirements as string[] | string | null | undefined) ?? null,
+        location: (parsed.location as string) ?? null,
+        salary_range: (parsed.salary_range as string) ?? null,
+        employment_type: (parsed.employment_type as string) ?? null,
+        experience_level: (parsed.experience_level as string) ?? null,
+        responsibilities: (parsed.responsibilities as string) ?? null,
+        benefits: (parsed.benefits as string) ?? null,
+        company_website_url: (parsed.company_website_url as string) ?? null,
+        company_linkedin_url: (parsed.company_linkedin_url as string) ?? null,
+      }),
+    });
+    const wf = await wfRes.json();
+    if (!wfRes.ok) throw new Error(wf.error ?? "Failed to save listing");
+    router.push(`/listings/${wf.id}`);
+  };
+
+      await createWorkflowFromParsed(parsed, url);
+
+  // Parse pasted listing text and continue through listing review
+  const handleAnalyzeText = async () => {
+    if (!listingText.trim() || busy) return;
+    setStep("parsing");
+      const lines = listingText.trim().split("\n").map((line) => line.trim()).filter(Boolean);
+      const fallbackTitle = lines[0] ?? "Untitled Position";
+      const parseRes = await fetch("/api/listings/parse", {
+          manual: {
+            title: fallbackTitle,
+            description: listingText.trim(),
+            requirements: lines.slice(1, 9),
+          },
+      const parsed = await parseRes.json();
+      if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to intake listing text");
+
+      setStep("saving");
+      await createWorkflowFromParsed(parsed);
+      {/* Stage 1 guided workspace */}
+      <div className="card-base p-5 mb-10 space-y-4">
+          <div className="flex-1 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-800">
+            Let&apos;s start Stage 1. Share a job listing URL or paste listing text. I&apos;ll run intake, bundle understanding, check your profile in context, ask only targeted follow-ups if needed, validate the package, then guide a next-step choice.
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => selectGuidedPath("url")}
+            className={cn(
+              "text-xs px-3 py-1.5 rounded-full border transition-colors",
+              mode === "url"
+                ? "border-sky-300 bg-sky-50 text-sky-700"
+                : "border-slate-200 text-slate-600 hover:border-slate-300"
+            )}
+          >
+            Listing URL
+          </button>
+          <button
+            onClick={() => selectGuidedPath("manual")}
+            className={cn(
+              "text-xs px-3 py-1.5 rounded-full border transition-colors",
+              mode === "manual"
+                ? "border-slate-400 bg-slate-100 text-slate-800"
+                : "border-slate-200 text-slate-600 hover:border-slate-300"
+            )}
+          >
+            Pasted listing text
+          </button>
+        {error && (
+          <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {error}
+        )}
+        {mode === "url" ? (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-600">Opportunity intake — URL</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  ref={urlInputRef}
+                  value={url}
+                  onChange={e => { setUrl(e.target.value); setError(null); }}
+                  onKeyDown={e => e.key === "Enter" && handleAnalyzeUrl()}
+                  placeholder="https://company.com/careers/role"
+                  className="form-input pl-9 text-sm"
+                  disabled={busy}
+                />
+              </div>
+                onClick={handleAnalyzeUrl}
+                disabled={busy || !url.trim()}
+                className="btn-ocean flex items-center gap-1.5 text-sm px-4 py-2.5 flex-shrink-0 disabled:opacity-50"
+                {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                <span className="hidden sm:inline">{step === "idle" ? "Begin Stage 1" : step === "parsing" ? "Parsing…" : "Saving…"}</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-600">Opportunity intake — pasted listing text</label>
+            <textarea
+              value={listingText}
+              onChange={(e) => { setListingText(e.target.value); setError(null); }}
+              placeholder="Paste the role description here..."
+              className="form-input text-sm w-full min-h-[140px]"
+              disabled={busy}
+            />
+            <button
+              onClick={handleAnalyzeText}
+              disabled={busy || !listingText.trim()}
+              className="btn-ocean flex items-center gap-1.5 text-sm px-4 py-2.5 disabled:opacity-50"
+            >
+              {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              {step === "idle" ? "Begin Stage 1" : step === "parsing" ? "Parsing…" : "Saving…"}
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-2 text-xs text-slate-600">
+          <p className="font-semibold text-slate-700">Stage 1 guided bundles</p>
+          <p>1) Opportunity parsing & orientation {busy ? "• in progress" : "• waiting for intake"}</p>
+          <p>2) Listing understanding bundle {busy ? "• next" : "• queued after intake"}</p>
+          <p>3) User-in-context bundle {profileContextKnown ? "• known profile data will be reused" : "• may need context from profile"}</p>
+          <p>4) Targeted collection {profileContextKnown ? "• only for unresolved blockers" : "• will ask only missing high-value items"}</p>
+          <p>5) Validation bundle • confirm trusted context before positioning</p>
+          <p>6) Positioning outcome • strong fit / stretch / future target guidance</p>
+          <p>7) Next-step choice • proceed to Stage 2 / save as future role target / start over</p>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           company_name: manualCompany.trim(),
@@ -191,6 +426,13 @@ export default function DashboardPage() {
 
   return (
     <div className="page-wrapper max-w-1000px">
+      <OnboardingModal
+        open={onboardingOpen}
+        draft={onboardingDraft}
+        saving={onboardingSaving}
+        onDraftChange={setOnboardingDraft}
+        onSubmit={handleOnboardingSave}
+      />
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>
@@ -224,16 +466,6 @@ export default function DashboardPage() {
                 className={cn(
                   "text-xs px-3 py-1.5 rounded-full border transition-colors",
                   mode === "manual"
-                    ? "border-slate-400 bg-slate-100 text-slate-800"
-                    : "border-slate-200 text-slate-600 hover:border-slate-300"
-                )}
-              >
-                Start manually
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Entry cards ──────────────────────────────────────────────────────── */}
       <div className="grid sm:grid-cols-2 gap-4 mb-10">
