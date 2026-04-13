@@ -16,12 +16,11 @@ import type { Workflow, Job } from "@/lib/types";
 import type { WorkflowState } from "@/types/database";
 import { resolveAppEntry } from "@/lib/entry-routing";
 import {
-  DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
   hasConfirmedOnboardingPreferences,
   isOnboardingComplete,
+  type OnboardingContactPreferences,
   type OnboardingProfileDraft,
 } from "@/lib/onboarding-memory";
-import { OnboardingModal, type OnboardingDraft } from "@/components/onboarding/onboarding-modal";
 
 type Mode = "url" | "manual";
 type Step = "idle" | "parsing" | "saving";
@@ -47,18 +46,6 @@ export default function DashboardPage() {
   const [pendingListings, setPendingListings] = useState<Workflow[]>([]);
   const [inProgressJobs, setInProgressJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
-  const [onboardingSaving, setOnboardingSaving] = useState(false);
-  const [onboardingDraft, setOnboardingDraft] = useState<OnboardingDraft>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    location: "",
-    linkedinUrl: "",
-    websiteUrl: "",
-    preferences: DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
-  });
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -79,7 +66,7 @@ export default function DashboardPage() {
       setInProgressJobs(inProgress.slice(0, 3));
       setTotalJobs(inProgress.length);
 
-      let storedPreferences: Partial<OnboardingDraft["preferences"]> | null = null;
+      let storedPreferences: Partial<OnboardingContactPreferences> | null = null;
       try {
         const storedRaw = localStorage.getItem(ONBOARDING_STORAGE_KEY);
         storedPreferences = storedRaw ? JSON.parse(storedRaw) : null;
@@ -88,37 +75,16 @@ export default function DashboardPage() {
       }
 
       const preferencesConfirmed = hasConfirmedOnboardingPreferences(storedPreferences);
-      const normalizePreferences = (
-        value: Partial<OnboardingDraft["preferences"]> | null
-      ): OnboardingDraft["preferences"] => ({
-        ...DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
-        ...(value ?? {}),
-      });
-      const preferencesForForm = normalizePreferences(
-        preferencesConfirmed ? storedPreferences : null
-      );
-
-      const draft: OnboardingDraft = {
-        firstName: profile?.first_name ?? "",
-        lastName: profile?.last_name ?? "",
-        email: session?.user?.account?.email ?? "",
-        phone: profile?.phone ?? "",
-        location: profile?.location ?? "",
-        linkedinUrl: profile?.linkedin_url ?? "",
-        websiteUrl: profile?.website_url ?? "",
-        preferences: preferencesForForm,
-      };
-      setOnboardingDraft(draft);
 
       const completedOnce = Boolean(localStorage.getItem(ONBOARDING_COMPLETED_AT_KEY));
 
       const onboardingProfile: OnboardingProfileDraft = {
-        firstName: draft.firstName || null,
-        lastName: draft.lastName || null,
-        email: draft.email || null,
-        phone: draft.phone || null,
-        location: draft.location || null,
-        contactPreferences: completedOnce ? draft.preferences : null,
+        firstName: profile?.first_name ?? null,
+        lastName: profile?.last_name ?? null,
+        email: session?.user?.account?.email ?? null,
+        phone: profile?.phone ?? null,
+        location: profile?.location ?? null,
+        contactPreferences: completedOnce && preferencesConfirmed ? storedPreferences : null,
       };
 
       const activeWorkflow = activeWorkflows.find((wf) =>
@@ -133,7 +99,6 @@ export default function DashboardPage() {
       });
 
       if (resolution.destination === "onboarding_modal") {
-        setOnboardingOpen(true);
         return;
       }
       if (resolution.destination === "resume_active_action" && resolution.workflowId) {
@@ -147,32 +112,6 @@ export default function DashboardPage() {
   }, [router]);
 
   const busy = step !== "idle";
-
-  const handleOnboardingSave = async () => {
-    setOnboardingSaving(true);
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        first_name: onboardingDraft.firstName.trim() || null,
-        last_name: onboardingDraft.lastName.trim() || null,
-        phone: onboardingDraft.phone.trim() || null,
-        location: onboardingDraft.location.trim() || null,
-        linkedin_url: onboardingDraft.linkedinUrl.trim() || null,
-        website_url: onboardingDraft.websiteUrl.trim() || null,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok || data?.error) {
-      setOnboardingSaving(false);
-      throw new Error(data?.error ?? "Unable to save onboarding data.");
-    }
-
-    localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(onboardingDraft.preferences));
-    localStorage.setItem(ONBOARDING_COMPLETED_AT_KEY, new Date().toISOString());
-    setOnboardingOpen(false);
-    setOnboardingSaving(false);
-  };
 
   // Parse URL → create workflow → navigate to listing review
   const handleAnalyzeUrl = async () => {
@@ -245,13 +184,6 @@ export default function DashboardPage() {
 
   return (
     <div className="page-wrapper max-w-1000px">
-      <OnboardingModal
-        open={onboardingOpen}
-        draft={onboardingDraft}
-        saving={onboardingSaving}
-        onDraftChange={setOnboardingDraft}
-        onSubmit={handleOnboardingSave}
-      />
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>

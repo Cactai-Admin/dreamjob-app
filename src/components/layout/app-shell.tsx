@@ -9,6 +9,7 @@ import { TopNav } from "./top-nav";
 import { PrivacyScreenProvider } from "@/components/privacy-screen/privacy-screen";
 import { MobileNavSlotProvider } from "@/components/layout/mobile-nav-slot";
 import { DocControlsProvider } from "@/components/layout/doc-controls-slot";
+import { OnboardingGate } from "@/components/onboarding/onboarding-gate";
 
 interface Props {
   children: ReactNode;
@@ -26,6 +27,7 @@ export function AppShell({ children }: Props) {
     <DocControlsProvider>
     <MobileNavSlotProvider>
       <div className="h-dvh bg-slate-50 flex flex-col overflow-hidden">
+        <OnboardingGate />
         {/* Top navigation — placeholder during SSR to prevent hydration mismatch */}
         {mounted ? (
           <TopNav />
