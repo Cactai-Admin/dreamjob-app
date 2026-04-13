@@ -15,13 +15,13 @@ async function getAccountId() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: account } = await supabaseAdmin
+  const { data: accountRecord } = await supabaseAdmin
     .from('accounts')
     .select('id')
     .eq('supabase_auth_id', user.id)
     .single()
 
-  return account?.id ?? null
+  return accountRecord?.id ?? null
 }
 
 export async function GET(
