@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Link2, Sparkles, RefreshCw, ArrowRight,
+  Link2, Sparkles, RefreshCw, ArrowRight, MessageSquare,
   ChevronRight, Clock, Briefcase, Layers, AlertCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/jobs/status-badge";
@@ -21,10 +21,23 @@ import {
   type OnboardingContactPreferences,
   type OnboardingProfileDraft,
 } from "@/lib/onboarding-memory";
+type ChatMessage = {
+  id: string;
+  role: "assistant" | "user";
+  content: string;
+};
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
   const [listingText, setListingText] = useState("");
   const [profileContextKnown, setProfileContextKnown] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "stage1-intro",
+      role: "assistant",
+      content:
+        "Welcome to Stage 1. Share a job listing URL or paste listing text, and I’ll guide the analysis conversation step by step.",
+    },
+  ]);
       fetch("/api/workflows?state=listing_review").then((r) => r.json()).catch(() => []),
       fetch("/api/workflows?state=!listing_review").then((r) => r.json()).catch(() => []),
     ]).then(([profile, session, listings, active]) => {
@@ -90,14 +103,78 @@ const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
     if (nextMode === "url") {
       setTimeout(() => urlInputRef.current?.focus(), 80);
     }
+  const appendChat = (message: ChatMessage) => {
+    setChatMessages((prev) => [...prev, message]);
   };
-const greetingHour = () => {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
-};
 
+  const runIntakeSequence = (intakeSource: "url" | "text", inputPreview: string) => {
+    appendChat({
+      id: `user-intake-${Date.now()}`,
+      role: "user",
+      content: intakeSource === "url" ? `Analyze this URL: ${inputPreview}` : `I pasted the listing text.`,
+    });
+    appendChat({
+      id: `assistant-ack-${Date.now()}`,
+      role: "assistant",
+      content: "Got it — I’m parsing the opportunity now.",
+    });
+    appendChat({
+      id: `assistant-listing-${Date.now()}`,
+      role: "assistant",
+      content:
+        "Next, I’ll prepare the listing understanding bundle: role, company, level, key requirements, and notable constraints.",
+    });
+    appendChat({
+      id: `assistant-context-${Date.now()}`,
+      role: "assistant",
+      content: profileContextKnown
+        ? "Then I’ll map your known approved context to the role and call out only what is still uncertain."
+        : "Then I’ll map what we already know about you and highlight only the missing context that could block trusted positioning.",
+    });
+    appendChat({
+      id: `assistant-validation-${Date.now()}`,
+      role: "assistant",
+      content:
+        "Before positioning, I’ll give you a validation bundle so you can approve or correct the trusted working set.",
+    });
+    appendChat({
+      id: `assistant-positioning-${Date.now()}`,
+      role: "assistant",
+      content:
+        "After validation, I’ll provide a positioning outcome and guide the next choice: proceed to Stage 2, save as Future Role Target, or start over.",
+    });
+  };
+
+    appendChat({
+      id: `mode-${nextMode}-${Date.now()}`,
+      role: "assistant",
+      content:
+        nextMode === "url"
+          ? "Great — paste the listing URL and I’ll start with opportunity intake."
+          : "Great — paste the listing text and I’ll start with opportunity intake.",
+    });
+  };
+      runIntakeSequence("url", url.trim());
+      runIntakeSequence("text", listingText.trim());
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <MessageSquare className="w-3.5 h-3.5" />
+          Stage 1 guided chat
+        </div>
+
+        <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+          {chatMessages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "max-w-[90%] rounded-lg px-3 py-2 text-sm",
+                message.role === "assistant"
+                  ? "bg-white border border-slate-200 text-slate-800"
+                  : "ml-auto bg-sky-600 text-white"
+              )}
+            >
+              {message.content}
+            </div>
+          ))}
   const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string) => {
     const wfRes = await fetch("/api/workflows", {
       method: "POST",
@@ -276,16 +353,6 @@ const greetingHour = () => {
                 className={cn(
                   "text-xs px-3 py-1.5 rounded-full border transition-colors",
                   mode === "manual"
-                    ? "border-slate-400 bg-slate-100 text-slate-800"
-                    : "border-slate-200 text-slate-600 hover:border-slate-300"
-                )}
-              >
-                Start manually
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Entry cards ──────────────────────────────────────────────────────── */}
       <div className="grid sm:grid-cols-2 gap-4 mb-10">
