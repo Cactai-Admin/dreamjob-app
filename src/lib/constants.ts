@@ -51,6 +51,10 @@ export const WORKFLOW_STATES: Record<
     label: 'Archived',
     description: 'Workflow has been archived.',
   },
+  draft: {
+    label: 'Draft',
+    description: 'Application has started and is currently in progress.',
+  },
 }
 
 export const OUTPUT_TYPES: Record<OutputType, { label: string }> = {
@@ -73,6 +77,11 @@ export const STATUS_EVENTS: Record<
   rejected: { label: 'Rejected', dependencies: ['sent'] },
   ghosted: { label: 'Ghosted', dependencies: ['sent'] },
   declined: { label: 'Declined', dependencies: ['offer'] },
+  ready: { label: 'Ready', dependencies: [] },
+  submitted: { label: 'Submitted', dependencies: ['sent'] },
+  interview_scheduled: { label: 'Interview Scheduled', dependencies: ['sent'] },
+  offer_received: { label: 'Offer Received', dependencies: ['interview'] },
+  withdrawn: { label: 'Withdrawn', dependencies: ['sent'] },
 }
 
 export const ACCOUNT_STATES: Record<AccountState, { label: string }> = {

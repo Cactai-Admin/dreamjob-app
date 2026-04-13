@@ -54,6 +54,11 @@ export const STATUS_DEPENDENCIES: StatusDependency = {
   rejected: ['sent'],
   ghosted: ['sent'],
   declined: ['offer'],
+  ready: [],
+  submitted: ['sent'],
+  interview_scheduled: ['sent'],
+  offer_received: ['interview'],
+  withdrawn: ['sent'],
 }
 
 /**
@@ -64,7 +69,11 @@ export const STATUS_CONFLICTS: [StatusEventType, StatusEventType][] = [
   ['hired', 'rejected'],
   ['hired', 'ghosted'],
   ['hired', 'declined'],
+  ['hired', 'withdrawn'],
   ['rejected', 'declined'],
   ['rejected', 'ghosted'],
+  ['rejected', 'withdrawn'],
   ['declined', 'ghosted'],
+  ['declined', 'withdrawn'],
+  ['ghosted', 'withdrawn'],
 ]

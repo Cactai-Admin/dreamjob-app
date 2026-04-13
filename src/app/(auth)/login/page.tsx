@@ -8,7 +8,7 @@ import { LoginBg } from '@/components/auth/login-bg'
 function LoginForm() {
   const router      = useRouter()
   const params      = useSearchParams()
-  const redirectTo  = params.get('redirect') || '/jobs'
+  const redirectTo  = params.get('redirect') || '/'
 
   const [identifier, setIdentifier] = useState('')
   const [password,   setPassword]   = useState('')
