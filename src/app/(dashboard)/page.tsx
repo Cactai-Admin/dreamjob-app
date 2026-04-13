@@ -53,6 +53,8 @@ export default function DashboardPage() {
     email: "",
     phone: "",
     location: "",
+    linkedinUrl: "",
+    websiteUrl: "",
     preferences: DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
   });
   const urlInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +94,8 @@ export default function DashboardPage() {
         email: session?.user?.account?.email ?? "",
         phone: profile?.phone ?? "",
         location: profile?.location ?? "",
+        linkedinUrl: profile?.linkedin_url ?? "",
+        websiteUrl: profile?.website_url ?? "",
         preferences: storedPreferences,
       };
       setOnboardingDraft(draft);
@@ -142,6 +146,8 @@ export default function DashboardPage() {
         last_name: onboardingDraft.lastName.trim() || null,
         phone: onboardingDraft.phone.trim() || null,
         location: onboardingDraft.location.trim() || null,
+        linkedin_url: onboardingDraft.linkedinUrl.trim() || null,
+        website_url: onboardingDraft.websiteUrl.trim() || null,
       }),
     });
     const data = await res.json();

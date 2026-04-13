@@ -10,6 +10,8 @@ export interface OnboardingDraft {
   email: string;
   phone: string;
   location: string;
+  linkedinUrl: string;
+  websiteUrl: string;
   preferences: OnboardingContactPreferences;
 }
 
@@ -96,6 +98,18 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
               placeholder="Location (city/region)"
               value={draft.location}
               onChange={(e) => onDraftChange({ ...draft, location: e.target.value })}
+            />
+            <input
+              className="form-input"
+              placeholder="LinkedIn profile URL"
+              value={draft.linkedinUrl}
+              onChange={(e) => onDraftChange({ ...draft, linkedinUrl: e.target.value })}
+            />
+            <input
+              className="form-input"
+              placeholder="Personal website URL"
+              value={draft.websiteUrl}
+              onChange={(e) => onDraftChange({ ...draft, websiteUrl: e.target.value })}
             />
           </div>
 
