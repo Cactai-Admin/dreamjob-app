@@ -13,9 +13,19 @@ import { StatusBadge } from "@/components/jobs/status-badge";
 import { cn } from "@/lib/utils";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
+import type { WorkflowState } from "@/types/database";
+import { resolveAppEntry } from "@/lib/entry-routing";
+import {
+  hasConfirmedOnboardingPreferences,
+  isOnboardingComplete,
+  type OnboardingContactPreferences,
+  type OnboardingProfileDraft,
+} from "@/lib/onboarding-memory";
 
 type Mode = "url" | "manual";
 type Step = "idle" | "parsing" | "saving";
+const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
+const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
 
 const greetingHour = () => {
   const h = new Date().getHours();
@@ -39,25 +49,76 @@ export default function DashboardPage() {
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/profile").then(r => r.json()).then(d => {
-      if (d.first_name) setFirstName(d.first_name);
-    }).catch(() => {});
-
     Promise.all([
-      fetch("/api/workflows?state=listing_review").then(r => r.json()),
-      fetch("/api/workflows?state=!listing_review").then(r => r.json()),
-    ]).then(([listings, active]) => {
-      if (Array.isArray(listings)) setPendingListings(listings.slice(0, 3));
-      if (Array.isArray(active)) {
-        const jobs = active.map(workflowToJob);
-        const inProgress = jobs.filter(j => !["hired", "declined", "rejected", "ghosted"].includes(j.status));
-        setInProgressJobs(inProgress.slice(0, 3));
-        setTotalJobs(inProgress.length);
+      fetch("/api/profile").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/auth/session").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/workflows?state=listing_review").then((r) => r.json()).catch(() => []),
+      fetch("/api/workflows?state=!listing_review").then((r) => r.json()).catch(() => []),
+    ]).then(([profile, session, listings, active]) => {
+      if (profile?.first_name) setFirstName(profile.first_name);
+
+      const activeWorkflows: Workflow[] = Array.isArray(active) ? active : [];
+      const pending = Array.isArray(listings) ? listings : [];
+      setPendingListings(pending.slice(0, 3));
+
+      const jobs = activeWorkflows.map(workflowToJob);
+      const inProgress = jobs.filter((j) => !["hired", "declined", "rejected", "ghosted"].includes(j.status));
+      setInProgressJobs(inProgress.slice(0, 3));
+      setTotalJobs(inProgress.length);
+
+      let storedPreferences: Partial<OnboardingContactPreferences> | null = null;
+      try {
+        const storedRaw = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+        storedPreferences = storedRaw ? JSON.parse(storedRaw) : null;
+      } catch {
+        // ignore malformed local storage
+      }
+
+      const preferencesConfirmed = hasConfirmedOnboardingPreferences(storedPreferences);
+
+      const completedOnce = Boolean(localStorage.getItem(ONBOARDING_COMPLETED_AT_KEY));
+
+      const onboardingProfile: OnboardingProfileDraft = {
+        firstName: profile?.first_name ?? null,
+        lastName: profile?.last_name ?? null,
+        email: session?.user?.account?.email ?? null,
+        phone: profile?.phone ?? null,
+        location: profile?.location ?? null,
+        contactPreferences: completedOnce && preferencesConfirmed ? storedPreferences : null,
+      };
+
+      const activeWorkflow = activeWorkflows.find((wf) =>
+        !["listing_review", "completed", "archived"].includes(wf.state)
+      );
+      const hasAlerts = activeWorkflows.some((wf) => ["ready", "ready_to_send"].includes(wf.state));
+      const resolution = resolveAppEntry({
+        onboardingComplete: isOnboardingComplete(onboardingProfile),
+        activeWorkflowId: activeWorkflow?.id,
+        activeWorkflowState: (activeWorkflow?.state as WorkflowState | undefined) ?? null,
+        hasAlerts,
+      });
+
+      if (resolution.destination === "onboarding_modal") {
+        return;
+      }
+      if (resolution.destination === "resume_active_action" && resolution.workflowId) {
+        router.replace(`/jobs/${resolution.workflowId}`);
+        return;
+      }
+      if (resolution.destination === "dashboard_alerts") {
+        router.replace("/jobs");
       }
     }).catch(() => {});
-  }, []);
+  }, [router]);
 
   const busy = step !== "idle";
+  const selectGuidedPath = (nextMode: Mode) => {
+    setMode(nextMode);
+    setError(null);
+    if (nextMode === "url") {
+      setTimeout(() => urlInputRef.current?.focus(), 80);
+    }
+  };
 
   // Parse URL → create workflow → navigate to listing review
   const handleAnalyzeUrl = async () => {
@@ -133,7 +194,45 @@ export default function DashboardPage() {
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">What are you applying for?</h1>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Let&apos;s analyze your next opportunity</h1>
+      </div>
+
+      {/* Stage 1 guided chat-first transition surface */}
+      <div className="card-base p-5 mb-6">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-bold">
+            AI
+          </div>
+          <div className="flex-1">
+            <p className="text-sm text-slate-800">
+              I can guide Stage 1 for you. Share a listing URL to start analysis, or begin with title + company and we&apos;ll fill details together.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                onClick={() => selectGuidedPath("url")}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  mode === "url"
+                    ? "border-sky-300 bg-sky-50 text-sky-700"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                )}
+              >
+                Analyze a URL
+              </button>
+              <button
+                onClick={() => selectGuidedPath("manual")}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                  mode === "manual"
+                    ? "border-slate-400 bg-slate-100 text-slate-800"
+                    : "border-slate-200 text-slate-600 hover:border-slate-300"
+                )}
+              >
+                Start manually
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Entry cards ──────────────────────────────────────────────────────── */}
