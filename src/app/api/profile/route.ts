@@ -15,13 +15,13 @@ async function getAccountId() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: account } = await supabaseAdmin
+  const { data: accountRecord } = await supabaseAdmin
     .from('accounts')
     .select('id')
     .eq('supabase_auth_id', user.id)
     .single()
 
-  return account?.id ?? null
+  return accountRecord?.id ?? null
 }
 
 export async function GET() {
@@ -36,7 +36,7 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  const { data: account } = await supabaseAdmin
+  const { data: accountRecord } = await supabaseAdmin
     .from('accounts')
     .select('email')
     .eq('id', accountId)
@@ -44,7 +44,7 @@ export async function GET() {
 
   return NextResponse.json({
     ...data,
-    email: account?.email ?? null,
+    email: accountRecord?.email ?? null,
     // Backward-compatible alias for legacy consumers.
     portfolio_url: data.website_url ?? null,
   })
@@ -52,7 +52,7 @@ export async function GET() {
     body.website_url = body.portfolio_url
   }
 
-  const { data: account } = await supabaseAdmin
+  const { data: accountRecord } = await supabaseAdmin
     .from('accounts')
     .select('email')
     .eq('id', accountId)
@@ -60,7 +60,7 @@ export async function GET() {
 
   return NextResponse.json({
     ...data,
-    email: account?.email ?? null,
+    email: accountRecord?.email ?? null,
     portfolio_url: data.website_url ?? null,
   })
     .from('accounts')
