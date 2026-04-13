@@ -13,9 +13,18 @@ import { StatusBadge } from "@/components/jobs/status-badge";
 import { cn } from "@/lib/utils";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
+import type { WorkflowState } from "@/types/database";
+import { resolveAppEntry } from "@/lib/entry-routing";
+import {
+  DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
+  isOnboardingComplete,
+  type OnboardingProfileDraft,
+} from "@/lib/onboarding-memory";
+import { OnboardingModal, type OnboardingDraft } from "@/components/onboarding/onboarding-modal";
 
 type Mode = "url" | "manual";
 type Step = "idle" | "parsing" | "saving";
+const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 
 const greetingHour = () => {
   const h = new Date().getHours();
@@ -36,28 +45,115 @@ export default function DashboardPage() {
   const [pendingListings, setPendingListings] = useState<Workflow[]>([]);
   const [inProgressJobs, setInProgressJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [onboardingDraft, setOnboardingDraft] = useState<OnboardingDraft>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    location: "",
+    preferences: DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
+  });
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/profile").then(r => r.json()).then(d => {
-      if (d.first_name) setFirstName(d.first_name);
-    }).catch(() => {});
-
     Promise.all([
-      fetch("/api/workflows?state=listing_review").then(r => r.json()),
-      fetch("/api/workflows?state=!listing_review").then(r => r.json()),
-    ]).then(([listings, active]) => {
-      if (Array.isArray(listings)) setPendingListings(listings.slice(0, 3));
-      if (Array.isArray(active)) {
-        const jobs = active.map(workflowToJob);
-        const inProgress = jobs.filter(j => !["hired", "declined", "rejected", "ghosted"].includes(j.status));
-        setInProgressJobs(inProgress.slice(0, 3));
-        setTotalJobs(inProgress.length);
+      fetch("/api/profile").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/auth/session").then((r) => r.json()).catch(() => ({})),
+      fetch("/api/workflows?state=listing_review").then((r) => r.json()).catch(() => []),
+      fetch("/api/workflows?state=!listing_review").then((r) => r.json()).catch(() => []),
+    ]).then(([profile, session, listings, active]) => {
+      if (profile?.first_name) setFirstName(profile.first_name);
+
+      const activeWorkflows: Workflow[] = Array.isArray(active) ? active : [];
+      const pending = Array.isArray(listings) ? listings : [];
+      setPendingListings(pending.slice(0, 3));
+
+      const jobs = activeWorkflows.map(workflowToJob);
+      const inProgress = jobs.filter((j) => !["hired", "declined", "rejected", "ghosted"].includes(j.status));
+      setInProgressJobs(inProgress.slice(0, 3));
+      setTotalJobs(inProgress.length);
+
+      let storedPreferences = DEFAULT_ONBOARDING_CONTACT_PREFERENCES;
+      try {
+        const stored = JSON.parse(localStorage.getItem(ONBOARDING_STORAGE_KEY) ?? "{}");
+        storedPreferences = {
+          ...DEFAULT_ONBOARDING_CONTACT_PREFERENCES,
+          ...stored,
+        };
+      } catch {
+        // ignore malformed local storage
+      }
+
+      const draft: OnboardingDraft = {
+        firstName: profile?.first_name ?? "",
+        lastName: profile?.last_name ?? "",
+        email: session?.user?.account?.email ?? "",
+        phone: profile?.phone ?? "",
+        location: profile?.location ?? "",
+        preferences: storedPreferences,
+      };
+      setOnboardingDraft(draft);
+
+      const onboardingProfile: OnboardingProfileDraft = {
+        firstName: draft.firstName || null,
+        lastName: draft.lastName || null,
+        email: draft.email || null,
+        phone: draft.phone || null,
+        location: draft.location || null,
+        contactPreferences: draft.preferences,
+      };
+
+      const activeWorkflow = activeWorkflows.find((wf) =>
+        !["listing_review", "completed", "archived"].includes(wf.state)
+      );
+      const hasAlerts = activeWorkflows.some((wf) => ["ready", "ready_to_send"].includes(wf.state));
+      const resolution = resolveAppEntry({
+        onboardingComplete: isOnboardingComplete(onboardingProfile),
+        activeWorkflowId: activeWorkflow?.id,
+        activeWorkflowState: (activeWorkflow?.state as WorkflowState | undefined) ?? null,
+        hasAlerts,
+      });
+
+      if (resolution.destination === "onboarding_modal") {
+        setOnboardingOpen(true);
+        return;
+      }
+      if (resolution.destination === "resume_active_action" && resolution.workflowId) {
+        router.replace(`/jobs/${resolution.workflowId}`);
+        return;
+      }
+      if (resolution.destination === "dashboard_alerts") {
+        router.replace("/jobs");
       }
     }).catch(() => {});
-  }, []);
+  }, [router]);
 
   const busy = step !== "idle";
+
+  const handleOnboardingSave = async () => {
+    setOnboardingSaving(true);
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_name: onboardingDraft.firstName.trim() || null,
+        last_name: onboardingDraft.lastName.trim() || null,
+        phone: onboardingDraft.phone.trim() || null,
+        location: onboardingDraft.location.trim() || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      setOnboardingSaving(false);
+      throw new Error(data?.error ?? "Unable to save onboarding data.");
+    }
+
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(onboardingDraft.preferences));
+    setOnboardingOpen(false);
+    setOnboardingSaving(false);
+  };
 
   // Parse URL → create workflow → navigate to listing review
   const handleAnalyzeUrl = async () => {
@@ -130,6 +226,13 @@ export default function DashboardPage() {
 
   return (
     <div className="page-wrapper max-w-1000px">
+      <OnboardingModal
+        open={onboardingOpen}
+        draft={onboardingDraft}
+        saving={onboardingSaving}
+        onDraftChange={setOnboardingDraft}
+        onSubmit={handleOnboardingSave}
+      />
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>
