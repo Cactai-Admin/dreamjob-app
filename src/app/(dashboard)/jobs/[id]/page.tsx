@@ -19,7 +19,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { workflowToJob, deriveApplicationStatus, deriveAllStatuses } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
 
 const EXCLUSIVE_GROUP = new Set<ApplicationStatus>(["hired", "declined", "ghosted", "rejected"]);
 
@@ -59,7 +58,44 @@ const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: stri
   { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
 ];
 
+function parseReqs(val: unknown): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    const t = val.trim();
+    if (t.startsWith("[")) { try { return JSON.parse(t); } catch { /* fall */ } }
+    if (t.startsWith("{") && t.endsWith("}")) return t.slice(1, -1).split(",").map(s => s.trim()).filter(Boolean);
+    if (t.includes("\n")) return t.split("\n").map(s => s.trim()).filter(Boolean);
+    return t ? [t] : [];
+  }
+  return [];
+}
+
 type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
+
+function computeMatch(reqs: string[], skills: string[], keywords: string[], tools: string[], certs: string[], clearances: string[], tech: string[], manuallyMarked: string[] = []) {
+  const userTerms = [...new Set(
+    [...skills, ...keywords, ...tools, ...certs, ...clearances, ...tech].map(s => s.toLowerCase().trim()).filter(s => s.length > 2)
+  )];
+  if (userTerms.length === 0 && manuallyMarked.length === 0 || reqs.length === 0) return { score: 0, matched: [] as string[], missing: [] as string[] };
+  const termCoversReq = (u: string, rLow: string) => {
+    if (rLow.includes(u)) return true;
+    const words = u.split(/\s+/).filter(w => w.length >= 4);
+    return words.length > 0 && words.some(w => rLow.includes(w));
+  };
+  const matchedTerms: string[] = [];
+  for (const t of userTerms) {
+    if (reqs.some(req => termCoversReq(t, req.toLowerCase()))) matchedTerms.push(t);
+  }
+  const coveredReqs = reqs.map(req => {
+    if (manuallyMarked.includes(req)) return true;
+    const rLow = req.toLowerCase();
+    return userTerms.some(u => termCoversReq(u, rLow));
+  });
+  const score = Math.round((coveredReqs.filter(Boolean).length / reqs.length) * 100);
+  const missing = reqs.filter((_, i) => !coveredReqs[i]);
+  return { score, matched: matchedTerms.slice(0, 12), missing: missing.slice(0, 10) };
+}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -142,7 +178,7 @@ export default function JobDetailPage({ params }: Props) {
         setEditWebsite(l.company_website_url ?? wf.company?.website_url ?? "");
         setEditLinkedIn(wf.company?.linkedin_url ?? "");
         setEditDescription(l.description ?? "");
-        setEditReqs(parseRequirements(l.requirements));
+        setEditReqs(parseReqs(l.requirements));
         setEditAdditional(l.responsibilities ?? "");
         setNotes(wf.notes ?? "");
 
@@ -325,16 +361,7 @@ export default function JobDetailPage({ params }: Props) {
   if (!job || !workflow) return notFound();
 
   const linkedInUrl = editLinkedIn || workflow.company?.linkedin_url || "";
-  const match = computeRequirementMatch({
-    requirements: editReqs,
-    skills: profSkills,
-    keywords: profKeywords,
-    tools: profTools,
-    certifications: profCerts,
-    clearances: profClearances,
-    technologies: empTech,
-    manuallyMarked,
-  });
+  const match = computeMatch(editReqs, profSkills, profKeywords, profTools, profCerts, profClearances, empTech, manuallyMarked);
   const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
 
   return (
