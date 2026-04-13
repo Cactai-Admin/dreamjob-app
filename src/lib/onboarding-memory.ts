@@ -47,7 +47,8 @@ export function isOnboardingComplete(draft: OnboardingProfileDraft): boolean {
   return Boolean(
     draft.firstName?.trim() &&
       draft.lastName?.trim() &&
-      (draft.email?.trim() || draft.phone?.trim()) &&
+      draft.email?.trim() &&
+      draft.phone?.trim() &&
       draft.location?.trim() &&
       hasConfirmedOnboardingPreferences(draft.contactPreferences)
   )

@@ -26,7 +26,8 @@ interface Props {
 type StepKey =
   | "firstName"
   | "lastName"
-  | "contact"
+  | "email"
+  | "phone"
   | "location"
   | "linkedin"
   | "website"
@@ -35,7 +36,7 @@ type StepKey =
 
 export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }: Props) {
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<StepKey>("firstName");
+  const [step, setStep] = useState<StepKey>("linkedin");
   const [input, setInput] = useState("");
 
   const addTurn = (text: string, next: StepKey, updater: (value: string) => void) => {
@@ -60,8 +61,17 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
     draft.firstName.trim() &&
       draft.lastName.trim() &&
       draft.location.trim() &&
-      (draft.email.trim() || draft.phone.trim())
+      draft.email.trim() &&
+      draft.phone.trim()
   );
+  const requiredStep: StepKey | null =
+    !draft.firstName.trim() ? "firstName"
+      : !draft.lastName.trim() ? "lastName"
+        : !draft.email.trim() ? "email"
+          : !draft.phone.trim() ? "phone"
+            : !draft.location.trim() ? "location"
+              : null;
+  const activeStep: StepKey = requiredStep ?? step;
 
   return (
     <Dialog open={open}>
@@ -90,7 +100,7 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
             )}
             {(draft.email || draft.phone) && (
               <div className="bg-sky-50 border border-sky-100 rounded-lg p-2.5 text-slate-800">
-                Contact: {draft.email || draft.phone}
+                Email: {draft.email || "(missing)"} · Phone: {draft.phone || "(missing)"}
               </div>
             )}
             {draft.location && (
@@ -110,52 +120,55 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
             )}
           </div>
 
-          {step !== "preferences" && step !== "review" && (
+          {activeStep !== "preferences" && activeStep !== "review" && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-slate-600">
                 {{
                   firstName: "What first name should I use?",
                   lastName: "Great. And your last name?",
-                  contact: "What&apos;s the best contact detail to include (email or phone)?",
+                  email: "What email should appear on application materials?",
+                  phone: "What phone number should appear on application materials?",
                   location: "What location should appear on your materials?",
                   linkedin: "Optional: LinkedIn profile URL?",
                   website: "Optional: personal website URL?",
-                }[step]}
+                }[activeStep]}
               </p>
               <div className="flex gap-2">
                 <input
                   className="form-input flex-1"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={step === "contact" ? "you@example.com or phone" : "Type your response"}
+                  placeholder={
+                    activeStep === "email"
+                      ? "you@example.com"
+                      : activeStep === "phone"
+                        ? "(555) 123-4567"
+                        : "Type your response"
+                  }
                   onKeyDown={(e) => {
                     if (e.key !== "Enter") return;
-                    if (step === "firstName") addTurn(input, "lastName", (v) => onDraftChange({ ...draft, firstName: v }));
-                    else if (step === "lastName") addTurn(input, "contact", (v) => onDraftChange({ ...draft, lastName: v }));
-                    else if (step === "contact") addTurn(input, "location", (v) => {
-                      if (v.includes("@")) onDraftChange({ ...draft, email: v });
-                      else onDraftChange({ ...draft, phone: v });
-                    });
-                    else if (step === "location") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, location: v }));
-                    else if (step === "linkedin") addTurn(input, "website", (v) => onDraftChange({ ...draft, linkedinUrl: v }));
-                    else if (step === "website") addTurn(input, "preferences", (v) => onDraftChange({ ...draft, websiteUrl: v }));
+                    if (activeStep === "firstName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, firstName: v }));
+                    else if (activeStep === "lastName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, lastName: v }));
+                    else if (activeStep === "email") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, email: v }));
+                    else if (activeStep === "phone") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, phone: v }));
+                    else if (activeStep === "location") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, location: v }));
+                    else if (activeStep === "linkedin") addTurn(input, "website", (v) => onDraftChange({ ...draft, linkedinUrl: v }));
+                    else if (activeStep === "website") addTurn(input, "preferences", (v) => onDraftChange({ ...draft, websiteUrl: v }));
                   }}
                 />
                 <button
                   className="btn-ocean px-3 py-2"
                   onClick={() => {
-                    if (step === "firstName") addTurn(input, "lastName", (v) => onDraftChange({ ...draft, firstName: v }));
-                    else if (step === "lastName") addTurn(input, "contact", (v) => onDraftChange({ ...draft, lastName: v }));
-                    else if (step === "contact") addTurn(input, "location", (v) => {
-                      if (v.includes("@")) onDraftChange({ ...draft, email: v });
-                      else onDraftChange({ ...draft, phone: v });
-                    });
-                    else if (step === "location") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, location: v }));
-                    else if (step === "linkedin") {
+                    if (activeStep === "firstName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, firstName: v }));
+                    else if (activeStep === "lastName") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, lastName: v }));
+                    else if (activeStep === "email") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, email: v }));
+                    else if (activeStep === "phone") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, phone: v }));
+                    else if (activeStep === "location") addTurn(input, "linkedin", (v) => onDraftChange({ ...draft, location: v }));
+                    else if (activeStep === "linkedin") {
                       if (input.trim()) onDraftChange({ ...draft, linkedinUrl: input.trim() });
                       setInput("");
                       setStep("website");
-                    } else if (step === "website") {
+                    } else if (activeStep === "website") {
                       if (input.trim()) onDraftChange({ ...draft, websiteUrl: input.trim() });
                       setInput("");
                       setStep("preferences");
@@ -165,12 +178,12 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
                   Continue
                 </button>
               </div>
-              {(step === "linkedin" || step === "website") && (
+              {(activeStep === "linkedin" || activeStep === "website") && requiredStep === null && (
                 <button
                   className="text-xs text-slate-500 hover:text-slate-700"
                   onClick={() => {
                     setInput("");
-                    setStep(step === "linkedin" ? "website" : "preferences");
+                    setStep(activeStep === "linkedin" ? "website" : "preferences");
                   }}
                 >
                   Skip for now
@@ -179,7 +192,7 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
             </div>
           )}
 
-          {step === "preferences" && (
+          {activeStep === "preferences" && (
             <div className="rounded-xl border border-slate-200 p-3">
               <p className="text-xs font-semibold text-slate-600 mb-2">What should DreamJob include in application materials?</p>
               <div className="grid sm:grid-cols-2 gap-2 text-sm text-slate-700">
@@ -214,7 +227,7 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
 
           {error && <p className="text-xs text-red-600">{error}</p>}
 
-          {step === "review" && (
+          {activeStep === "review" && (
             <div className="flex justify-end">
               <button
                 disabled={!isComplete || saving}
