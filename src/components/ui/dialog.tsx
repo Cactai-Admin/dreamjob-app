@@ -33,12 +33,8 @@ const DialogContent = React.forwardRef<
     showCloseButton?: boolean
   }
 >(({ className, children, showCloseButton = true, ...props }, ref) => (
-      {showCloseButton && (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-[8px] p-1 text-foreground-subtle opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-object">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </DialogPrimitive.Close>
-      )}
+  <DialogPortal>
+    <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
