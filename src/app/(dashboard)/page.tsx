@@ -12,6 +12,7 @@ import {
 import { SharedChatShell } from "@/components/chat/shared-chat-shell";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, type ChatThreadTurn, type ThreadAction } from "@/lib/chat-thread-model";
+import { computeRequirementMatch, parseRequirements } from "@/lib/listing-match";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
 import type { WorkflowState } from "@/types/database";
@@ -60,6 +61,20 @@ export default function DashboardPage() {
   });
   const [conversationMode, setConversationMode] = useState<"onboarding" | "intake" | "find_jobs">("onboarding");
   const [pendingField, setPendingField] = useState<keyof typeof onboardingDraft | null>(null);
+  const [trustedProfile, setTrustedProfile] = useState({
+    headline: "",
+    summary: "",
+    skills: [] as string[],
+    keywords: [] as string[],
+    tools: [] as string[],
+    clearances: [] as string[],
+    certifications: [] as string[],
+    yearsExperience: 0 as number | null,
+  });
+  const [pendingParsed, setPendingParsed] = useState<Record<string, unknown> | null>(null);
+  const [pendingSourceUrl, setPendingSourceUrl] = useState<string | undefined>(undefined);
+  const [awaitingCollection, setAwaitingCollection] = useState<string | null>(null);
+  const [awaitingBranchAction, setAwaitingBranchAction] = useState(false);
   const onboardingInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -70,6 +85,16 @@ export default function DashboardPage() {
       fetch("/api/workflows?state=!listing_review").then((r) => r.json()).catch(() => []),
     ]).then(([profile, session, listings, active]) => {
       if (profile?.first_name) setFirstName(profile.first_name);
+      setTrustedProfile({
+        headline: profile?.headline ?? "",
+        summary: profile?.summary ?? "",
+        skills: Array.isArray(profile?.skills) ? profile.skills : [],
+        keywords: Array.isArray(profile?.keywords) ? profile.keywords : [],
+        tools: Array.isArray(profile?.tools) ? profile.tools : [],
+        clearances: Array.isArray(profile?.clearances) ? profile.clearances : [],
+        certifications: Array.isArray(profile?.certifications) ? profile.certifications : [],
+        yearsExperience: typeof profile?.years_experience === "number" ? profile.years_experience : null,
+      });
       setProfileContextKnown(Boolean(
         profile?.headline || profile?.location || profile?.summary || profile?.skills?.length
       ));
@@ -215,7 +240,121 @@ export default function DashboardPage() {
     });
   };
 
-  const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string) => {
+  const summarizeListingBundle = (parsed: Record<string, unknown>) => {
+    const requirements = parseRequirements(parsed.requirements as string[] | string | null | undefined);
+    const themes = requirements.slice(0, 4).map((r) => `• ${r}`).join("\n") || "• Requirements were limited in the source listing.";
+    const hardConstraints = requirements
+      .filter((r) => /(clearance|work authorization|citizen|onsite|on-site|years? of experience)/i.test(r))
+      .slice(0, 3)
+      .map((r) => `• ${r}`)
+      .join("\n") || "• No explicit hard constraints detected.";
+    const level =
+      (parsed.experience_level as string | null | undefined)
+      ?? (/senior|lead|principal/i.test(String(parsed.title ?? "")) ? "senior" : "unspecified");
+
+    return [
+      `**Listing understanding bundle**`,
+      `Role: ${String(parsed.title ?? "Unknown role")}`,
+      `Company: ${String(parsed.company_name ?? parsed.company ?? "Unknown company")}`,
+      `Location/work mode: ${String(parsed.location ?? "Not specified")}`,
+      `Estimated level: ${level}`,
+      `Major requirement themes:\n${themes}`,
+      `Hard requirements/constraints:\n${hardConstraints}`,
+    ].join("\n");
+  };
+
+  const summarizeUserContextBundle = (parsed: Record<string, unknown>) => {
+    const requirements = parseRequirements(parsed.requirements as string[] | string | null | undefined);
+    const match = computeRequirementMatch({
+      requirements,
+      skills: trustedProfile.skills,
+      keywords: trustedProfile.keywords,
+      tools: trustedProfile.tools,
+      certifications: trustedProfile.certifications,
+      clearances: trustedProfile.clearances,
+      technologies: [],
+      manuallyMarked: [],
+    });
+
+    const known = [
+      trustedProfile.headline ? `• Headline captured` : null,
+      trustedProfile.summary ? `• Summary captured` : null,
+      trustedProfile.skills.length ? `• ${trustedProfile.skills.length} skills` : null,
+      trustedProfile.tools.length ? `• ${trustedProfile.tools.length} tools` : null,
+    ].filter(Boolean).join("\n") || "• Limited approved profile context currently available.";
+
+    const inferred = [
+      `• Requirement match score currently estimates **${match.score}%**`,
+      match.matched.length ? `• Likely aligned terms: ${match.matched.slice(0, 5).join(", ")}` : "• No strong aligned terms detected yet.",
+    ].join("\n");
+
+    const unknown = [
+      !trustedProfile.summary ? "• No approved summary yet" : null,
+      !trustedProfile.skills.length ? "• Skills list is sparse for this role" : null,
+      match.missing.length ? `• Missing/unclear requirement terms: ${match.missing.slice(0, 4).join(", ")}` : null,
+    ].filter(Boolean).join("\n") || "• No blocking unknowns identified.";
+
+    return {
+      message: [
+        `**User-in-context bundle**`,
+        `Known / trusted:\n${known}`,
+        `Inferred / likely:\n${inferred}`,
+        `Unknown / missing:\n${unknown}`,
+      ].join("\n"),
+      match,
+    };
+  };
+
+  const derivePositioningOutcome = (score: number) => {
+    if (score >= 90 && (trustedProfile.yearsExperience ?? 0) >= 8) return "Overqualified";
+    if (score >= 75) return "Strong Fit";
+    if (score >= 60) return "Healthy Stretch";
+    if (score >= 40) return "Big Stretch";
+    return "Future Role Target";
+  };
+
+  const runStage1OperationalFlow = async (parsed: Record<string, unknown>) => {
+    setPendingParsed(parsed);
+    appendChat({ id: `assistant-listing-bundle-${Date.now()}`, role: "assistant", content: summarizeListingBundle(parsed) });
+
+    const userBundle = summarizeUserContextBundle(parsed);
+    appendChat({ id: `assistant-user-bundle-${Date.now()}`, role: "assistant", content: userBundle.message });
+
+    if (!trustedProfile.summary || userBundle.match.missing.length > 4) {
+      const prompt = !trustedProfile.summary
+        ? "Targeted collection: share one recent accomplishment most relevant to this role."
+        : `Targeted collection: confirm one requirement you can strongly support: ${userBundle.match.missing[0]}`;
+      setAwaitingCollection(prompt);
+      appendChat({ id: `assistant-collect-${Date.now()}`, role: "assistant", content: prompt });
+      return;
+    }
+
+    appendChat({
+      id: `assistant-validation-${Date.now()}`,
+      role: "assistant",
+      content: `**Validation bundle**\nTrusted opportunity understanding and your trusted profile context are sufficient.\nKey matches: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited"}\nKey gaps: ${userBundle.match.missing.slice(0, 3).join(", ") || "none major"}\nNon-blocking unknowns: ${userBundle.match.missing.length > 3 ? "some requirement depth remains unknown" : "none"}.`,
+    });
+
+    const outcome = derivePositioningOutcome(userBundle.match.score);
+    appendChat({
+      id: `assistant-position-${Date.now()}`,
+      role: "assistant",
+      content: `**Positioning outcome: ${outcome}**\nWhy: estimated match score ${userBundle.match.score}% with current trusted context.\nBest next move: ${outcome === "Future Role Target" ? "save this role as a future target and gather evidence for gaps." : "proceed to Stage 2 and tailor artifacts."}`,
+    });
+    setAwaitingBranchAction(true);
+    appendChat({
+      id: `assistant-next-actions-${Date.now()}`,
+      role: "assistant",
+      content: "Choose your next step:",
+      actions: [
+        { id: "proceed-stage2", kind: "action_card", label: "Proceed to Stage 2" },
+        { id: "save-future-target", kind: "action_card", label: "Save as Future Role Target" },
+        { id: "start-over", kind: "action_card", label: "Start over" },
+      ],
+    });
+  };
+
+  const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string, navigate = true) => {
     const wfRes = await fetch("/api/workflows", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -237,7 +376,8 @@ export default function DashboardPage() {
     });
     const wf = await wfRes.json();
     if (!wfRes.ok) throw new Error(wf.error ?? "Failed to save listing");
-    router.push(`/listings/${wf.id}`);
+    if (navigate) router.push(`/listings/${wf.id}`);
+    return wf;
   };
 
   // Parse URL → create workflow → navigate to listing review
@@ -258,7 +398,9 @@ export default function DashboardPage() {
       if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to parse listing URL");
 
       setStep("saving");
-      await createWorkflowFromParsed(parsed, urlText.trim());
+      setPendingSourceUrl(urlText.trim());
+      await runStage1OperationalFlow(parsed);
+      setStep("idle");
     } catch (e) {
       setStep("idle");
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -289,7 +431,9 @@ export default function DashboardPage() {
       if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to intake listing text");
 
       setStep("saving");
-      await createWorkflowFromParsed(parsed);
+      setPendingSourceUrl(undefined);
+      await runStage1OperationalFlow(parsed);
+      setStep("idle");
     } catch (e) {
       setStep("idle");
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -314,6 +458,37 @@ export default function DashboardPage() {
     const value = text.trim();
     if (!value || busy) return;
     appendChat({ id: `user-${Date.now()}`, role: "user", content: value });
+
+    if (awaitingCollection) {
+      setAwaitingCollection(null);
+      appendChat({ id: `assistant-collect-thanks-${Date.now()}`, role: "assistant", content: "Great — that helps tighten your positioning confidence." });
+      if (pendingParsed) {
+        const userBundle = summarizeUserContextBundle(pendingParsed);
+        appendChat({
+          id: `assistant-validation-after-collect-${Date.now()}`,
+          role: "assistant",
+          content: `**Validation bundle**\nTrusted opportunity understanding and user context are now sufficient for next-step guidance.\nKey matches: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited"}\nKey gaps: ${userBundle.match.missing.slice(0, 3).join(", ") || "none major"}\nNon-blocking unknowns: reduced after your clarification.`,
+        });
+        const outcome = derivePositioningOutcome(userBundle.match.score);
+        appendChat({
+          id: `assistant-position-after-collect-${Date.now()}`,
+          role: "assistant",
+          content: `**Positioning outcome: ${outcome}**\nWhy: estimated match score ${userBundle.match.score}% plus your latest context.\nBest next move: ${outcome === "Future Role Target" ? "save as a future target and close gaps." : "proceed to Stage 2."}`,
+        });
+        setAwaitingBranchAction(true);
+        appendChat({
+          id: `assistant-next-actions-after-collect-${Date.now()}`,
+          role: "assistant",
+          content: "Choose your next step:",
+          actions: [
+            { id: "proceed-stage2", kind: "action_card", label: "Proceed to Stage 2" },
+            { id: "save-future-target", kind: "action_card", label: "Save as Future Role Target" },
+            { id: "start-over", kind: "action_card", label: "Start over" },
+          ],
+        });
+      }
+      return;
+    }
 
     if (conversationMode === "onboarding" && pendingField) {
       const nextDraft = { ...onboardingDraft, [pendingField]: value };
@@ -377,6 +552,37 @@ export default function DashboardPage() {
     });
   };
 
+  const handleThreadAction = async (action: ThreadAction) => {
+    if (!awaitingBranchAction) return;
+    if (action.id === "start-over") {
+      setAwaitingBranchAction(false);
+      setPendingParsed(null);
+      setPendingSourceUrl(undefined);
+      appendChat({ id: `assistant-restart-${Date.now()}`, role: "assistant", content: "No problem — let’s start fresh. Paste a URL, listing text, or ask me to find jobs." });
+      return;
+    }
+    if (!pendingParsed) return;
+
+    if (action.id === "proceed-stage2") {
+      const wf = await createWorkflowFromParsed(pendingParsed, pendingSourceUrl, false);
+      setAwaitingBranchAction(false);
+      appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Great — moving this opportunity into Stage 2 now." });
+      router.push(`/listings/${wf.id}`);
+      return;
+    }
+
+    if (action.id === "save-future-target") {
+      const wf = await createWorkflowFromParsed(pendingParsed, pendingSourceUrl, false);
+      await fetch(`/api/workflows/${wf.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: "archived", is_active: false, notes: "Saved as future role target from Stage 1 chat." }),
+      });
+      setAwaitingBranchAction(false);
+      appendChat({ id: `assistant-future-${Date.now()}`, role: "assistant", content: "Saved as a Future Role Target. You can revisit it any time from your listings/workflows." });
+    }
+  };
+
   return (
     <div className="page-wrapper max-w-1000px">
       {/* Greeting */}
@@ -396,6 +602,7 @@ export default function DashboardPage() {
           messages={stage1Thread}
           isTyping={busy}
           onSend={handleThreadInput}
+          onAction={handleThreadAction}
           headerTitle="Stage 1 Thread"
           headerSubtitle={conversationMode === "onboarding" ? "Onboarding in-thread" : "Guided intake"}
           placeholder={stage1Config.placeholder}
