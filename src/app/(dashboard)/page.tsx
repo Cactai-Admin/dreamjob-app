@@ -269,13 +269,6 @@ export default function DashboardPage() {
 
   return (
     <div className="page-wrapper max-w-1000px">
-      <OnboardingModal
-        open={onboardingOpen}
-        draft={onboardingDraft}
-        saving={onboardingSaving}
-        onDraftChange={setOnboardingDraft}
-        onSubmit={handleOnboardingSave}
-      />
       {/* Greeting */}
       <div className="mb-7">
         <p className="text-slate-400 text-sm mb-0.5">{greetingHour()}, {firstName}</p>
