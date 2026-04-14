@@ -124,7 +124,7 @@ export default function ListingReviewPage({ params }: Props) {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
     const isDup = existing.some(e => norm(e) === norm(term.trim()));
     if (!isDup) {
-        setReqs(parseRequirements(l.requirements));
+      const updated = [...existing, term.trim()];
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
