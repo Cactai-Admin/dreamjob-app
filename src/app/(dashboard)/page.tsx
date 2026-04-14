@@ -9,9 +9,11 @@ import {
   Link2, Sparkles, RefreshCw, ArrowRight, MessageSquare,
   ChevronRight, Clock, Briefcase, Layers, AlertCircle,
 } from "lucide-react";
+import { SharedChatShell } from "@/components/chat/shared-chat-shell";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 import { cn } from "@/lib/utils";
+import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, type ChatThreadTurn } from "@/lib/chat-thread-model";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
 import type { WorkflowState } from "@/types/database";
@@ -129,6 +131,14 @@ export default function DashboardPage() {
   }, [router]);
 
   const busy = step !== "idle";
+  const stage1Config = DEFAULT_SHARED_CHAT_STAGE_CONFIG.stage1;
+  const stage1Thread: ChatThreadTurn[] = chatMessages.map((message, index) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    createdAt: new Date(Date.now() + index).toISOString(),
+  }));
+
   const appendChat = (message: ChatMessage) => {
     setChatMessages((prev) => [...prev, message]);
   };
@@ -283,21 +293,14 @@ export default function DashboardPage() {
           Stage 1 guided chat
         </div>
 
-        <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-          {chatMessages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "max-w-[90%] rounded-lg px-3 py-2 text-sm",
-                message.role === "assistant"
-                  ? "bg-white border border-slate-200 text-slate-800"
-                  : "ml-auto bg-sky-600 text-white"
-              )}
-            >
-              {message.content}
-            </div>
-          ))}
-        </div>
+        <SharedChatShell
+          messages={stage1Thread}
+          inputEnabled={false}
+          headerTitle="Stage 1 Thread"
+          headerSubtitle="Guided intake"
+          emptyStateText={stage1Config.emptyStateText}
+          className="max-h-[320px]"
+        />
 
         <div className="flex flex-wrap gap-2">
           <button
