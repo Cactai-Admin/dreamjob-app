@@ -261,6 +261,7 @@ export default function ProfilePage() {
 
   const [heroForm, setHeroForm] = useState<Pick<Profile, "location" | "phone" | "linkedin_url" | "website_url" | "github_url">>({});
   const [summary, setSummary] = useState("");
+  const [editingSummary, setEditingSummary] = useState(false);
   const [savingSummary, setSavingSummary] = useState(false);
 
   // Skills
