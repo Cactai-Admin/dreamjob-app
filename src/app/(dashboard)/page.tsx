@@ -10,6 +10,7 @@ import {
   ChevronRight, Clock, Briefcase, Layers, AlertCircle,
 } from "lucide-react";
 import { StatusBadge } from "@/components/jobs/status-badge";
+import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 import { cn } from "@/lib/utils";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
