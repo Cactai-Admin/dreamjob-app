@@ -224,7 +224,6 @@ export interface Artifact {
   updated_at: string
 }
 
-  company_website_url: string | null
 export interface Company {
   id: string
   name: string
