@@ -153,8 +153,9 @@ export default function JobDetailPage({ params }: Props) {
             ? fetch(`/api/linkedin/company?listing_id=${wf.listing_id}`).then(r => r.json()).catch(() => ({}))
             : Promise.resolve({}),
           fetch("/api/profile").then(r => r.json()).catch(() => ({})),
-        setEditReqs(parseRequirements(l.requirements));
+          fetch("/api/profile/employment").then(r => r.json()).catch(() => ([])),
         ]);
+        setEditReqs(parseRequirements(l.requirements));
         if (liRes && !liRes.error) setLinkedInActive(liRes.isAuthenticated);
         if (connRes?.connections) setConnections(connRes.connections);
         if (profRes && !profRes.error) {
@@ -337,16 +338,7 @@ export default function JobDetailPage({ params }: Props) {
   });
   const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
 
-  const match = computeRequirementMatch({
-    requirements: editReqs,
-    skills: profSkills,
-    keywords: profKeywords,
-    tools: profTools,
-    certifications: profCerts,
-    clearances: profClearances,
-    technologies: empTech,
-    manuallyMarked,
-  });
+  return (
     <div className="page-wrapper max-w-1000px">
       <PageHeader
         title={job.title}
