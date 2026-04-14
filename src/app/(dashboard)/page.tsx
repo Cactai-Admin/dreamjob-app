@@ -6,14 +6,12 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Link2, Sparkles, RefreshCw, ArrowRight, MessageSquare,
+  ArrowRight, MessageSquare,
   ChevronRight, Clock, Briefcase, Layers, AlertCircle,
 } from "lucide-react";
 import { SharedChatShell } from "@/components/chat/shared-chat-shell";
 import { StatusBadge } from "@/components/jobs/status-badge";
-import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
-import { cn } from "@/lib/utils";
-import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, type ChatThreadTurn } from "@/lib/chat-thread-model";
+import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, type ChatThreadTurn, type ThreadAction } from "@/lib/chat-thread-model";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
 import type { WorkflowState } from "@/types/database";
@@ -25,12 +23,12 @@ import {
   type OnboardingProfileDraft,
 } from "@/lib/onboarding-memory";
 
-type Mode = "url" | "manual";
 type Step = "idle" | "parsing" | "saving";
 type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
+  actions?: ThreadAction[];
 };
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
@@ -44,10 +42,7 @@ const greetingHour = () => {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("url");
   const [step, setStep] = useState<Step>("idle");
-  const [url, setUrl] = useState("");
-  const [listingText, setListingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [firstName, setFirstName] = useState("there");
   const [profileContextKnown, setProfileContextKnown] = useState(false);
@@ -55,14 +50,17 @@ export default function DashboardPage() {
   const [inProgressJobs, setInProgressJobs] = useState<Job[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: "stage1-intro",
-      role: "assistant",
-      content:
-        "Welcome to Stage 1. Share a job listing URL or paste listing text, and I’ll guide the analysis conversation step by step.",
-    },
   ]);
-  const urlInputRef = useRef<HTMLInputElement>(null);
+  const [onboardingDraft, setOnboardingDraft] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    location: "",
+  });
+  const [conversationMode, setConversationMode] = useState<"onboarding" | "intake" | "find_jobs">("onboarding");
+  const [pendingField, setPendingField] = useState<keyof typeof onboardingDraft | null>(null);
+  const onboardingInitializedRef = useRef(false);
 
   useEffect(() => {
     Promise.all([
@@ -96,15 +94,55 @@ export default function DashboardPage() {
       const preferencesConfirmed = hasConfirmedOnboardingPreferences(storedPreferences);
 
       const completedOnce = Boolean(localStorage.getItem(ONBOARDING_COMPLETED_AT_KEY));
+      const nextOnboardingDraft = {
+        firstName: profile?.first_name ?? "",
+        lastName: profile?.last_name ?? "",
+        email: session?.user?.account?.email ?? "",
+        phone: profile?.phone ?? "",
+        location: profile?.location ?? "",
+      };
+      setOnboardingDraft(nextOnboardingDraft);
 
       const onboardingProfile: OnboardingProfileDraft = {
-        firstName: profile?.first_name ?? null,
-        lastName: profile?.last_name ?? null,
-        email: session?.user?.account?.email ?? null,
-        phone: profile?.phone ?? null,
-        location: profile?.location ?? null,
+        firstName: nextOnboardingDraft.firstName || null,
+        lastName: nextOnboardingDraft.lastName || null,
+        email: nextOnboardingDraft.email || null,
+        phone: nextOnboardingDraft.phone || null,
+        location: nextOnboardingDraft.location || null,
         contactPreferences: completedOnce && preferencesConfirmed ? storedPreferences : null,
       };
+      const missingField = (Object.entries(nextOnboardingDraft).find(([, value]) => !String(value).trim())?.[0] ?? null) as keyof typeof onboardingDraft | null;
+      const isOnboarded = isOnboardingComplete(onboardingProfile);
+      setConversationMode(isOnboarded ? "intake" : "onboarding");
+      setPendingField(isOnboarded ? null : missingField);
+      if (!onboardingInitializedRef.current) {
+        onboardingInitializedRef.current = true;
+        if (isOnboarded) {
+          setChatMessages([
+            {
+              id: "intro-ready",
+              role: "assistant",
+              content: "Welcome back — I’m ready. Paste a job listing URL or listing text to start Stage 1.",
+            },
+          ]);
+        } else {
+          const intro = profile?.first_name
+            ? `Hi ${profile.first_name} — before we start, I want to confirm a few details so I can tailor your applications.`
+            : "Hi — before we start, I want to learn a little about you so I can tailor your applications.";
+          const prompts: Record<keyof typeof onboardingDraft, string> = {
+            firstName: "What first name should I use?",
+            lastName: "Thanks. What last name should I use?",
+            email: "What email should appear on your application materials?",
+            phone: "What phone number should appear on your application materials?",
+            location: "What location should appear on your application materials?",
+          };
+          setChatMessages([
+            { id: "intro-onboarding", role: "assistant", content: intro },
+            { id: "intro-process", role: "assistant", content: "I’ll keep this quick, then we’ll move straight into your target role." },
+            { id: "intro-question", role: "assistant", content: missingField ? prompts[missingField] : "When you’re ready, share a job listing URL." },
+          ]);
+        }
+      }
 
       const activeWorkflow = activeWorkflows.find((wf) =>
         !["listing_review", "completed", "archived"].includes(wf.state)
@@ -137,18 +175,14 @@ export default function DashboardPage() {
     role: message.role,
     content: message.content,
     createdAt: new Date(Date.now() + index).toISOString(),
+    actions: message.actions,
   }));
 
   const appendChat = (message: ChatMessage) => {
     setChatMessages((prev) => [...prev, message]);
   };
 
-  const runIntakeSequence = (intakeSource: "url" | "text", inputPreview: string) => {
-    appendChat({
-      id: `user-intake-${Date.now()}`,
-      role: "user",
-      content: intakeSource === "url" ? `Analyze this URL: ${inputPreview}` : `I pasted the listing text.`,
-    });
+  const runIntakeSequence = () => {
     appendChat({
       id: `assistant-ack-${Date.now()}`,
       role: "assistant",
@@ -181,22 +215,6 @@ export default function DashboardPage() {
     });
   };
 
-  const selectGuidedPath = (nextMode: Mode) => {
-    setMode(nextMode);
-    setError(null);
-    appendChat({
-      id: `mode-${nextMode}-${Date.now()}`,
-      role: "assistant",
-      content:
-        nextMode === "url"
-          ? "Great — paste the listing URL and I’ll start with opportunity intake."
-          : "Great — paste the listing text and I’ll start with opportunity intake.",
-    });
-    if (nextMode === "url") {
-      setTimeout(() => urlInputRef.current?.focus(), 80);
-    }
-  };
-
   const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string) => {
     const wfRes = await fetch("/api/workflows", {
       method: "POST",
@@ -223,24 +241,24 @@ export default function DashboardPage() {
   };
 
   // Parse URL → create workflow → navigate to listing review
-  const handleAnalyzeUrl = async () => {
-    if (!url.trim() || busy) return;
+  const handleAnalyzeUrl = async (urlText: string) => {
+    if (!urlText.trim() || busy) return;
     setError(null);
     setStep("parsing");
     try {
-      runIntakeSequence("url", url.trim());
+      runIntakeSequence();
       let provider: string | undefined;
       try { const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}"); if (s.aiProvider) provider = s.aiProvider; } catch { /* ignore */ }
       const parseRes = await fetch("/api/listings/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), provider }),
+        body: JSON.stringify({ url: urlText.trim(), provider }),
       });
       const parsed = await parseRes.json();
       if (!parseRes.ok) throw new Error(parsed.error ?? "Failed to parse listing URL");
 
       setStep("saving");
-      await createWorkflowFromParsed(parsed, url.trim());
+      await createWorkflowFromParsed(parsed, urlText.trim());
     } catch (e) {
       setStep("idle");
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -248,13 +266,13 @@ export default function DashboardPage() {
   };
 
   // Parse pasted listing text and continue through listing review
-  const handleAnalyzeText = async () => {
-    if (!listingText.trim() || busy) return;
+  const handleAnalyzeText = async (text: string) => {
+    if (!text.trim() || busy) return;
     setError(null);
     setStep("parsing");
     try {
-      runIntakeSequence("text", listingText.trim());
-      const lines = listingText.trim().split("\n").map((line) => line.trim()).filter(Boolean);
+      runIntakeSequence();
+      const lines = text.trim().split("\n").map((line) => line.trim()).filter(Boolean);
       const fallbackTitle = lines[0] ?? "Untitled Position";
       const parseRes = await fetch("/api/listings/parse", {
         method: "POST",
@@ -262,7 +280,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           manual: {
             title: fallbackTitle,
-            description: listingText.trim(),
+            description: text.trim(),
             requirements: lines.slice(1, 9),
           },
         }),
@@ -276,6 +294,87 @@ export default function DashboardPage() {
       setStep("idle");
       setError(e instanceof Error ? e.message : "Something went wrong");
     }
+  };
+
+  const persistOnboarding = async (draft: typeof onboardingDraft) => {
+    await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_name: draft.firstName.trim() || null,
+        last_name: draft.lastName.trim() || null,
+        phone: draft.phone.trim() || null,
+        location: draft.location.trim() || null,
+      }),
+    });
+    localStorage.setItem(ONBOARDING_COMPLETED_AT_KEY, new Date().toISOString());
+  };
+
+  const handleThreadInput = async (text: string) => {
+    const value = text.trim();
+    if (!value || busy) return;
+    appendChat({ id: `user-${Date.now()}`, role: "user", content: value });
+
+    if (conversationMode === "onboarding" && pendingField) {
+      const nextDraft = { ...onboardingDraft, [pendingField]: value };
+      setOnboardingDraft(nextDraft);
+      const nextMissing = (Object.entries(nextDraft).find(([, v]) => !String(v).trim())?.[0] ?? null) as keyof typeof onboardingDraft | null;
+      if (nextMissing) {
+        setPendingField(nextMissing);
+        const prompts: Record<keyof typeof onboardingDraft, string> = {
+          firstName: "What first name should I use?",
+          lastName: "Thanks. What last name should I use?",
+          email: "What email should appear on your application materials?",
+          phone: "What phone number should appear on your application materials?",
+          location: "What location should appear on your application materials?",
+        };
+        appendChat({ id: `assistant-next-${Date.now()}`, role: "assistant", content: prompts[nextMissing] });
+      } else {
+        await persistOnboarding(nextDraft);
+        setConversationMode("intake");
+        setPendingField(null);
+        appendChat({ id: `assistant-ready-${Date.now()}`, role: "assistant", content: "Perfect — thanks. Now paste a job listing URL, paste listing text, or ask me to find roles for you." });
+      }
+      return;
+    }
+
+    if (/find\s+me\s+jobs|find\s+jobs|help\s+me\s+find/i.test(value)) {
+      setConversationMode("find_jobs");
+      appendChat({ id: `assistant-find-${Date.now()}`, role: "assistant", content: "Absolutely — I can help with that. Tell me the role title, preferred location, and any must-have skills." });
+      return;
+    }
+
+    if (conversationMode === "find_jobs") {
+      appendChat({
+        id: `assistant-results-${Date.now()}`,
+        role: "assistant",
+        content: "Great, here are 3 starter listings based on what you shared. Pick one and I’ll start Stage 1 analysis.",
+        actions: [
+          { id: "job-1", kind: "action_card", label: "Senior Product Designer · Remote" },
+          { id: "job-2", kind: "action_card", label: "UX Designer · New York, NY" },
+          { id: "job-3", kind: "action_card", label: "Product Designer · San Francisco, CA" },
+        ],
+      });
+      setConversationMode("intake");
+      return;
+    }
+
+    const urlMatch = value.match(/https?:\/\/\S+/i);
+    if (urlMatch) {
+      await handleAnalyzeUrl(urlMatch[0]);
+      return;
+    }
+
+    if (value.includes("\n") || value.length > 100) {
+      await handleAnalyzeText(value);
+      return;
+    }
+
+    appendChat({
+      id: `assistant-clarify-${Date.now()}`,
+      role: "assistant",
+      content: "Please paste either a job listing URL or the full listing text. If you want, say “find me jobs” and I’ll gather your criteria first.",
+    });
   };
 
   return (
@@ -295,89 +394,19 @@ export default function DashboardPage() {
 
         <SharedChatShell
           messages={stage1Thread}
-          inputEnabled={false}
+          isTyping={busy}
+          onSend={handleThreadInput}
           headerTitle="Stage 1 Thread"
-          headerSubtitle="Guided intake"
+          headerSubtitle={conversationMode === "onboarding" ? "Onboarding in-thread" : "Guided intake"}
+          placeholder={stage1Config.placeholder}
           emptyStateText={stage1Config.emptyStateText}
           className="max-h-[320px]"
         />
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => selectGuidedPath("url")}
-            className={cn(
-              "text-xs px-3 py-1.5 rounded-full border transition-colors",
-              mode === "url"
-                ? "border-sky-300 bg-sky-50 text-sky-700"
-                : "border-slate-200 text-slate-600 hover:border-slate-300"
-            )}
-          >
-            Listing URL
-          </button>
-          <button
-            onClick={() => selectGuidedPath("manual")}
-            className={cn(
-              "text-xs px-3 py-1.5 rounded-full border transition-colors",
-              mode === "manual"
-                ? "border-slate-400 bg-slate-100 text-slate-800"
-                : "border-slate-200 text-slate-600 hover:border-slate-300"
-            )}
-          >
-            Pasted listing text
-          </button>
-        </div>
 
         {error && (
           <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             {error}
-          </div>
-        )}
-
-        {mode === "url" ? (
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-600">Opportunity intake — URL</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  ref={urlInputRef}
-                  value={url}
-                  onChange={e => { setUrl(e.target.value); setError(null); }}
-                  onKeyDown={e => e.key === "Enter" && handleAnalyzeUrl()}
-                  placeholder="https://company.com/careers/role"
-                  className="form-input pl-9 text-sm"
-                  disabled={busy}
-                />
-              </div>
-              <button
-                onClick={handleAnalyzeUrl}
-                disabled={busy || !url.trim()}
-                className="btn-ocean flex items-center gap-1.5 text-sm px-4 py-2.5 flex-shrink-0 disabled:opacity-50"
-              >
-                {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                <span className="hidden sm:inline">{step === "idle" ? "Begin Stage 1" : step === "parsing" ? "Parsing…" : "Saving…"}</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-600">Opportunity intake — pasted listing text</label>
-            <textarea
-              value={listingText}
-              onChange={(e) => { setListingText(e.target.value); setError(null); }}
-              placeholder="Paste the role description here..."
-              className="form-input text-sm w-full min-h-[140px]"
-              disabled={busy}
-            />
-            <button
-              onClick={handleAnalyzeText}
-              disabled={busy || !listingText.trim()}
-              className="btn-ocean flex items-center gap-1.5 text-sm px-4 py-2.5 disabled:opacity-50"
-            >
-              {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-              {step === "idle" ? "Begin Stage 1" : step === "parsing" ? "Parsing…" : "Saving…"}
-            </button>
           </div>
         )}
 
