@@ -262,19 +262,6 @@ export default function ListingReviewPage({ params }: Props) {
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
           <Link href="/listings" className="flex-shrink-0 w-8 h-8 mt-0.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm">
-  const match = computeRequirementMatch(
-    {
-      requirements: reqs,
-      skills,
-      keywords,
-      tools: profileTools,
-      certifications: profileCerts,
-      clearances: profileClearances,
-      technologies: tech,
-      manuallyMarked,
-    },
-    { includeAllMissingWhenNoProfileTerms: true }
-  );
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{title || "Untitled Listing"}</h1>
