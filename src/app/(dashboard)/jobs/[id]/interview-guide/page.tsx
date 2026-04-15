@@ -161,19 +161,7 @@ export default function InterviewGuidePage({ params }: Props) {
   }
 
   if (!workflow) return notFound();
-  const interviewMessages = [
-    {
-      id: "interview-seed",
-      role: "assistant" as const,
-      content: `I can help you convert this guide into strong interview stories for **${workflow.listing?.title ?? "this role"}** at **${workflow.listing?.company_name ?? "this company"}**.`,
-      timestamp: new Date().toISOString(),
-      suggestions: [
-        "Give me 3 STAR stories for this role.",
-        "What questions should I ask the interviewer?",
-        "Turn my resume bullets into interview talking points.",
-      ],
-    },
-  ];
+
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
@@ -249,7 +237,7 @@ export default function InterviewGuidePage({ params }: Props) {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Interview focus</p>
             <p className="mt-1 text-xs text-slate-600">Use the assistant for story framing, mock questions, and role-specific examples.</p>
           </div>
-          <AiChatPanel workflowId={id} surface="interview_guide" initialMessages={interviewMessages} className="flex-1 h-full min-h-0" />
+          <AiChatPanel workflowId={id} surface="interview_guide" className="flex-1 h-full min-h-0" />
         </div>
       </div>
 
@@ -262,7 +250,7 @@ export default function InterviewGuidePage({ params }: Props) {
       </button>
       {chatOpen && (
         <div className="md:hidden fixed inset-0 z-50">
-          <AiChatPanel workflowId={id} surface="interview_guide" initialMessages={interviewMessages} onClose={() => setChatOpen(false)} className="h-full" />
+          <AiChatPanel workflowId={id} surface="interview_guide" onClose={() => setChatOpen(false)} className="h-full" />
         </div>
       )}
     </div>

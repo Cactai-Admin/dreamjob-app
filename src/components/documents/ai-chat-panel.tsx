@@ -13,27 +13,13 @@ interface Props {
   surface?: string;
   onClose?: () => void;
   className?: string;
-  initialMessages?: ChatMessage[];
 }
 
-const LISTING_REVIEW_ASSISTANT_SEED: ChatMessage[] = [
-  {
-    id: "listing-review-guide",
-    role: "assistant",
-    content: "I can help you validate the parsed listing, spot missing context, and decide what to fix before starting your application packet.",
-    timestamp: "seed",
-    suggestions: [
-      "Which listing fields should I verify first before proceeding?",
-      "Help me tighten requirements into concise bullets.",
-      "What should I check for compensation or employment gaps?",
-    ],
-  },
-];
-
-export function AiChatPanel({ workflowId, surface = "document", onClose, className, initialMessages }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
+export function AiChatPanel({ workflowId, surface = "document", onClose, className }: Props) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [loadingThread, setLoadingThread] = useState(true);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const [stageKey, setStageKey] = useState<"stage1" | "stage2" | "support">("stage2");
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
   const copyBySurface: Partial<Record<string, { subtitle: string; placeholder: string; empty: string }>> = {
@@ -102,13 +88,10 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
               timestamp: message.created_at,
             })));
           } else {
-            setMessages(
-              initialMessages
-                ?? (surface === "listing_review"
-                  ? LISTING_REVIEW_ASSISTANT_SEED.map((message) => ({ ...message, timestamp: new Date().toISOString() }))
-                  : [])
-            );
+            setMessages([]);
           }
+        } else {
+          setRequestError(data?.error ?? "Unable to load thread.");
         }
       } finally {
         if (active) setLoadingThread(false);
@@ -117,18 +100,14 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
 
     loadThread();
     return () => { active = false; };
-  }, [workflowId, surface, initialMessages]);
+  }, [workflowId, surface]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
+    setRequestError(null);
     const includesUrl = /https?:\/\/|www\./i.test(text);
     if (includesUrl) {
-      setMessages((prev) => [...prev, {
-        id: `msg-url-block-${Date.now()}`,
-        role: "assistant",
-        content: "New listing URL intake is handled on Home. Go to Home to analyze a new listing URL, and use this chat for the current workflow.",
-        timestamp: new Date().toISOString(),
-      }]);
+      setRequestError("New listing URL intake is handled on Home. Go to Home to analyze a new listing URL, and use this chat for the current workflow.");
       return;
     }
 
@@ -155,20 +134,19 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         body: JSON.stringify({ workflow_id: workflowId, message: text.trim(), surface, provider }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        setRequestError(data.error ?? "Something went wrong.");
+        return;
+      }
       const aiMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: "assistant",
-        content: res.ok ? data.message : (data.error ?? "Something went wrong."),
+        content: data.message,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
-      setMessages((prev) => [...prev, {
-        id: `msg-err-${Date.now()}`,
-        role: "assistant",
-        content: "Connection error — please try again.",
-        timestamp: new Date().toISOString(),
-      }]);
+      setRequestError("Connection error — please try again.");
     } finally {
       setIsTyping(false);
     }
@@ -183,7 +161,7 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         onSuggestion={sendMessage}
         onClose={onClose}
         headerTitle="AI Assistant"
-        headerSubtitle={loadingThread ? "Loading thread…" : (surfaceCopy?.subtitle ?? "Ready to help")}
+        headerSubtitle={loadingThread ? "Loading thread…" : (requestError ?? surfaceCopy?.subtitle ?? "Ready to help")}
         placeholder={surfaceCopy?.placeholder ?? stageConfig.placeholder}
         emptyStateText={surfaceCopy?.empty ?? stageConfig.emptyStateText}
         className="h-full border-0 rounded-none"

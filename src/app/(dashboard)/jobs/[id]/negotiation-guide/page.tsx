@@ -161,19 +161,7 @@ export default function NegotiationGuidePage({ params }: Props) {
   }
 
   if (!workflow) return notFound();
-  const negotiationMessages = [
-    {
-      id: "negotiation-seed",
-      role: "assistant" as const,
-      content: `I can help you plan offer tradeoffs, counters, and talking points for **${workflow.listing?.title ?? "this role"}** at **${workflow.listing?.company_name ?? "this company"}**.`,
-      timestamp: new Date().toISOString(),
-      suggestions: [
-        "Help me build a compensation counter.",
-        "What should I negotiate besides salary?",
-        "Draft a professional negotiation reply email.",
-      ],
-    },
-  ];
+
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
@@ -249,7 +237,7 @@ export default function NegotiationGuidePage({ params }: Props) {
             <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Negotiation focus</p>
             <p className="mt-1 text-xs text-slate-600">Use the assistant to prioritize terms, script counters, and pressure-test your fallback plan.</p>
           </div>
-          <AiChatPanel workflowId={id} surface="negotiation_guide" initialMessages={negotiationMessages} className="flex-1 h-full min-h-0" />
+          <AiChatPanel workflowId={id} surface="negotiation_guide" className="flex-1 h-full min-h-0" />
         </div>
       </div>
 
@@ -262,7 +250,7 @@ export default function NegotiationGuidePage({ params }: Props) {
       </button>
       {chatOpen && (
         <div className="md:hidden fixed inset-0 z-50">
-          <AiChatPanel workflowId={id} surface="negotiation_guide" initialMessages={negotiationMessages} onClose={() => setChatOpen(false)} className="h-full" />
+          <AiChatPanel workflowId={id} surface="negotiation_guide" onClose={() => setChatOpen(false)} className="h-full" />
         </div>
       )}
     </div>
