@@ -115,7 +115,13 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="card-base p-4 space-y-3">
+      <form
+        className="card-base p-4 space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void handleAnalyze();
+        }}
+      >
         <label className="text-xs font-medium text-slate-500">Listing URL</label>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
@@ -128,7 +134,7 @@ export default function HomePage() {
             />
           </div>
           <button
-            onClick={handleAnalyze}
+            type="submit"
             disabled={submitting || !url.trim()}
             className="btn-ocean px-4 py-2.5 text-sm font-semibold rounded-xl disabled:opacity-50"
           >
@@ -140,7 +146,7 @@ export default function HomePage() {
             <AlertCircle className="w-3.5 h-3.5" /> {error}
           </div>
         )}
-      </div>
+      </form>
 
       {hasContent && (
         <div className="card-base overflow-hidden">

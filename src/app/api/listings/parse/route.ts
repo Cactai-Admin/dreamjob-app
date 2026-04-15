@@ -4,6 +4,55 @@ import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { LISTING_PARSE_SYSTEM, LISTING_URL_ANALYSIS } from '@/lib/ai/prompts/listing-parse'
 
+const EMPLOYMENT_TYPE_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
+  { type: 'internship', pattern: /\b(intern(ship)?|co-?op)\b/i },
+  { type: 'contract', pattern: /\b(contract(or)?|1099|freelance|consultant)\b/i },
+  { type: 'temporary', pattern: /\b(temp(orary)?|seasonal|fixed[- ]term)\b/i },
+  { type: 'part-time', pattern: /\b(part[- ]?time|pt\b)\b/i },
+  { type: 'full-time', pattern: /\b(full[- ]?time|permanent|fte)\b/i },
+]
+
+const EXPERIENCE_LEVEL_PATTERNS: Array<{ level: string; pattern: RegExp }> = [
+  { level: 'director', pattern: /\b(director|head of|vp|vice president|chief)\b/i },
+  { level: 'manager', pattern: /\b(manager|management)\b/i },
+  { level: 'lead', pattern: /\b(lead|principal)\b/i },
+  { level: 'staff', pattern: /\bstaff\b/i },
+  { level: 'senior', pattern: /\b(senior|sr\.?)\b/i },
+  { level: 'mid', pattern: /\b(mid[- ]?level|intermediate|ii\b|iii\b)\b/i },
+  { level: 'entry', pattern: /\b(entry[- ]?level|junior|jr\.?|new grad(uate)?|associate)\b/i },
+]
+
+function normalizeEmploymentType(existing: unknown, sourceText: string): string | null {
+  const existingValue = typeof existing === 'string' ? existing.trim() : ''
+  if (existingValue) return existingValue
+
+  for (const matcher of EMPLOYMENT_TYPE_PATTERNS) {
+    if (matcher.pattern.test(sourceText)) return matcher.type
+  }
+  return null
+}
+
+function normalizeExperienceLevel(existing: unknown, sourceText: string): string | null {
+  const existingValue = typeof existing === 'string' ? existing.trim() : ''
+  if (existingValue) return existingValue
+
+  for (const matcher of EXPERIENCE_LEVEL_PATTERNS) {
+    if (matcher.pattern.test(sourceText)) return matcher.level
+  }
+
+  const yearsMatch = sourceText.match(/\b(\d{1,2})\+?\s*(?:years?|yrs?)\b/i)
+  if (yearsMatch) {
+    const years = Number.parseInt(yearsMatch[1], 10)
+    if (Number.isFinite(years)) {
+      if (years >= 10) return 'director'
+      if (years >= 7) return 'senior'
+      if (years >= 4) return 'mid'
+      if (years >= 0) return 'entry'
+    }
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -129,6 +178,19 @@ export async function POST(request: NextRequest) {
     }
 
     const parsed = JSON.parse(jsonMatch[0])
+    const signalText = [
+      typeof parsed.title === 'string' ? parsed.title : '',
+      typeof parsed.description === 'string' ? parsed.description : '',
+      Array.isArray(parsed.requirements) ? parsed.requirements.join('\n') : typeof parsed.requirements === 'string' ? parsed.requirements : '',
+      typeof parsed.responsibilities === 'string' ? parsed.responsibilities : '',
+      pageContent,
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    parsed.employment_type = normalizeEmploymentType(parsed.employment_type, signalText)
+    parsed.experience_level = normalizeExperienceLevel(parsed.experience_level, signalText)
+
     // Fill gaps from HTML/URL extraction when AI missed them
     if (!parsed.company_linkedin_url && scrapedLinkedIn) {
       parsed.company_linkedin_url = scrapedLinkedIn
