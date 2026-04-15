@@ -45,6 +45,17 @@ type ListingReviewDraft = {
   company_website_url: string;
   company_linkedin_url: string;
 };
+type ProfileReviewDraft = {
+  headline: string;
+  summary: string;
+  skills: string[];
+  keywords: string[];
+  tools: string[];
+  certifications: string[];
+  clearances: string[];
+  yearsExperience: string;
+  location: string;
+};
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
 const FIRST_LOGIN_SEEN_KEY = "dreamjob_first_login_seen";
@@ -90,7 +101,10 @@ export default function DashboardPage() {
   const [listingReview, setListingReview] = useState<ListingReviewDraft | null>(null);
   const [pendingSourceUrl, setPendingSourceUrl] = useState<string | undefined>(undefined);
   const [awaitingCollection, setAwaitingCollection] = useState<string | null>(null);
-  const [awaitingBranchAction, setAwaitingBranchAction] = useState(false);
+  const [activeReviewPhase, setActiveReviewPhase] = useState<2 | 3 | null>(null);
+  const [profileReview, setProfileReview] = useState<ProfileReviewDraft | null>(null);
+  const [awaitingPhase2Approval, setAwaitingPhase2Approval] = useState(false);
+  const [awaitingPhase3Approval, setAwaitingPhase3Approval] = useState(false);
   const onboardingInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -245,6 +259,18 @@ export default function DashboardPage() {
     company_linkedin_url: String(parsed.company_linkedin_url ?? ""),
   });
 
+  const toProfileReviewDraft = (): ProfileReviewDraft => ({
+    headline: trustedProfile.headline,
+    summary: trustedProfile.summary,
+    skills: trustedProfile.skills,
+    keywords: trustedProfile.keywords,
+    tools: trustedProfile.tools,
+    certifications: trustedProfile.certifications,
+    clearances: trustedProfile.clearances,
+    yearsExperience: trustedProfile.yearsExperience ? String(trustedProfile.yearsExperience) : "",
+    location: onboardingDraft.location || "",
+  });
+
   const runIntakeSequence = () => {
     appendChat({
       id: `assistant-ack-${Date.now()}`,
@@ -354,6 +380,8 @@ export default function DashboardPage() {
   const runStage1OperationalFlow = async (parsed: Record<string, unknown>) => {
     setPendingParsed(parsed);
     setListingReview(toListingReviewDraft(parsed));
+    setProfileReview(toProfileReviewDraft());
+    setActiveReviewPhase(2);
     appendChat({ id: `assistant-listing-bundle-${Date.now()}`, role: "assistant", content: summarizeListingBundle(parsed) });
     appendChat({
       id: `assistant-review-panel-${Date.now()}`,
@@ -363,7 +391,19 @@ export default function DashboardPage() {
 
     const userBundle = summarizeUserContextBundle(parsed);
     appendChat({ id: `assistant-user-bundle-${Date.now()}`, role: "assistant", content: userBundle.message });
+    appendChat({
+      id: `assistant-phase2-actions-${Date.now()}`,
+      role: "assistant",
+      content: "When the listing details look right, choose **Proceed to profile review**. I’ll keep guiding interpretation in chat if anything is unclear.",
+      actions: [
+        { id: "phase2-proceed-profile-review", kind: "action_card", label: "Proceed to profile review" },
+      ],
+    });
+    setAwaitingPhase2Approval(true);
+  };
 
+  const runPhase3OperationalFlow = (parsed: Record<string, unknown>) => {
+    const userBundle = summarizeUserContextBundle(parsed);
     if (!trustedProfile.summary || userBundle.match.missing.length > 4) {
       const prompt = !trustedProfile.summary
         ? "Targeted collection: share one recent accomplishment most relevant to this role."
@@ -372,30 +412,28 @@ export default function DashboardPage() {
       appendChat({ id: `assistant-collect-${Date.now()}`, role: "assistant", content: prompt });
       return;
     }
-
     appendChat({
-      id: `assistant-validation-${Date.now()}`,
+      id: `assistant-phase3-validation-${Date.now()}`,
       role: "assistant",
-      content: `**Validation bundle**\nTrusted opportunity understanding and your trusted profile context are sufficient.\nKey matches: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited"}\nKey gaps: ${userBundle.match.missing.slice(0, 3).join(", ") || "none major"}\nNon-blocking unknowns: ${userBundle.match.missing.length > 3 ? "some requirement depth remains unknown" : "none"}.`,
+      content: `**Phase 3 profile readiness**\nStrong: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited approved matches yet"}\nWeak or missing: ${userBundle.match.missing.slice(0, 4).join(", ") || "no major missing items"}\nI can help tailor anything in the right panel before we start resume generation.`,
     });
-
     const outcome = derivePositioningOutcome(userBundle.match.score);
     appendChat({
-      id: `assistant-position-${Date.now()}`,
+      id: `assistant-phase3-position-${Date.now()}`,
       role: "assistant",
       content: `**Positioning outcome: ${outcome}**\nWhy: estimated match score ${userBundle.match.score}% with current trusted context.\nBest next move: ${outcome === "Future Role Target" ? "save this role as a future target and gather evidence for gaps." : "proceed to Stage 2 and tailor artifacts."}`,
     });
-    setAwaitingBranchAction(true);
     appendChat({
-      id: `assistant-next-actions-${Date.now()}`,
+      id: `assistant-phase3-actions-${Date.now()}`,
       role: "assistant",
-      content: "Choose your next step:",
+      content: "Confirm when you are ready for resume generation, or go back to listing review.",
       actions: [
-        { id: "proceed-stage2", kind: "action_card", label: "Proceed to Stage 2" },
+        { id: "phase3-confirm-ready", kind: "action_card", label: "Ready for resume generation" },
+        { id: "phase3-back-to-listing", kind: "action_card", label: "Back to listing review" },
         { id: "save-future-target", kind: "action_card", label: "Save as Future Role Target" },
-        { id: "start-over", kind: "action_card", label: "Start over" },
       ],
     });
+    setAwaitingPhase3Approval(true);
   };
 
   const createWorkflowFromParsed = async (parsed: Record<string, unknown>, sourceUrl?: string, navigate = true) => {
@@ -507,29 +545,7 @@ export default function DashboardPage() {
       setAwaitingCollection(null);
       appendChat({ id: `assistant-collect-thanks-${Date.now()}`, role: "assistant", content: "Great — that helps tighten your positioning confidence." });
       if (pendingParsed) {
-        const userBundle = summarizeUserContextBundle(pendingParsed);
-        appendChat({
-          id: `assistant-validation-after-collect-${Date.now()}`,
-          role: "assistant",
-          content: `**Validation bundle**\nTrusted opportunity understanding and user context are now sufficient for next-step guidance.\nKey matches: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited"}\nKey gaps: ${userBundle.match.missing.slice(0, 3).join(", ") || "none major"}\nNon-blocking unknowns: reduced after your clarification.`,
-        });
-        const outcome = derivePositioningOutcome(userBundle.match.score);
-        appendChat({
-          id: `assistant-position-after-collect-${Date.now()}`,
-          role: "assistant",
-          content: `**Positioning outcome: ${outcome}**\nWhy: estimated match score ${userBundle.match.score}% plus your latest context.\nBest next move: ${outcome === "Future Role Target" ? "save as a future target and close gaps." : "proceed to Stage 2."}`,
-        });
-        setAwaitingBranchAction(true);
-        appendChat({
-          id: `assistant-next-actions-after-collect-${Date.now()}`,
-          role: "assistant",
-          content: "Choose your next step:",
-          actions: [
-            { id: "proceed-stage2", kind: "action_card", label: "Proceed to Stage 2" },
-            { id: "save-future-target", kind: "action_card", label: "Save as Future Role Target" },
-            { id: "start-over", kind: "action_card", label: "Start over" },
-          ],
-        });
+        runPhase3OperationalFlow(pendingParsed);
       }
       return;
     }
@@ -597,15 +613,48 @@ export default function DashboardPage() {
   };
 
   const handleThreadAction = async (action: ThreadAction) => {
-    if (!awaitingBranchAction) return;
     if (action.id === "start-over") {
-      setAwaitingBranchAction(false);
+      setAwaitingPhase2Approval(false);
+      setAwaitingPhase3Approval(false);
       setPendingParsed(null);
       setListingReview(null);
+      setProfileReview(null);
+      setActiveReviewPhase(null);
       setPendingSourceUrl(undefined);
       appendChat({ id: `assistant-restart-${Date.now()}`, role: "assistant", content: "No problem — let’s start fresh. Paste a URL, listing text, or ask me to find jobs." });
       return;
     }
+
+    if (action.id === "phase2-proceed-profile-review") {
+      if (!awaitingPhase2Approval || !pendingParsed || !listingReview) return;
+      setAwaitingPhase2Approval(false);
+      setActiveReviewPhase(3);
+      appendChat({
+        id: `assistant-phase3-open-${Date.now()}`,
+        role: "assistant",
+        content: "Great — Phase 2 is locked enough to continue. The right panel now shows **Applicable Profile Data Review** for this listing.",
+      });
+      runPhase3OperationalFlow({
+        ...pendingParsed,
+        ...listingReview,
+        employment_type: listingReview.work_mode,
+      });
+      return;
+    }
+
+    if (action.id === "phase3-back-to-listing") {
+      setActiveReviewPhase(2);
+      setAwaitingPhase2Approval(true);
+      setAwaitingPhase3Approval(false);
+      appendChat({
+        id: `assistant-back-phase2-${Date.now()}`,
+        role: "assistant",
+        content: "Back to Phase 2 listing review. Update the extracted listing fields and proceed again when ready.",
+      });
+      return;
+    }
+
+    if (!awaitingPhase3Approval) return;
     if (!pendingParsed || !listingReview) return;
 
     const reviewedParsed: Record<string, unknown> = {
@@ -614,10 +663,10 @@ export default function DashboardPage() {
       employment_type: listingReview.work_mode,
     };
 
-    if (action.id === "proceed-stage2") {
+    if (action.id === "phase3-confirm-ready") {
       const wf = await createWorkflowFromParsed(reviewedParsed, pendingSourceUrl, false);
-      setAwaitingBranchAction(false);
-      appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Great — moving this opportunity into Stage 2 now." });
+      setAwaitingPhase3Approval(false);
+      appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Confirmed — Phase 3 is complete enough. I’m now moving into resume generation." });
       router.push(`/listings/${wf.id}`);
       return;
     }
@@ -629,7 +678,7 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ state: "archived", is_active: false, notes: "Saved as future role target from Stage 1 chat." }),
       });
-      setAwaitingBranchAction(false);
+      setAwaitingPhase3Approval(false);
       appendChat({ id: `assistant-future-${Date.now()}`, role: "assistant", content: "Saved as a Future Role Target. You can revisit it any time from your listings/workflows." });
     }
   };
@@ -648,7 +697,7 @@ export default function DashboardPage() {
           <MessageSquare className="w-3.5 h-3.5" />
           Stage 1 guided chat
         </div>
-        <div className={listingReview ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]" : ""}>
+        <div className={activeReviewPhase ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]" : ""}>
           <SharedChatShell
             messages={stage1Thread}
             isTyping={busy}
@@ -660,7 +709,7 @@ export default function DashboardPage() {
             emptyStateText={stage1Config.emptyStateText}
             className="max-h-[440px]"
           />
-          {listingReview && (
+          {activeReviewPhase === 2 && listingReview && (
             <aside className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700">Phase 2 · Listing Review</p>
               <h2 className="text-sm font-semibold text-slate-900">Extracted Listing Context</h2>
@@ -720,6 +769,65 @@ export default function DashboardPage() {
                     !listingReview.salary_range ? "compensation" : null,
                     listingReview.requirements.length === 0 ? "requirements" : null,
                   ].filter(Boolean).join(", ") || "No critical missing fields detected."}
+                </p>
+              </div>
+            </aside>
+          )}
+          {activeReviewPhase === 3 && profileReview && (
+            <aside className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-700">Phase 3 · Applicable Profile Data Review</p>
+              <h2 className="text-sm font-semibold text-slate-900">Context Used for Resume Tailoring</h2>
+              <p className="text-xs text-slate-600">Refine strengths, weak spots, and missing details before resume generation.</p>
+              <div className="space-y-2">
+                {[
+                  { key: "headline", label: "Headline" },
+                  { key: "summary", label: "Summary" },
+                  { key: "location", label: "Location" },
+                  { key: "yearsExperience", label: "Years of experience" },
+                ].map(({ key, label }) => (
+                  <label key={key} className="block">
+                    <span className="text-[11px] font-medium text-slate-600">{label}</span>
+                    <input
+                      value={profileReview[key as keyof ProfileReviewDraft] as string}
+                      onChange={(event) => {
+                        setProfileReview((current) => current ? { ...current, [key]: event.target.value } : current);
+                      }}
+                      className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                    />
+                  </label>
+                ))}
+                {[
+                  { key: "skills", label: "Skills" },
+                  { key: "keywords", label: "Keywords" },
+                  { key: "tools", label: "Tools" },
+                  { key: "certifications", label: "Certifications" },
+                  { key: "clearances", label: "Clearances" },
+                ].map(({ key, label }) => (
+                  <label key={key} className="block">
+                    <span className="text-[11px] font-medium text-slate-600">{label} (one per line)</span>
+                    <textarea
+                      value={(profileReview[key as keyof ProfileReviewDraft] as string[]).join("\n")}
+                      onChange={(event) => {
+                        setProfileReview((current) => current ? {
+                          ...current,
+                          [key]: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
+                        } : current);
+                      }}
+                      rows={3}
+                      className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
+                <p className="text-[11px] font-medium text-amber-700">Missing / uncertain</p>
+                <p className="text-[11px] text-amber-800">
+                  {[
+                    !profileReview.summary ? "summary" : null,
+                    profileReview.skills.length === 0 ? "skills" : null,
+                    profileReview.tools.length === 0 ? "tools" : null,
+                    !profileReview.yearsExperience ? "years of experience" : null,
+                  ].filter(Boolean).join(", ") || "No critical missing profile fields detected."}
                 </p>
               </div>
             </aside>
