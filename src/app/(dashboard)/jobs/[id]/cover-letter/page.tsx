@@ -176,21 +176,7 @@ export default function CoverLetterBuilderPage({ params }: Props) {
 
   if (!workflow) return notFound();
 
-  const jobTitle = workflow.listing?.title ?? "this role";
-  const company = workflow.listing?.company_name ?? "the company";
-  const initialMessages = [
-    {
-      id: "cover-letter-greeting",
-      role: "assistant" as const,
-      content: generating
-        ? `I’m drafting your cover letter for **${jobTitle}** at **${company}**. If you share a key achievement now, I can help weave it into the final version.`
-        : `Your cover letter draft is ready for **${jobTitle}** at **${company}**. Tell me what tone or emphasis you want to refine first.`,
-      timestamp: new Date().toISOString(),
-      suggestions: generating
-        ? ["I'll wait for the draft", "Here's my top achievement"]
-        : ["Tighten the opening", "Align with resume highlights", "Make this more concise"],
-    },
-  ];
+
   const wordCount = content.split(/\s+/).filter(Boolean).length;
   const hasPlaceholderCopy = /I am excited to apply|I believe I am a strong candidate|I would welcome the opportunity/i.test(content);
   const hasWeakLength = wordCount < 180;
@@ -305,7 +291,6 @@ export default function CoverLetterBuilderPage({ params }: Props) {
           <AiChatPanel
             workflowId={id}
             surface="cover_letter_workspace"
-            initialMessages={initialMessages}
             className="flex-1 h-full"
           />
         </div>
@@ -324,7 +309,6 @@ export default function CoverLetterBuilderPage({ params }: Props) {
           <AiChatPanel
             workflowId={id}
             surface="cover_letter_workspace"
-            initialMessages={initialMessages}
             onClose={() => setChatOpen(false)}
             className="h-full"
           />

@@ -13,7 +13,7 @@ import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
-import type { Workflow, Output, DocumentSection, ChatMessage } from "@/lib/types";
+import type { Workflow, Output, DocumentSection } from "@/lib/types";
 import { deriveApplicationStatus } from "@/lib/workflow-adapter";
 
 interface Props {
@@ -214,19 +214,7 @@ export default function ResumeBuilderPage({ params }: Props) {
   const jobTitle = workflow.listing?.title ?? "this role";
   const company = workflow.listing?.company_name ?? "the company";
 
-  const initialMessages: ChatMessage[] = [
-    {
-      id: "greeting",
-      role: "assistant",
-      content: generating
-        ? `Hi! I'm building your resume for the **${jobTitle}** role at **${company}** right now. While you wait, tell me — what's the project or accomplishment you're most proud of that relates to this job? I'll weave it into the draft.`
-        : `Hi! I've generated your resume draft for **${jobTitle}** at **${company}**. It's pre-filled with your profile information and tailored to the job requirements. What would you like to refine first?`,
-      timestamp: new Date().toISOString(),
-      suggestions: generating
-        ? ["I'll wait for the draft", "Let me describe my top project"]
-        : ["Strengthen the summary", "Improve experience bullets", "Adjust skills section", "Change the tone"],
-    },
-  ];
+
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
@@ -342,7 +330,6 @@ export default function ResumeBuilderPage({ params }: Props) {
           <AiChatPanel
             workflowId={id}
             surface="resume_workspace"
-            initialMessages={initialMessages}
             className="flex-1 h-full"
           />
         </div>
@@ -353,7 +340,6 @@ export default function ResumeBuilderPage({ params }: Props) {
             <AiChatPanel
               workflowId={id}
               surface="resume_workspace"
-              initialMessages={initialMessages}
               onClose={() => setChatOpen(false)}
               className="h-full"
             />
