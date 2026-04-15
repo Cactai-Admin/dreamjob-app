@@ -56,14 +56,14 @@ export function ContinuitySidebar({ open, onToggle }: Props) {
       <button
         onClick={onToggle}
         className={cn(
-          "hidden lg:inline-flex fixed z-50 items-center gap-1.5 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-all",
+          "hidden lg:inline-flex fixed z-50 items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-all",
           open ? "left-[280px]" : "left-3"
         )}
         style={{ top: 86 }}
-        aria-label={open ? "Close workflow drawer" : "Open workflow drawer"}
+        aria-label={open ? "Close drawer" : "Open drawer"}
+        title={open ? "Close drawer" : "Open drawer"}
       >
         {open ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-        <span className="text-xs font-medium">{open ? "Close" : "Workflows"}</span>
       </button>
 
       {open && (
