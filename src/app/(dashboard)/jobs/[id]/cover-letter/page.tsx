@@ -201,6 +201,16 @@ export default function CoverLetterBuilderPage({ params }: Props) {
       )}
 
       <div className="flex-1 flex overflow-hidden">
+        <aside className="hidden lg:block w-[220px] border-r border-slate-200 bg-white/70 p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">Reference tabs</p>
+          <div className="space-y-2">
+            <a href={`/listings/${id}`} className="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Listing</a>
+            <a href={`/jobs/${id}`} className="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Fit &amp; Evidence</a>
+            <a href={`/jobs/${id}/resume`} className="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Resume</a>
+          </div>
+          <p className="mt-3 text-[11px] text-slate-500">Cover letter editing stays in the center panel.</p>
+        </aside>
+
         <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden md:block")}>
           {generating ? (
             <div className="flex flex-col items-center justify-center h-full p-8">

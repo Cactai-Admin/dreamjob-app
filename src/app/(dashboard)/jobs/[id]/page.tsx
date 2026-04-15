@@ -82,7 +82,6 @@ export default function JobDetailPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
 
   // Listing edit state
   const [editingListing, setEditingListing] = useState(false);
@@ -381,7 +380,10 @@ export default function JobDetailPage({ params }: Props) {
   const readyModuleCount = packetStates.filter((status) => status === "approved").length;
   const draftModuleCount = packetStates.filter((status) => status === "draft").length;
   const notStartedModuleCount = packetStates.filter((status) => status === "not_started").length;
-  const hasExportableContent = packetStates.some((status) => status === "draft" || status === "approved");
+  const hasSavedResume = job.resumeStatus === "draft" || job.resumeStatus === "approved";
+  const hasSavedCoverLetter = job.coverLetterStatus === "draft" || job.coverLetterStatus === "approved";
+  const coreMaterialsReady = hasSavedResume && hasSavedCoverLetter;
+  const hasExportableContent = hasSavedResume || hasSavedCoverLetter;
   const nextPacketAction = job.resumeStatus === "not_started"
     ? "Start your resume first."
     : job.coverLetterStatus === "not_started"
@@ -394,10 +396,12 @@ export default function JobDetailPage({ params }: Props) {
             ? "Optional: add negotiation prep for later phases."
             : "Packet is progressing well — continue refinement or export.";
   const exportDisabledReason = !hasExportableContent
-    ? "Start Resume or Cover Letter to unlock export."
-    : readyModuleCount === 0
-      ? "Export is available for drafts. Approve at least one module for final-ready packet quality."
-      : "Export is active.";
+    ? "Save Resume or Cover Letter to unlock individual exports."
+    : !coreMaterialsReady
+      ? "Save both Resume and Cover Letter to unlock combined export."
+      : readyModuleCount === 0
+        ? "Export is available for saved drafts. Approve modules for final-ready quality."
+        : "Export is active.";
   const interviewModuleBlocked = !inApplicationSupport && job.interviewGuideStatus === "not_started";
   const negotiationModuleBlocked = !activeStatuses.some((status) => ["offer", "negotiating", "hired", "declined"].includes(status)) && job.negotiationGuideStatus === "not_started";
   const packetModules = [
@@ -421,7 +425,7 @@ export default function JobDetailPage({ params }: Props) {
       blocked: false,
       blockedReason: null,
     },
-    {
+    ...(coreMaterialsReady ? [{
       href: `/jobs/${job.id}/interview-guide`,
       label: "Interview Guide",
       iconBg: "bg-violet-100",
@@ -430,8 +434,7 @@ export default function JobDetailPage({ params }: Props) {
       status: job.interviewGuideStatus,
       blocked: interviewModuleBlocked,
       blockedReason: interviewModuleBlocked ? "Unlocked after you mark the application as applied." : null,
-    },
-    {
+    }, {
       href: `/jobs/${job.id}/negotiation-guide`,
       label: "Negotiation Guide",
       iconBg: "bg-amber-100",
@@ -440,21 +443,49 @@ export default function JobDetailPage({ params }: Props) {
       status: job.negotiationGuideStatus,
       blocked: negotiationModuleBlocked,
       blockedReason: negotiationModuleBlocked ? "Unlocked when an offer context exists." : null,
-    },
+    }] : []),
   ];
 
   return (
-    <div className="page-wrapper max-w-1000px">
+    <div className="page-wrapper max-w-none">
       <PageHeader
         title={job.title}
         subtitle={job.company}
         actions={<StatusBadge status={job.status} />}
       />
 
+      <div className="grid lg:grid-cols-[220px_minmax(0,1fr)_360px] gap-5">
+        <aside className="hidden lg:block">
+          <div className="card-base p-4 sticky top-24">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">Reference tabs</p>
+            <div className="space-y-2">
+              <Link href={`/listings/${id}`} className="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                Listing
+              </Link>
+              <button
+                type="button"
+                className="w-full text-left rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800"
+              >
+                Fit &amp; Evidence
+              </button>
+            </div>
+            <p className="mt-3 text-[11px] text-slate-500">
+              The active workspace stays in the center panel.
+            </p>
+          </div>
+        </aside>
 
-      <div className="grid lg:grid-cols-3 gap-5">
-        {/* Main column */}
-        <div className="lg:col-span-2 space-y-5">
+        <div className="space-y-5 min-w-0">
+          <section className="card-base p-4">
+            <h2 className="text-sm font-semibold text-slate-900">Fit &amp; Evidence Review</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Review match fit, extracted line items, profile evidence, and listing-specific draft guidance before editing artifacts.
+            </p>
+          </section>
+
+          <div className="grid lg:grid-cols-3 gap-5">
+            {/* Main column */}
+            <div className="lg:col-span-2 space-y-5">
 
           {editingListing ? (
             /* ── Edit mode ── */
@@ -749,8 +780,8 @@ export default function JobDetailPage({ params }: Props) {
           )}
         </div>
 
-        {/* Right column */}
-        <div className="space-y-4">
+            {/* Right column */}
+            <div className="space-y-4">
           <div className="card-base p-5">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
@@ -761,13 +792,12 @@ export default function JobDetailPage({ params }: Props) {
                     : `${draftModuleCount} draft · ${notStartedModuleCount} not started`}
                 </p>
               </div>
-              <button
-                onClick={() => setSupportOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-semibold hover:bg-sky-700 transition-colors"
-              >
-                <LifeBuoy className="w-3.5 h-3.5" />
-                Open support
-              </button>
+              {!coreMaterialsReady && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">
+                  <LifeBuoy className="w-3 h-3" />
+                  Support unlocks after Resume + Cover Letter are saved
+                </span>
+              )}
             </div>
             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Next useful action</p>
@@ -826,13 +856,13 @@ export default function JobDetailPage({ params }: Props) {
               ))}
 
               <Link href={`/jobs/${job.id}/export`}
-                aria-disabled={!hasExportableContent}
+                aria-disabled={!coreMaterialsReady}
                 onClick={(event) => {
-                  if (!hasExportableContent) event.preventDefault();
+                  if (!coreMaterialsReady) event.preventDefault();
                 }}
                 className={cn(
                   "flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold rounded-xl transition-colors",
-                  hasExportableContent
+                  coreMaterialsReady
                     ? "bg-slate-900 text-white hover:bg-slate-800"
                     : "bg-slate-200 text-slate-500 cursor-not-allowed"
                 )}>
@@ -841,7 +871,7 @@ export default function JobDetailPage({ params }: Props) {
               </Link>
               <p className={cn(
                 "text-[11px] text-center",
-                hasExportableContent ? "text-slate-500" : "text-amber-700"
+                coreMaterialsReady ? "text-slate-500" : "text-amber-700"
               )}>
                 {exportDisabledReason}
               </p>
@@ -1075,25 +1105,13 @@ export default function JobDetailPage({ params }: Props) {
             )}
           </div>
         </div>
-      </div>
-
-      {supportOpen && (
-        <>
-          <button
-            className="fixed inset-0 z-40 bg-slate-950/35"
-            onClick={() => setSupportOpen(false)}
-            aria-label="Close support drawer"
-          />
-          <div className="fixed z-50 inset-y-0 right-0 w-full max-w-[420px] bg-white border-l border-slate-200 shadow-2xl">
-            <AiChatPanel
-              workflowId={id}
-              surface="application_overview_support"
-              className="h-full"
-              onClose={() => setSupportOpen(false)}
-            />
           </div>
-        </>
-      )}
+        </div>
+
+        <aside className="hidden xl:flex xl:flex-col xl:border-l xl:border-slate-200">
+          <AiChatPanel workflowId={id} surface="application_creation" className="h-full" />
+        </aside>
+      </div>
 
       {/* ── Add to Profile Modal ── */}
       {addModal && (
