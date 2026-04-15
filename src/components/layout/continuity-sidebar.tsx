@@ -56,10 +56,10 @@ export function ContinuitySidebar({ open, onToggle }: Props) {
       <button
         onClick={onToggle}
         className={cn(
-          "hidden lg:inline-flex fixed z-50 items-center justify-center p-2 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-all",
-          open ? "left-[280px]" : "left-3"
+          "hidden lg:inline-flex fixed z-50 items-center justify-center w-9 h-9 border border-slate-200 bg-white/95 backdrop-blur text-slate-700 shadow-sm transition-all",
+          open ? "left-[272px] rounded-r-xl rounded-l-md" : "left-4 rounded-xl"
         )}
-        style={{ top: 86 }}
+        style={{ top: 72 }}
         aria-label={open ? "Close drawer" : "Open drawer"}
         title={open ? "Close drawer" : "Open drawer"}
       >
