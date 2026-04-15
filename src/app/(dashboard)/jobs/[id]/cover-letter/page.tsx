@@ -191,6 +191,13 @@ export default function CoverLetterBuilderPage({ params }: Props) {
         : ["Tighten the opening", "Align with resume highlights", "Make this more concise"],
     },
   ];
+  const wordCount = content.split(/\s+/).filter(Boolean).length;
+  const hasPlaceholderCopy = /I am excited to apply|I believe I am a strong candidate|I would welcome the opportunity/i.test(content);
+  const hasWeakLength = wordCount < 180;
+  const qualityFlags = [
+    hasPlaceholderCopy ? "Contains generic starter language — replace with role-specific evidence." : null,
+    hasWeakLength ? "Draft is short. Add impact bullets or quantified examples." : null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
@@ -221,21 +228,24 @@ export default function CoverLetterBuilderPage({ params }: Props) {
             </div>
           ) : (
             <div className="max-w-2xl mx-auto">
-              <div className="mb-4">
-                <ContextPhasePanel
-                  phase={5}
-                  title="Cover Letter"
-                  subtitle="Cover letter editing is active while the assistant stays persistent on the right."
-                  items={[
-                    { label: "Workflow", value: id },
-                    { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
-                    { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
-                    { label: "Length", value: `${content.split(/\\s+/).filter(Boolean).length} words` },
-                    { label: "Status", value: generating ? "Generating" : "Draft/Editable" },
-                  ]}
-                />
+              <div className="mb-2 flex items-center justify-between px-1 gap-2">
+                <p className="text-xs text-slate-500">
+                  Click anywhere in the letter to edit inline. Changes auto-save and the assistant can rewrite selected sections.
+                </p>
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                  Live cover letter workspace
+                </span>
               </div>
-              <AlignmentIndicators title="Cover letter alignment" />
+              {qualityFlags.length > 0 && (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Draft quality checks</p>
+                  <ul className="mt-1.5 space-y-1">
+                    {qualityFlags.map((flag) => (
+                      <li key={flag} className="text-xs text-amber-800">• {flag}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="document-paper overflow-hidden">
                 <div className="p-8 sm:p-12">
                   <div className="mb-8 pb-6 border-b border-slate-100">
@@ -259,7 +269,7 @@ export default function CoverLetterBuilderPage({ params }: Props) {
                     />
                   ) : (
                     <div
-                      className="cursor-text"
+                      className="cursor-text rounded-md border border-dashed border-slate-200/80 px-2 py-2 -mx-2 hover:border-sky-300 hover:bg-sky-50/50 transition-colors"
                       onClick={() => setEditing(true)}
                       title="Click to edit"
                     >
@@ -268,8 +278,25 @@ export default function CoverLetterBuilderPage({ params }: Props) {
                   )}
                 </div>
               </div>
+              <div className="mt-4">
+                <AlignmentIndicators title="Cover letter alignment" />
+              </div>
+              <div className="mt-4">
+                <ContextPhasePanel
+                  phase={5}
+                  title="Cover Letter Workspace Context"
+                  subtitle="Artifact-first editing with support and metadata below the document."
+                  items={[
+                    { label: "Workflow", value: id },
+                    { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
+                    { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
+                    { label: "Length", value: `${wordCount} words` },
+                    { label: "Edit state", value: editing ? "Editing now" : "Click document to edit" },
+                  ]}
+                />
+              </div>
               <div className="text-right mt-2 text-xs text-slate-400">
-                {content.split(/\s+/).filter(Boolean).length} words
+                {wordCount} words
               </div>
             </div>
           )}

@@ -17,11 +17,16 @@ import {
   HatGlasses,
   Save,
   Check,
+  Circle,
+  CircleCheck,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
+import { deriveApplicationStatus, deriveDocumentStatus } from "@/lib/workflow-adapter";
+import type { Workflow } from "@/lib/types";
 
 const USER_MENU_ITEMS = [
   { href: "/profile",  label: "Profile",  icon: User },
@@ -40,6 +45,7 @@ export function TopNav() {
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; avatar_url?: string; email?: string }>({});
   const [profileIcon, setProfileIcon] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  const [milestoneWorkflow, setMilestoneWorkflow] = useState<Workflow | null>(null);
   const { activate: lockScreen } = usePrivacyScreen();
   const { controls } = useDocControls();
 
@@ -105,11 +111,45 @@ export function TopNav() {
     { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
   ] : [];
   const milestoneActiveIndex = milestones.findIndex(({ href }) => pathname === href);
-  const milestoneCurrentIndex = milestoneActiveIndex > -1
+  useEffect(() => {
+    if (!milestoneWorkflowId) {
+      return;
+    }
+    let active = true;
+    fetch(`/api/workflows/${milestoneWorkflowId}`)
+      .then((res) => res.json())
+      .then((wf) => {
+        if (active && wf?.id) setMilestoneWorkflow(wf as Workflow);
+      })
+      .catch(() => {
+        if (active) setMilestoneWorkflow(null);
+      });
+    return () => { active = false; };
+  }, [milestoneWorkflowId]);
+
+  const coverLetterStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "cover_letter");
+  const interviewStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "interview_guide");
+  const negotiationStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "negotiation_guide");
+  const appStatus = milestoneWorkflow
+    ? deriveApplicationStatus(milestoneWorkflow.state, milestoneWorkflow.status_events ?? [])
+    : "draft";
+  const appHasAdvanced = ["applied", "received", "interviewing", "offer", "negotiating", "hired", "declined", "ghosted", "rejected"].includes(appStatus);
+  const fallbackFurthest = milestoneActiveIndex > -1
     ? milestoneActiveIndex
     : pathname.startsWith(`/jobs/${milestoneWorkflowId}`)
       ? 1
       : 0;
+  const furthestReachedIndex = !milestoneWorkflow
+    ? fallbackFurthest
+    : milestoneWorkflow.state === "listing_review"
+    ? 0
+    : negotiationStatus !== "not_started" || ["offer", "negotiating", "hired", "declined"].includes(appStatus)
+      ? 4
+      : interviewStatus !== "not_started" || appHasAdvanced
+        ? 3
+        : coverLetterStatus !== "not_started"
+          ? 2
+          : 1;
 
   // Profile button — shared across desktop and mobile
   const renderProfileButton = (sizePx?: number) => (
@@ -187,10 +227,10 @@ export function TopNav() {
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
               {milestones.map(({ href, label }, idx) => {
                 const active = pathname === href;
-                const completed = idx < milestoneCurrentIndex;
-                const draftAvailable = idx === milestoneCurrentIndex + 1;
-                const unavailable = idx > milestoneCurrentIndex + 1;
-                const clickable = !unavailable;
+                const completed = !active && idx <= furthestReachedIndex - 1;
+                const available = !completed && !active && idx <= furthestReachedIndex + 1;
+                const blocked = !active && !completed && !available;
+                const clickable = !blocked;
                 return (
                   <button
                     key={href}
@@ -200,19 +240,20 @@ export function TopNav() {
                       "px-3 py-1.5 rounded-md text-xs font-medium transition-colors border",
                       active && "bg-sky-50 text-sky-800 border-sky-300 shadow-sm",
                       completed && "text-emerald-700 bg-emerald-50 border-emerald-300",
-                      draftAvailable && "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100",
-                      !active && !completed && !draftAvailable && !unavailable && "text-slate-600 bg-white border-slate-200 hover:text-slate-800",
-                      unavailable && "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed"
+                      available && "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100",
+                      blocked && "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed"
                     )}
                   >
                     <span className="inline-flex items-center gap-1.5">
-                      <span className={cn(
-                        "w-1.5 h-1.5 rounded-full",
-                        active && "bg-sky-500",
-                        completed && "bg-emerald-500",
-                        draftAvailable && "bg-amber-500",
-                        unavailable && "bg-slate-300"
-                      )} />
+                      {active ? (
+                        <Circle className="w-3 h-3 fill-sky-500 text-sky-500" />
+                      ) : completed ? (
+                        <CircleCheck className="w-3 h-3 text-emerald-600" />
+                      ) : available ? (
+                        <Circle className="w-3 h-3 text-amber-500" />
+                      ) : (
+                        <Lock className="w-3 h-3 text-slate-400" />
+                      )}
                       {label}
                     </span>
                   </button>

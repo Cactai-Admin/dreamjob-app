@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, MessageSquare, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
+import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
@@ -160,6 +161,19 @@ export default function InterviewGuidePage({ params }: Props) {
   }
 
   if (!workflow) return notFound();
+  const interviewMessages = [
+    {
+      id: "interview-seed",
+      role: "assistant" as const,
+      content: `I can help you convert this guide into strong interview stories for **${workflow.listing?.title ?? "this role"}** at **${workflow.listing?.company_name ?? "this company"}**.`,
+      timestamp: new Date().toISOString(),
+      suggestions: [
+        "Give me 3 STAR stories for this role.",
+        "What questions should I ask the interviewer?",
+        "Turn my resume bullets into interview talking points.",
+      ],
+    },
+  ];
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
@@ -190,6 +204,19 @@ export default function InterviewGuidePage({ params }: Props) {
             </div>
           ) : (
             <div className="max-w-2xl mx-auto">
+              <div className="mb-4">
+                <ContextPhasePanel
+                  phase={6}
+                  title="Interview Prep Workspace"
+                  subtitle="Refine this guide while assistant support stays focused on role-specific stories and questions."
+                  items={[
+                    { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
+                    { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
+                    { label: "Word count", value: `${content.split(/\s+/).filter(Boolean).length}` },
+                    { label: "Edit state", value: editing ? "Editing now" : "Click guide to edit" },
+                  ]}
+                />
+              </div>
               <div className="document-paper overflow-hidden">
                 <div className="p-8 sm:p-12">
                   <div className="mb-6 pb-4 border-b border-slate-100">
@@ -206,7 +233,7 @@ export default function InterviewGuidePage({ params }: Props) {
                       rows={Math.max(20, content.split("\n").length + 2)}
                     />
                   ) : (
-                    <div className="cursor-text" onClick={() => setEditing(true)} title="Click to edit">
+                    <div className="cursor-text rounded-md border border-dashed border-slate-200/80 px-2 py-2 -mx-2 hover:border-sky-300 hover:bg-sky-50/50 transition-colors" onClick={() => setEditing(true)} title="Click to edit">
                       <MarkdownDoc content={content} />
                     </div>
                   )}
@@ -218,7 +245,11 @@ export default function InterviewGuidePage({ params }: Props) {
         </div>
 
         <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
-          <AiChatPanel workflowId={id} surface="interview_guide" className="flex-1 h-full" />
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Interview focus</p>
+            <p className="mt-1 text-xs text-slate-600">Use the assistant for story framing, mock questions, and role-specific examples.</p>
+          </div>
+          <AiChatPanel workflowId={id} surface="interview_guide" initialMessages={interviewMessages} className="flex-1 h-full min-h-0" />
         </div>
       </div>
 
@@ -231,7 +262,7 @@ export default function InterviewGuidePage({ params }: Props) {
       </button>
       {chatOpen && (
         <div className="md:hidden fixed inset-0 z-50">
-          <AiChatPanel workflowId={id} surface="interview_guide" onClose={() => setChatOpen(false)} className="h-full" />
+          <AiChatPanel workflowId={id} surface="interview_guide" initialMessages={interviewMessages} onClose={() => setChatOpen(false)} className="h-full" />
         </div>
       )}
     </div>

@@ -61,11 +61,11 @@ const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: stri
   { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
 ];
 
-const PACKET_STATE_COPY: Record<string, { hint: string }> = {
-  not_started: { hint: "Open to begin drafting" },
-  generating: { hint: "AI draft is generating" },
-  draft: { hint: "Review and refine content" },
-  approved: { hint: "Ready for packet use" },
+const PACKET_STATE_COPY: Record<string, { hint: string; readiness: string }> = {
+  not_started: { hint: "Not started yet", readiness: "Not started" },
+  generating: { hint: "AI draft is in progress", readiness: "Drafting" },
+  draft: { hint: "Editable draft available", readiness: "Draft" },
+  approved: { hint: "Approved for export and send", readiness: "Ready" },
 };
 
 type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
@@ -378,7 +378,26 @@ export default function JobDetailPage({ params }: Props) {
     job.interviewGuideStatus,
     job.negotiationGuideStatus,
   ];
+  const readyModuleCount = packetStates.filter((status) => status === "approved").length;
+  const draftModuleCount = packetStates.filter((status) => status === "draft").length;
+  const notStartedModuleCount = packetStates.filter((status) => status === "not_started").length;
   const hasExportableContent = packetStates.some((status) => status === "draft" || status === "approved");
+  const nextPacketAction = job.resumeStatus === "not_started"
+    ? "Start your resume first."
+    : job.coverLetterStatus === "not_started"
+      ? "Draft the cover letter to complete your core packet."
+      : job.resumeStatus === "draft" || job.coverLetterStatus === "draft"
+        ? "Refine your core packet modules toward Ready."
+        : job.interviewGuideStatus === "not_started"
+          ? "Optional: draft interview guidance for phase continuity."
+          : job.negotiationGuideStatus === "not_started"
+            ? "Optional: add negotiation prep for later phases."
+            : "Packet is progressing well — continue refinement or export.";
+  const exportDisabledReason = !hasExportableContent
+    ? "Start Resume or Cover Letter to unlock export."
+    : readyModuleCount === 0
+      ? "Export is available for drafts. Approve at least one module for final-ready packet quality."
+      : "Export is active.";
 
   return (
     <div className="page-wrapper max-w-1000px">
@@ -713,13 +732,13 @@ export default function JobDetailPage({ params }: Props) {
           />
 
           <div className="card-base p-5">
-            <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex items-start justify-between gap-3 mb-3">
               <div>
-                <h3 className="font-semibold text-slate-900">Workflow Support</h3>
+                <h3 className="font-semibold text-slate-900">Application Packet</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  {inApplicationSupport
-                    ? "Get follow-up and post-send guidance for this application stage."
-                    : "Open support to plan next actions for this application packet."}
+                  {readyModuleCount > 0
+                    ? `${readyModuleCount} ready · ${draftModuleCount} draft · ${notStartedModuleCount} not started`
+                    : `${draftModuleCount} draft · ${notStartedModuleCount} not started`}
                 </p>
               </div>
               <button
@@ -730,27 +749,10 @@ export default function JobDetailPage({ params }: Props) {
                 Open support
               </button>
             </div>
-            <div className="flex flex-wrap gap-2 mt-3">
-              {[
-                inApplicationSupport
-                  ? "Draft a concise follow-up email for this application."
-                  : "What should I complete before marking this packet ready?",
-                "Help me prioritize the next workflow step.",
-                "Show me the fastest path to export readiness.",
-              ].map((prompt) => (
-                <span
-                  key={prompt}
-                  className="text-xs px-2.5 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
-                >
-                  {prompt}
-                </span>
-              ))}
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Next useful action</p>
+              <p className="text-xs text-slate-700 mt-1">{nextPacketAction}</p>
             </div>
-          </div>
-
-          {/* Application Packet */}
-          <div className="card-base p-5">
-            <h3 className="font-semibold text-slate-900 mb-3">Application Packet</h3>
             <div className="space-y-3">
               <Link href={`/jobs/${job.id}/resume`}
                 className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group">
@@ -760,7 +762,7 @@ export default function JobDetailPage({ params }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Resume</div>
                   <DocStatusPill status={job.resumeStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.resumeStatus].hint}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.resumeStatus].readiness} · {PACKET_STATE_COPY[job.resumeStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -773,7 +775,7 @@ export default function JobDetailPage({ params }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Cover Letter</div>
                   <DocStatusPill status={job.coverLetterStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.coverLetterStatus].hint}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.coverLetterStatus].readiness} · {PACKET_STATE_COPY[job.coverLetterStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -786,7 +788,7 @@ export default function JobDetailPage({ params }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Interview Guide</div>
                   <DocStatusPill status={job.interviewGuideStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.interviewGuideStatus].hint}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.interviewGuideStatus].readiness} · {PACKET_STATE_COPY[job.interviewGuideStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -799,7 +801,7 @@ export default function JobDetailPage({ params }: Props) {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Negotiation Guide</div>
                   <DocStatusPill status={job.negotiationGuideStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.negotiationGuideStatus].hint}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.negotiationGuideStatus].readiness} · {PACKET_STATE_COPY[job.negotiationGuideStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -818,11 +820,28 @@ export default function JobDetailPage({ params }: Props) {
                 <Download className="w-4 h-4" />
                 Export Packet
               </Link>
-              {!hasExportableContent && (
-                <p className="text-[11px] text-slate-500 text-center">
-                  Export unlocks after at least one packet module has draft or completed content.
-                </p>
-              )}
+              <p className={cn(
+                "text-[11px] text-center",
+                hasExportableContent ? "text-slate-500" : "text-amber-700"
+              )}>
+                {exportDisabledReason}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {[
+                inApplicationSupport
+                  ? "Draft a concise follow-up email for this application."
+                  : "What should I complete before marking this packet ready?",
+                "Help me prioritize the next workflow step.",
+                "Show me the fastest path to export readiness.",
+              ].map((prompt) => (
+                <span
+                  key={prompt}
+                  className="text-xs px-2.5 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
+                >
+                  {prompt}
+                </span>
+              ))}
             </div>
           </div>
 
