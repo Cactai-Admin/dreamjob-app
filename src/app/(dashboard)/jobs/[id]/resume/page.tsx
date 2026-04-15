@@ -256,7 +256,16 @@ export default function ResumeBuilderPage({ params }: Props) {
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden">
-        <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden lg:block")}>
+        <div className="hidden lg:flex lg:flex-1 lg:min-w-0 lg:border-r lg:border-slate-200">
+          <AiChatPanel
+            workflowId={id}
+            surface="application_materials"
+            initialMessages={initialMessages}
+            className="flex-1 h-full"
+          />
+        </div>
+
+        <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden md:block")}>
           {generating ? (
             <GeneratingState title={jobTitle} company={company} />
           ) : (
@@ -330,14 +339,15 @@ export default function ResumeBuilderPage({ params }: Props) {
         {/* AI panel — mobile only (hidden on desktop per request) */}
         {chatOpen && (
           <div className="md:hidden fixed inset-0 z-50">
-            <AiChatPanel workflowId={id} surface="resume" initialMessages={initialMessages} onClose={() => setChatOpen(false)} className="h-full" />
+            <AiChatPanel
+              workflowId={id}
+              surface="application_materials"
+              initialMessages={initialMessages}
+              onClose={() => setChatOpen(false)}
+              className="h-full"
+            />
           </div>
         )}
-
-        {/* AI panel — desktop always-visible sidebar */}
-        <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
-          <AiChatPanel workflowId={id} surface="resume" initialMessages={initialMessages} className="flex-1 h-full" />
-        </div>
       </div>
 
       {/* Mobile AI button — top-right, below header */}

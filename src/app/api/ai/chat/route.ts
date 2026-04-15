@@ -157,3 +157,58 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export async function GET(request: NextRequest) {
+  const accountId = await getAccountId()
+  if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const url = new URL(request.url)
+  const workflow_id = url.searchParams.get('workflow_id')
+  const surface = url.searchParams.get('surface') ?? 'qa'
+
+  if (!workflow_id) {
+    return NextResponse.json({ error: 'workflow_id is required' }, { status: 400 })
+  }
+
+  const { data: workflow } = await supabaseAdmin
+    .from('workflows')
+    .select('id')
+    .eq('id', workflow_id)
+    .eq('account_id', accountId)
+    .single()
+
+  if (!workflow) {
+    return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
+  }
+
+  let { data: thread } = await supabaseAdmin
+    .from('chat_threads')
+    .select('*')
+    .eq('workflow_id', workflow_id)
+    .eq('surface', surface)
+    .single()
+
+  if (!thread) {
+    const { data: newThread } = await supabaseAdmin
+      .from('chat_threads')
+      .insert({ workflow_id, surface })
+      .select()
+      .single()
+    thread = newThread
+  }
+
+  if (!thread) {
+    return NextResponse.json({ error: 'Failed to load thread' }, { status: 500 })
+  }
+
+  const { data: messages } = await supabaseAdmin
+    .from('chat_messages')
+    .select('id, role, content, created_at')
+    .eq('thread_id', thread.id)
+    .order('created_at', { ascending: true })
+
+  return NextResponse.json({
+    threadId: thread.id,
+    messages: messages ?? [],
+  })
+}

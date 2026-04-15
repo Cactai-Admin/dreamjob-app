@@ -2,7 +2,7 @@
 
 // ── AiChatPanel — AI assistant panel for document refinement ──
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChatMessage } from "@/lib/types";
 import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, toThreadTurn } from "@/lib/chat-thread-model";
 import { SharedChatShell } from "@/components/chat/shared-chat-shell";
@@ -19,7 +19,39 @@ interface Props {
 export function AiChatPanel({ workflowId, surface = "document", onClose, className, initialMessages }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [isTyping, setIsTyping] = useState(false);
+  const [loadingThread, setLoadingThread] = useState(true);
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG.stage2;
+
+  useEffect(() => {
+    let active = true;
+    const loadThread = async () => {
+      setLoadingThread(true);
+      try {
+        const params = new URLSearchParams({ workflow_id: workflowId, surface });
+        const res = await fetch(`/api/ai/chat?${params.toString()}`);
+        const data = await res.json();
+        if (!active) return;
+
+        if (res.ok && Array.isArray(data.messages)) {
+          if (data.messages.length > 0) {
+            setMessages(data.messages.map((message: { id: string; role: "user" | "assistant"; content: string; created_at: string }) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+              timestamp: message.created_at,
+            })));
+          } else {
+            setMessages(initialMessages ?? []);
+          }
+        }
+      } finally {
+        if (active) setLoadingThread(false);
+      }
+    };
+
+    loadThread();
+    return () => { active = false; };
+  }, [workflowId, surface, initialMessages]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
@@ -75,7 +107,7 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         onSuggestion={sendMessage}
         onClose={onClose}
         headerTitle="AI Assistant"
-        headerSubtitle="Ready to help"
+        headerSubtitle={loadingThread ? "Loading thread…" : "Ready to help"}
         placeholder={stageConfig.placeholder}
         emptyStateText={stageConfig.emptyStateText}
         className="h-full border-0 rounded-none"
