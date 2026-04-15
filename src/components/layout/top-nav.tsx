@@ -14,8 +14,6 @@ import {
   Zap,
   Shield,
   Trash2,
-  LayoutDashboard,
-  Briefcase,
   HatGlasses,
   Save,
   Check,
@@ -25,16 +23,6 @@ import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { DOC_TABS } from "@/components/documents/doc-subheader";
 import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
-
-/* Desktop nav links */
-const NAV_ITEMS = [
-  { href: "/home",      label: "Home",                  icon: LayoutDashboard },
-  { href: "/listings",  label: "Listings",              icon: Zap },
-  { href: "/jobs",      label: "Applications",          icon: Briefcase },
-];
-
-/* Mobile bottom tab bar */
-const MOBILE_NAV_ITEMS = NAV_ITEMS;
 
 const USER_MENU_ITEMS = [
   { href: "/profile",  label: "Profile",  icon: User },
@@ -96,14 +84,6 @@ export function TopNav() {
     return () => document.removeEventListener('scroll', onScroll, { capture: true })
   }, []);
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    if (href === "/home") return pathname === "/home";
-    if (href === "/jobs") return pathname === "/jobs" || (pathname.startsWith("/jobs/") && !pathname.startsWith("/listings"));
-    if (href === "/listings") return pathname.startsWith("/listings");
-    return pathname.startsWith(href);
-  };
-
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     window.location.href = "/login";
@@ -114,12 +94,10 @@ export function TopNav() {
   // before the new page has called setDocControls.
   const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|interview-guide|negotiation-guide)$/);
   const mobileWorkflowId = mobileDocMatch?.[1];
-  const isDocPage = !!mobileDocMatch;
   const listingMatch = pathname.match(/^\/listings\/([^/]+)/);
   const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
   const milestoneWorkflowId = workflowMatch?.[1] ?? listingMatch?.[1];
   const showMilestones = Boolean(milestoneWorkflowId);
-  const isHomePage = pathname === "/home";
   const milestones = milestoneWorkflowId ? [
     { href: `/listings/${milestoneWorkflowId}`, label: "Listing Review" },
     { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
@@ -205,21 +183,6 @@ export function TopNav() {
               <span className="font-bold text-slate-900 text-[20px] tracking-tight">DreamJob</span>
             </Link>
           </div>
-
-          {/* Center: nav links (non-doc) or doc tabs — absolutely centered */}
-          {!isDocPage && !showMilestones && !isHomePage && (
-            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
-              {NAV_ITEMS.map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn("nav-link", isActive(href) && "nav-link-active")}
-                >
-                  {label}
-                </Link>
-              ))}
-            </div>
-          )}
 
           {showMilestones && (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
@@ -382,7 +345,7 @@ export function TopNav() {
         ) : (
           /* On all other pages: brand + profile */
           <>
-            <Link href="/" className="flex items-center gap-2 flex-shrink-0">
+            <Link href="/home" className="flex items-center gap-2 flex-shrink-0">
               <div
                 className="rounded-md bg-slate-900 flex items-center justify-center transition-all duration-300 shadow-[0_2px_6px_rgba(0,0,0,0.48)] active:shadow-[0_1px_3px_rgba(0,0,0,0.65)] active:translate-y-0.5"
                 style={{ width: scrolled ? 21 : 42, height: scrolled ? 21 : 42 }}
@@ -401,44 +364,6 @@ export function TopNav() {
           </>
         )}
       </div>
-
-{/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
-{!mobileWorkflowId && !isHomePage && (
-  <nav className="mobile-bottom-nav md:hidden flex">
-    <div className="flex items-stretch w-full">
-      {MOBILE_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = isActive(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-colors",
-              active ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            <div
-              className={cn(
-                "w-10 h-6 flex items-center justify-center rounded-full transition-all",
-                active && "bg-slate-100"
-              )}
-            >
-              <Icon className={cn("w-[18px] h-[18px]", active && "stroke-[2.2px]")} />
-            </div>
-            <span
-              className={cn(
-                "text-[10px] font-medium leading-none",
-                active ? "text-slate-900" : "text-slate-400"
-              )}
-            >
-              {label}
-            </span>
-          </Link>
-        );
-      })}
-    </div>
-  </nav>
-)}
     </>
   );
 }
