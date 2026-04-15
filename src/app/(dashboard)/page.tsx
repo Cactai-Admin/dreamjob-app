@@ -183,7 +183,7 @@ export default function DashboardPage() {
             {
               id: "intro-ready",
               role: "assistant",
-              content: "Welcome back — I’m ready. Paste a job listing URL or listing text to start Stage 1.",
+              content: "Welcome back — I’m ready. Paste a job listing URL or listing text to start Phase 1 listing intake.",
             },
           ]);
         } else {
@@ -321,7 +321,7 @@ export default function DashboardPage() {
       id: `assistant-positioning-${Date.now()}`,
       role: "assistant",
       content:
-        "After validation, I’ll provide a positioning outcome and guide the next choice: proceed to Stage 2, save as Future Role Target, or start over.",
+        "After validation, I’ll guide the transition into listing review, then applicable profile review before resume generation.",
     });
   };
 
@@ -407,9 +407,9 @@ export default function DashboardPage() {
     appendChat({
       id: `assistant-phase2-actions-${Date.now()}`,
       role: "assistant",
-      content: "When the listing details look right, choose **Proceed to profile review**. I’ll keep guiding interpretation in chat if anything is unclear.",
+      content: "When the listing details look right, choose **Create application from this listing**. I’ll switch to applicable profile data review and keep guiding in chat.",
       actions: [
-        { id: "phase2-proceed-profile-review", kind: "action_card", label: "Proceed to profile review" },
+        { id: "phase2-create-application", kind: "action_card", label: "Create application from this listing" },
       ],
     });
     setAwaitingPhase2Approval(true);
@@ -456,9 +456,9 @@ export default function DashboardPage() {
     appendChat({
       id: `assistant-phase3-actions-${Date.now()}`,
       role: "assistant",
-      content: "When you’re ready, use **Proceed to Resume Generation**. You can also return to listing review.",
+      content: "When you’re ready, use **Generate Resume**. You can also return to listing review.",
       actions: [
-        { id: "phase3-confirm-ready", kind: "action_card", label: "Proceed to Resume Generation" },
+        { id: "phase3-confirm-ready", kind: "action_card", label: "Generate Resume" },
         { id: "phase3-back-to-listing", kind: "action_card", label: "Back to listing review" },
       ],
     });
@@ -640,7 +640,7 @@ export default function DashboardPage() {
       appendChat({
         id: `assistant-results-${Date.now()}`,
         role: "assistant",
-        content: "Great, here are 3 starter listings based on what you shared. Pick one and I’ll start Stage 1 analysis.",
+        content: "Great, here are 3 starter listings based on what you shared. Pick one and I’ll start Phase 1 intake plus Phase 2 listing analysis.",
         actions: [
           { id: "job-1", kind: "action_card", label: "Senior Product Designer · Remote" },
           { id: "job-2", kind: "action_card", label: "UX Designer · New York, NY" },
@@ -684,7 +684,7 @@ export default function DashboardPage() {
       return;
     }
 
-    if (action.id === "phase2-proceed-profile-review") {
+    if (action.id === "phase2-create-application") {
       if (!awaitingPhase2Approval || !pendingParsed || !listingReview) return;
       setAwaitingPhase2Approval(false);
       setActiveReviewPhase(3);
@@ -693,7 +693,7 @@ export default function DashboardPage() {
       appendChat({
         id: `assistant-phase3-open-${Date.now()}`,
         role: "assistant",
-        content: "Great — Phase 2 is locked enough to continue. The right panel now shows **Applicable Profile Data Review** for this listing.",
+        content: "Great — you chose to create an application. The right panel now shows **Phase 3 · Applicable Profile Data Review** for this listing.",
       });
       runPhase3OperationalFlow({
         ...pendingParsed,
@@ -727,11 +727,27 @@ export default function DashboardPage() {
     if (action.id === "phase3-confirm-ready") {
       const wf = await createWorkflowFromParsed(reviewedParsed, pendingSourceUrl, false);
       setAwaitingPhase3Approval(false);
-      appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Confirmed — Phase 3 is complete enough. I’m now moving into resume generation." });
+      appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Confirmed — Phase 3 is complete enough. I’m now moving into **Phase 4 · Resume Generation**." });
       router.push(`/listings/${wf.id}`);
       return;
     }
   };
+
+  const phaseThreadTitle = conversationMode === "onboarding"
+    ? "Phase 0 Thread"
+    : activeReviewPhase === 2
+      ? "Phase 2 Thread"
+      : activeReviewPhase === 3
+        ? "Phase 3 Thread"
+        : "Phase 1 Thread";
+
+  const phaseThreadSubtitle = conversationMode === "onboarding"
+    ? "Onboarding / profile context"
+    : activeReviewPhase === 2
+      ? "Listing analysis + review"
+      : activeReviewPhase === 3
+        ? "Applicable profile data review"
+        : "Listing intake";
 
   return (
     <div className="page-wrapper max-w-1000px">
@@ -745,7 +761,7 @@ export default function DashboardPage() {
       <div className="card-base p-5 mb-10 space-y-4">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <MessageSquare className="w-3.5 h-3.5" />
-          Stage 1 guided chat
+          Guided workflow chat
         </div>
         <div className={activeReviewPhase ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]" : ""}>
           <SharedChatShell
@@ -753,8 +769,8 @@ export default function DashboardPage() {
             isTyping={busy}
             onSend={handleThreadInput}
             onAction={handleThreadAction}
-            headerTitle="Stage 1 Thread"
-            headerSubtitle={conversationMode === "onboarding" ? "Onboarding in-thread" : "Guided intake"}
+            headerTitle={phaseThreadTitle}
+            headerSubtitle={phaseThreadSubtitle}
             placeholder={stage1Config.placeholder}
             emptyStateText={stage1Config.emptyStateText}
             className="max-h-[440px]"
@@ -821,6 +837,13 @@ export default function DashboardPage() {
                   ].filter(Boolean).join(", ") || "No critical missing fields detected."}
                 </p>
               </div>
+              <button
+                onClick={() => void handleThreadAction({ id: "phase2-create-application", kind: "action_card", label: "Create application from this listing" })}
+                disabled={!awaitingPhase2Approval}
+                className="w-full rounded-md bg-sky-600 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create application from this listing
+              </button>
             </aside>
           )}
           {activeReviewPhase === 3 && profileReview && (
@@ -880,6 +903,13 @@ export default function DashboardPage() {
                   ].filter(Boolean).join(", ") || "No critical missing profile fields detected."}
                 </p>
               </div>
+              <button
+                onClick={() => void handleThreadAction({ id: "phase3-confirm-ready", kind: "action_card", label: "Generate Resume" })}
+                disabled={!awaitingPhase3Approval}
+                className="w-full rounded-md bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generate Resume
+              </button>
             </aside>
           )}
         </div>
