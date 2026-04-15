@@ -81,7 +81,7 @@ export function ContinuitySidebar({ open, onToggle }: Props) {
         )}
       >
       <div className="px-3 py-3 border-b border-slate-100">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Workflow Drawer</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500"></h2>
       </div>
       <div className="p-3 space-y-3 overflow-y-auto">
         <section className="space-y-2">
