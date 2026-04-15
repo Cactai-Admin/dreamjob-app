@@ -84,40 +84,18 @@ export function OnboardingModal({ open, draft, saving, onDraftChange, onSubmit }
         </DialogHeader>
 
         <div className="mt-4 space-y-4">
-          <div className="card-base bg-slate-50 p-4 space-y-3 text-sm text-slate-700 max-h-[360px] overflow-y-auto">
-            <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5">
-              Hi — I&apos;m DreamJob. I&apos;ll collect a few foundations, then we&apos;ll start Stage 1.
-            </div>
-            {draft.firstName && (
-              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
-                First name: {draft.firstName}
-              </div>
-            )}
-            {draft.lastName && (
-              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
-                Last name: {draft.lastName}
-              </div>
-            )}
-            {(draft.email || draft.phone) && (
-              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
-                Email: {draft.email || "(missing)"} · Phone: {draft.phone || "(missing)"}
-              </div>
-            )}
-            {draft.location && (
-              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
-                Location: {draft.location}
-              </div>
-            )}
-            {draft.linkedinUrl && (
-              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
-                LinkedIn: {draft.linkedinUrl}
-              </div>
-            )}
-            {draft.websiteUrl && (
-              <div className="ml-auto w-fit max-w-[92%] bg-sky-600 text-white rounded-xl px-3 py-2.5">
-                Website: {draft.websiteUrl}
-              </div>
-            )}
+          <div className="card-base bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">Onboarding progress</p>
+            <p className="text-xs text-slate-500 mt-1">Required profile foundations for Stage 1 readiness.</p>
+            <ul className="mt-3 space-y-1.5 text-xs">
+              <li>• First name: {draft.firstName || "(missing)"}</li>
+              <li>• Last name: {draft.lastName || "(missing)"}</li>
+              <li>• Email: {draft.email || "(missing)"}</li>
+              <li>• Phone: {draft.phone || "(missing)"}</li>
+              <li>• Location: {draft.location || "(missing)"}</li>
+              <li>• LinkedIn: {draft.linkedinUrl || "(optional)"}</li>
+              <li>• Website: {draft.websiteUrl || "(optional)"}</li>
+            </ul>
           </div>
 
           {activeStep !== "preferences" && activeStep !== "review" && (

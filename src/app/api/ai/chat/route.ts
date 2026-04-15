@@ -38,6 +38,52 @@ async function getAccountId() {
   return account?.id ?? null
 }
 
+async function captureRunFact(input: {
+  workflowId: string
+  accountId: string
+  surface: string
+  message: string
+  existingMessages: { role: string; content: string }[]
+}) {
+  const surfacesForRunFacts = new Set([
+    'qa',
+    'listing_review',
+    'resume_workspace',
+    'cover_letter_workspace',
+    'application_overview_support',
+    'interview_guide',
+    'negotiation_guide',
+  ])
+
+  if (!surfacesForRunFacts.has(input.surface)) return
+
+  const lastAssistant = [...input.existingMessages].reverse().find((msg) => msg.role === 'assistant')
+  const sourceQuestion = lastAssistant?.content?.trim() || `User-provided ${input.surface} context`
+
+  const { data: existing } = await supabaseAdmin
+    .from('qa_answers')
+    .select('sequence_order')
+    .eq('workflow_id', input.workflowId)
+    .order('sequence_order', { ascending: false })
+    .limit(1)
+
+  const nextOrder = (existing?.[0]?.sequence_order ?? -1) + 1
+
+  await supabaseAdmin
+    .from('qa_answers')
+    .insert({
+      workflow_id: input.workflowId,
+      account_id: input.accountId,
+      question_key: `chat_${input.surface}_${nextOrder}`,
+      question_text: sourceQuestion.slice(0, 800),
+      answer_text: input.message,
+      guidance_text: `Captured from chat surface: ${input.surface}`,
+      is_accepted: true,
+      accepted_at: new Date().toISOString(),
+      sequence_order: nextOrder,
+    })
+}
+
 export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -61,7 +107,6 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Get workflow with listing
   const { data: workflow } = await supabaseAdmin
     .from('workflows')
     .select('*, listing:job_listings(*), status_events(*)')
@@ -73,7 +118,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
   }
 
-  // Get or create chat thread
   let { data: thread } = await supabaseAdmin
     .from('chat_threads')
     .select('*')
@@ -94,30 +138,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create thread' }, { status: 500 })
   }
 
-  // Get existing messages
   const { data: existingMessages } = await supabaseAdmin
     .from('chat_messages')
     .select('*')
     .eq('thread_id', thread.id)
     .order('created_at', { ascending: true })
 
-  // If user sent a message, save it
   if (message) {
     await supabaseAdmin.from('chat_messages').insert({
       thread_id: thread.id,
       role: 'user',
       content: message,
+      metadata: { surface },
+    })
+
+    await captureRunFact({
+      workflowId: workflow_id,
+      accountId,
+      surface,
+      message,
+      existingMessages: existingMessages ?? [],
     })
   }
 
-  // Get previous QA answers for context
-  const { data: qaAnswers } = await supabaseAdmin
-    .from('qa_answers')
-    .select('question_text, answer_text')
-    .eq('workflow_id', workflow_id)
-    .order('sequence_order', { ascending: true })
+  const [{ data: qaAnswers }, { data: reusableFacts }] = await Promise.all([
+    supabaseAdmin
+      .from('qa_answers')
+      .select('question_text, answer_text, is_accepted')
+      .eq('workflow_id', workflow_id)
+      .eq('account_id', accountId)
+      .order('sequence_order', { ascending: true }),
+    supabaseAdmin
+      .from('profile_memory')
+      .select('type, content, context')
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(25),
+  ])
 
-  // Build messages for AI
   const eventTypes = (workflow.status_events ?? []).map((event: StatusEvent) => event.event_type)
   const inApplicationSupport =
     eventTypes.includes('sent') ||
@@ -138,11 +197,22 @@ export async function POST(request: NextRequest) {
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: buildQAUserMessage(workflow.listing, qaAnswers ?? []),
+      content: buildQAUserMessage({
+        workflowState: workflow.state,
+        surface,
+        listing: {
+          title: workflow.listing.title,
+          company_name: workflow.listing.company_name,
+          description: workflow.listing.description,
+          requirements: workflow.listing.requirements,
+          responsibilities: workflow.listing.responsibilities,
+        },
+        qaAnswers: qaAnswers ?? [],
+        reusableFacts: reusableFacts ?? [],
+      }),
     },
   ]
 
-  // Add previous chat messages
   for (const msg of existingMessages ?? []) {
     aiMessages.push({
       role: msg.role as 'system' | 'user' | 'assistant',
@@ -150,26 +220,27 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // Add current user message
   if (message) {
-    aiMessages.push({ role: 'user' as const, content: message })
+    aiMessages.push({ role: 'user', content: message })
   }
 
   try {
     const response = await provider.generate({
       messages: aiMessages,
-      maxTokens: 300,
-      temperature: 0.7,
+      maxTokens: 350,
+      temperature: 0.6,
     })
 
-    // Save assistant response
     await supabaseAdmin.from('chat_messages').insert({
       thread_id: thread.id,
       role: 'assistant',
       content: response,
+      metadata: {
+        surface,
+        workflow_state: workflow.state,
+      },
     })
 
-    // Check if QA is complete
     const isComplete = response.includes('[QA_COMPLETE]')
     if (isComplete) {
       await supabaseAdmin
