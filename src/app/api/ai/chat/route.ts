@@ -6,6 +6,22 @@ import { QA_SYSTEM_PROMPT, buildQAUserMessage } from '@/lib/ai/prompts/qa-guidan
 import { getAdminClient } from '@/lib/supabase/admin'
 
 const supabaseAdmin = getAdminClient()
+const APPLICATION_SUPPORT_SYSTEM_PROMPT = `You are DreamJob's post-submission application support assistant.
+
+The user has already sent or marked an application as applied.
+
+Focus your guidance on:
+- practical follow-up timing and cadence
+- concise follow-up message structure
+- outreach/networking suggestions
+- visibility-improvement actions
+- status-tracking checklists and reminders
+
+Rules:
+- Keep responses practical, specific, and short (3-6 bullets or under 120 words when possible).
+- Do not restart pre-apply intake questions unless the user explicitly asks.
+- If the user mentions interview or offer progression, pivot to that stage while preserving application support continuity.
+- If key details are missing, ask one focused follow-up question.`
 
 async function getAccountId() {
   const cookieStore = await cookies()
@@ -47,7 +63,7 @@ export async function POST(request: NextRequest) {
   // Get workflow with listing
   const { data: workflow } = await supabaseAdmin
     .from('workflows')
-    .select('*, listing:job_listings(*)')
+    .select('*, listing:job_listings(*), status_events(*)')
     .eq('id', workflow_id)
     .eq('account_id', accountId)
     .single()
@@ -101,8 +117,24 @@ export async function POST(request: NextRequest) {
     .order('sequence_order', { ascending: true })
 
   // Build messages for AI
+  const eventTypes = (workflow.status_events ?? []).map((event) => event.event_type)
+  const inApplicationSupport =
+    eventTypes.includes('sent') ||
+    eventTypes.includes('submitted') ||
+    workflow.state === 'sent' ||
+    workflow.state === 'completed'
+  const progressedToInterviewOrNegotiation =
+    eventTypes.includes('interview') ||
+    eventTypes.includes('interview_scheduled') ||
+    eventTypes.includes('offer') ||
+    eventTypes.includes('offer_received') ||
+    eventTypes.includes('negotiation')
+  const systemPrompt = inApplicationSupport && !progressedToInterviewOrNegotiation
+    ? APPLICATION_SUPPORT_SYSTEM_PROMPT
+    : QA_SYSTEM_PROMPT
+
   const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: QA_SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     {
       role: 'user',
       content: buildQAUserMessage(workflow.listing, qaAnswers ?? []),

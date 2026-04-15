@@ -20,7 +20,8 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [isTyping, setIsTyping] = useState(false);
   const [loadingThread, setLoadingThread] = useState(true);
-  const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG.stage2;
+  const [stageKey, setStageKey] = useState<"stage2" | "support">("stage2");
+  const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
 
   useEffect(() => {
     let active = true;
@@ -28,11 +29,24 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
       setLoadingThread(true);
       try {
         const params = new URLSearchParams({ workflow_id: workflowId, surface });
-        const res = await fetch(`/api/ai/chat?${params.toString()}`);
-        const data = await res.json();
+        const [threadRes, workflowRes] = await Promise.all([
+          fetch(`/api/ai/chat?${params.toString()}`),
+          fetch(`/api/workflows/${workflowId}`),
+        ]);
+        const [data, workflow] = await Promise.all([threadRes.json(), workflowRes.json()]);
         if (!active) return;
 
-        if (res.ok && Array.isArray(data.messages)) {
+        const eventTypes = Array.isArray(workflow?.status_events)
+          ? workflow.status_events.map((event: { event_type: string }) => event.event_type)
+          : [];
+        const isApplicationSupport =
+          eventTypes.includes("sent") ||
+          eventTypes.includes("submitted") ||
+          workflow?.state === "sent" ||
+          workflow?.state === "completed";
+        setStageKey(isApplicationSupport ? "support" : "stage2");
+
+        if (threadRes.ok && Array.isArray(data.messages)) {
           if (data.messages.length > 0) {
             setMessages(data.messages.map((message: { id: string; role: "user" | "assistant"; content: string; created_at: string }) => ({
               id: message.id,

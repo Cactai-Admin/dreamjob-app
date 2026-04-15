@@ -63,8 +63,8 @@ export const DEFAULT_SHARED_CHAT_STAGE_CONFIG: Record<SharedChatStageConfig['sta
   },
   support: {
     stage: 'support',
-    placeholder: 'Ask for support…',
-    emptyStateText: 'Support thread ready.',
+    placeholder: 'Ask for follow-up, outreach, or reminder guidance…',
+    emptyStateText: 'Application Support is active — ask for post-submission next steps.',
     allowsInput: true,
   },
 }
