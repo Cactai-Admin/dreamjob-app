@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { QA_SYSTEM_PROMPT, buildQAUserMessage } from '@/lib/ai/prompts/qa-guidance'
 import { getAdminClient } from '@/lib/supabase/admin'
+import type { StatusEvent } from '@/types/database'
 
 const supabaseAdmin = getAdminClient()
 const APPLICATION_SUPPORT_SYSTEM_PROMPT = `You are DreamJob's post-submission application support assistant.
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
     .order('sequence_order', { ascending: true })
 
   // Build messages for AI
-  const eventTypes = (workflow.status_events ?? []).map((event) => event.event_type)
+  const eventTypes = (workflow.status_events ?? []).map((event: StatusEvent) => event.event_type)
   const inApplicationSupport =
     eventTypes.includes('sent') ||
     eventTypes.includes('submitted') ||
