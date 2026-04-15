@@ -14,7 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
 import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
-import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 
 interface Props {
@@ -306,6 +305,10 @@ export default function ListingReviewPage({ params }: Props) {
       <div className="grid lg:grid-cols-5 gap-5">
         {/* ── Left: Listing data (3/5) ── */}
         <div className="lg:col-span-3 space-y-5">
+          <section className="space-y-1">
+            <h2 className="text-sm font-semibold text-slate-800">Core listing details</h2>
+            <p className="text-xs text-slate-500">Confirm foundational role and company context before moving forward.</p>
+          </section>
 
           {/* Core fields */}
           <div className="card-base p-5">
@@ -376,8 +379,11 @@ export default function ListingReviewPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Description */}
-          {/* Requirements */}
+          <section className="space-y-1 pt-1">
+            <h2 className="text-sm font-semibold text-slate-800">Requirements and role scope</h2>
+            <p className="text-xs text-slate-500">Refine requirement language and preserve supporting role details in editable form.</p>
+          </section>
+
           <div className="card-base p-5">
             <h2 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
               <Star className="w-4 h-4 text-sky-500" />
@@ -435,10 +441,14 @@ export default function ListingReviewPage({ params }: Props) {
             />
           </div>
 
-          {/* Additional Details */}
+          <section className="space-y-1 pt-1">
+            <h2 className="text-sm font-semibold text-slate-800">Additional extracted context</h2>
+            <p className="text-xs text-slate-500">Keep extra signals that matter for tailoring, interview prep, and expectations.</p>
+          </section>
+
           <div className="card-base p-5">
             <h2 className="font-semibold text-slate-900 mb-1">Additional Details</h2>
-            <p className="text-xs text-slate-400 mb-3">Anything from the listing that wasn't captured above — responsibilities, benefits, interview process, deadlines, work authorization, etc.</p>
+            <p className="text-xs text-slate-400 mb-3">Anything from the listing that wasn&apos;t captured above — responsibilities, benefits, interview process, deadlines, work authorization, etc.</p>
             <textarea
               value={additionalDetails}
               ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
@@ -453,23 +463,10 @@ export default function ListingReviewPage({ params }: Props) {
 
         {/* ── Right: Analysis (2/5) ── */}
         <div className="lg:col-span-2 space-y-5">
-          <ContextPhasePanel
-            phase={2}
-            title="Listing Extracted Information"
-            subtitle="Review/edit extracted listing context before creating an application."
-            items={[
-              { label: "Role", value: title || "Untitled Listing" },
-              { label: "Company", value: companyName || "Unknown" },
-              { label: "Location", value: location || "Not specified" },
-              { label: "Experience", value: expLevel || "Unknown" },
-              { label: "Requirements", value: `${reqs.length} captured` },
-            ]}
-          />
-
           {/* CTA card */}
           <div className="card-base p-5 bg-slate-900 border-slate-900">
             <h2 className="font-semibold text-white mb-1">Ready to apply?</h2>
-            <p className="text-slate-400 text-sm mb-4">We'll build a tailored resume and cover letter with AI assistance.</p>
+            <p className="text-slate-400 text-sm mb-4">We&apos;ll build a tailored resume and cover letter with AI assistance.</p>
             <button
               onClick={startApplication}
               disabled={starting}
@@ -482,9 +479,9 @@ export default function ListingReviewPage({ params }: Props) {
 
           {/* Match Score */}
           <div className="card-base p-5">
-            <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-sky-500" />
-              Profile Match
+              <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-sky-500" />
+              Alignment signals
             </h2>
             {skills.length === 0 && keywords.length === 0 && profileTools.length === 0 && tech.length === 0 ? (
               <div className="text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
@@ -509,9 +506,9 @@ export default function ListingReviewPage({ params }: Props) {
                       "font-semibold",
                       match.score >= 70 ? "text-emerald-700" : match.score >= 40 ? "text-amber-700" : "text-red-600"
                     )}>
-                      {match.score >= 70 ? "Strong match" : match.score >= 40 ? "Partial match" : "Low match"}
+                      {match.score >= 70 ? "Higher alignment trend" : match.score >= 40 ? "Moderate alignment trend" : "Lower alignment trend"}
                     </p>
-                    <p className="text-xs text-slate-400 mt-0.5">{match.matched.length} term{match.matched.length !== 1 ? "s" : ""} matched · {match.missing.length} requirement{match.missing.length !== 1 ? "s" : ""} to address</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{match.matched.length} term{match.matched.length !== 1 ? "s" : ""} aligned · {match.missing.length} requirement{match.missing.length !== 1 ? "s" : ""} still uncovered</p>
                   </div>
                 </div>
 
@@ -563,6 +560,25 @@ export default function ListingReviewPage({ params }: Props) {
                 )}
               </>
             )}
+          </div>
+
+          <div className="card-base p-5">
+            <h2 className="font-semibold text-slate-900 mb-2">Readiness snapshot</h2>
+            <p className="text-xs text-slate-500 mb-3">Use this as guidance, not a pass/fail gate.</p>
+            <ul className="space-y-2 text-sm text-slate-600">
+              <li className="flex items-start gap-2">
+                <ChevronRight className="w-3.5 h-3.5 mt-0.5 text-slate-400" />
+                <span>{reqs.length > 0 ? `${reqs.length} requirements are captured for review.` : "Add requirements to improve downstream tailoring quality."}</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <ChevronRight className="w-3.5 h-3.5 mt-0.5 text-slate-400" />
+                <span>{description.trim() ? "Job description is present and editable." : "Add the core job description to strengthen generation quality."}</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <ChevronRight className="w-3.5 h-3.5 mt-0.5 text-slate-400" />
+                <span>{linkedInUrl.trim() ? "Company LinkedIn URL is available for connection checks." : "Add a company LinkedIn URL if networking context matters for this role."}</span>
+              </li>
+            </ul>
           </div>
 
           {/* LinkedIn Connections */}

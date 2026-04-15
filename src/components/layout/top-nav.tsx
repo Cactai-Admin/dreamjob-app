@@ -121,6 +121,7 @@ export function TopNav() {
   const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
   const milestoneWorkflowId = workflowMatch?.[1] ?? listingMatch?.[1];
   const showMilestones = Boolean(milestoneWorkflowId);
+  const isHomePage = pathname === "/home";
   const milestones = milestoneWorkflowId ? [
     { href: `/listings/${milestoneWorkflowId}`, label: "Listing Review" },
     { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
@@ -128,9 +129,10 @@ export function TopNav() {
     { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview" },
     { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
   ] : [];
+  const milestoneActiveIndex = milestones.findIndex(({ href }) => pathname === href);
 
   // Profile button — shared across desktop and mobile
-  const ProfileButton = ({ sizePx }: { sizePx?: number }) => (
+  const renderProfileButton = (sizePx?: number) => (
     <div className="relative" style={userMenuOpen ? { zIndex: 191 } : undefined}>
       <button
         onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -202,7 +204,7 @@ export function TopNav() {
           </div>
 
           {/* Center: nav links (non-doc) or doc tabs — absolutely centered */}
-          {!isDocPage && !showMilestones && (
+          {!isDocPage && !showMilestones && !isHomePage && (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
               {NAV_ITEMS.map(({ href, label }) => (
                 <Link
@@ -218,19 +220,26 @@ export function TopNav() {
 
           {showMilestones && (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
-              {milestones.map(({ href, label }) => {
+              {milestones.map(({ href, label }, idx) => {
                 const active = pathname === href;
+                const completed = milestoneActiveIndex > -1 && idx < milestoneActiveIndex;
+                const locked = milestoneActiveIndex > -1 && idx > milestoneActiveIndex + 1;
+                const clickable = !locked;
                 return (
-                  <Link
+                  <button
                     key={href}
-                    href={href}
+                    onClick={() => clickable && router.push(href)}
+                    disabled={!clickable}
                     className={cn(
                       "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                      active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                      active && "bg-white text-slate-900 shadow-sm",
+                      completed && "text-emerald-700 bg-emerald-50",
+                      !active && !completed && !locked && "text-slate-500 hover:text-slate-700",
+                      locked && "text-slate-400 bg-slate-200/70 cursor-not-allowed"
                     )}
                   >
                     {label}
-                  </Link>
+                  </button>
                 );
               })}
             </div>
@@ -300,7 +309,7 @@ export function TopNav() {
             )}
 
             {/* Profile — icon only */}
-            <ProfileButton />
+            {renderProfileButton()}
           </div>
         </div>
       </nav>
@@ -362,7 +371,7 @@ export function TopNav() {
                 </>
               )}
 
-              <ProfileButton sizePx={scrolled ? 27 : 54} />
+              {renderProfileButton(scrolled ? 27 : 54)}
             </div>
           </>
         ) : (
@@ -383,13 +392,13 @@ export function TopNav() {
               </span>
             </Link>
             <div className="flex-1" />
-            <ProfileButton sizePx={scrolled ? 27 : 54} />
+            {renderProfileButton(scrolled ? 27 : 54)}
           </>
         )}
       </div>
 
 {/* ── Mobile bottom tab bar — not rendered on doc pages ── */}
-{!mobileWorkflowId && (
+{!mobileWorkflowId && !isHomePage && (
   <nav className="mobile-bottom-nav md:hidden flex">
     <div className="flex items-stretch w-full">
       {MOBILE_NAV_ITEMS.map(({ href, label, icon: Icon }) => {
