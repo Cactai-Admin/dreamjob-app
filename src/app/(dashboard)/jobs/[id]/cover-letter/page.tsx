@@ -222,6 +222,12 @@ export default function CoverLetterBuilderPage({ params }: Props) {
                   Live cover letter workspace
                 </span>
               </div>
+              <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">Editable artifact</p>
+                <p className="mt-1 text-xs text-slate-700">
+                  This document is your source of truth. Click the letter body to edit directly, and use the assistant rail to rewrite specific sections.
+                </p>
+              </div>
               {qualityFlags.length > 0 && (
                 <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Draft quality checks</p>
@@ -259,6 +265,11 @@ export default function CoverLetterBuilderPage({ params }: Props) {
                       onClick={() => setEditing(true)}
                       title="Click to edit"
                     >
+                      {hasPlaceholderCopy && (
+                        <div className="mb-2 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          Needs personalization
+                        </div>
+                      )}
                       <MarkdownDoc content={content} />
                     </div>
                   )}
@@ -267,11 +278,17 @@ export default function CoverLetterBuilderPage({ params }: Props) {
               <div className="mt-4">
                 <AlignmentIndicators title="Cover letter alignment" />
               </div>
+              <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Assistant support relationship</p>
+                <p className="mt-1 text-xs text-slate-700">
+                  The assistant is tuned for this cover letter context and should be used to tighten voice, role fit, and impact evidence while you keep final editorial control.
+                </p>
+              </div>
               <div className="mt-4">
                 <ContextPhasePanel
                   phase={5}
-                  title="Cover Letter Workspace Context"
-                  subtitle="Artifact-first editing with support and metadata below the document."
+                  title="Cover Letter Metadata"
+                  subtitle="Reference details below the artifact and assistant guidance."
                   items={[
                     { label: "Workflow", value: id },
                     { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
