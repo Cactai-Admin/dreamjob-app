@@ -69,6 +69,16 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;
+    const includesUrl = /https?:\/\/|www\./i.test(text);
+    if (includesUrl) {
+      setMessages((prev) => [...prev, {
+        id: `msg-url-block-${Date.now()}`,
+        role: "assistant",
+        content: "New listing URL intake is handled on Home. Go to Home to analyze a new listing URL, and use this chat for the current workflow.",
+        timestamp: new Date().toISOString(),
+      }]);
+      return;
+    }
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,

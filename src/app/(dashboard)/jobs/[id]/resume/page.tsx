@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, CreditCard as Edit3, Save, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
+import { AlignmentIndicators } from "@/components/documents/alignment-indicators";
 import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
@@ -256,15 +257,6 @@ export default function ResumeBuilderPage({ params }: Props) {
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden">
-        <div className="hidden lg:flex lg:flex-1 lg:min-w-0 lg:border-r lg:border-slate-200">
-          <AiChatPanel
-            workflowId={id}
-            surface="application_materials"
-            initialMessages={initialMessages}
-            className="flex-1 h-full"
-          />
-        </div>
-
         <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden md:block")}>
           {generating ? (
             <GeneratingState title={jobTitle} company={company} />
@@ -274,7 +266,7 @@ export default function ResumeBuilderPage({ params }: Props) {
                 <ContextPhasePanel
                   phase={4}
                   title="Resume"
-                  subtitle="Resume is the active right-panel artifact while chat stays central."
+                  subtitle="Resume editing is active while the assistant stays persistent on the right."
                   items={[
                     { label: "Workflow", value: id },
                     { label: "Role", value: jobTitle || "Untitled role" },
@@ -284,6 +276,7 @@ export default function ResumeBuilderPage({ params }: Props) {
                   ]}
                 />
               </div>
+              <AlignmentIndicators title="Resume alignment" />
               <div className="document-paper overflow-hidden">
                 {sections.map((section, idx) => (
                   <div
@@ -334,6 +327,15 @@ export default function ResumeBuilderPage({ params }: Props) {
               </div>
             </div>
           )}
+        </div>
+
+        <div className="hidden lg:flex lg:w-[360px] lg:min-w-0 lg:border-l lg:border-slate-200">
+          <AiChatPanel
+            workflowId={id}
+            surface="application_materials"
+            initialMessages={initialMessages}
+            className="flex-1 h-full"
+          />
         </div>
 
         {/* AI panel — mobile only (hidden on desktop per request) */}

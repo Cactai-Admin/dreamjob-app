@@ -2,7 +2,7 @@
 
 // ── Listing Review — Verify parsed data, check match score, find connections, then decide to apply ──
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
 import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
 import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
+import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -144,7 +145,7 @@ export default function ListingReviewPage({ params }: Props) {
     setAddModal(null);
   };
 
-  const saveListing = async () => {
+  const saveListing = useCallback(async () => {
     setSaving(true);
     await fetch(`/api/workflows/${id}`, {
       method: "PATCH",
@@ -171,7 +172,17 @@ export default function ListingReviewPage({ params }: Props) {
     });
     setSaving(false);
     setDirty(false);
-  };
+  }, [id, companyName, title, location, salary, empType, expLevel, description, reqs, additionalDetails, companyWebsite, linkedInUrl]);
+
+  useEffect(() => {
+    const onSaveProgress = () => {
+      if (dirty && !saving) {
+        void saveListing();
+      }
+    };
+    window.addEventListener("dreamjob:save-progress", onSaveProgress);
+    return () => window.removeEventListener("dreamjob:save-progress", onSaveProgress);
+  }, [dirty, saving, saveListing]);
 
   const addReq = () => {
     const r = newReq.trim();
@@ -258,7 +269,8 @@ export default function ListingReviewPage({ params }: Props) {
 
   return (
     <>
-    <div className="page-wrapper max-w-1000px">
+    <div className="flex-1 flex overflow-hidden">
+    <div className="page-wrapper max-w-1000px flex-1 overflow-y-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
@@ -652,6 +664,10 @@ export default function ListingReviewPage({ params }: Props) {
           </div>
         </div>
       </div>
+    </div>
+    <div className="hidden xl:flex xl:flex-col xl:w-[360px] xl:border-l xl:border-slate-200">
+      <AiChatPanel workflowId={id} surface="listing_review" className="flex-1 h-full" />
+    </div>
     </div>
 
     {/* ── Connections Modal ── */}

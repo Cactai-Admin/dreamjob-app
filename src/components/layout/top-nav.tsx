@@ -32,7 +32,6 @@ const NAV_ITEMS = [
   { href: "/home",      label: "Home",                  icon: LayoutDashboard },
   { href: "/listings",  label: "Listings",              icon: Zap },
   { href: "/jobs",      label: "Applications",          icon: Briefcase },
-  { href: "/profile",   label: "Profile",               icon: User },
 ];
 
 /* Mobile bottom tab bar */
@@ -118,6 +117,17 @@ export function TopNav() {
   const mobileWorkflowId = mobileDocMatch?.[1];
   const mobileActiveDoc = mobileDocMatch?.[2] as typeof DOC_TABS[number]['type'] | undefined;
   const isDocPage = !!mobileDocMatch;
+  const listingMatch = pathname.match(/^\/listings\/([^/]+)/);
+  const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
+  const milestoneWorkflowId = workflowMatch?.[1] ?? listingMatch?.[1];
+  const showMilestones = Boolean(milestoneWorkflowId);
+  const milestones = milestoneWorkflowId ? [
+    { href: `/listings/${milestoneWorkflowId}`, label: "Listing Review" },
+    { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
+    { href: `/jobs/${milestoneWorkflowId}/cover-letter`, label: "Cover Letter" },
+    { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview" },
+    { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
+  ] : [];
 
   // Profile button — shared across desktop and mobile
   const ProfileButton = ({ sizePx }: { sizePx?: number }) => (
@@ -179,7 +189,11 @@ export function TopNav() {
 
           {/* Left: brand always */}
           <div className="flex items-center flex-shrink-0">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <Link
+              href="/home"
+              onClick={() => window.dispatchEvent(new Event("dreamjob:save-progress"))}
+              className="flex items-center gap-2.5 flex-shrink-0"
+            >
               <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center shadow-[0_2px_6px_rgba(0,0,0,0.48)] transition-all duration-150 active:shadow-[0_1px_3px_rgba(0,0,0,0.65)] active:translate-y-0.5">
                 <Zap className="w-5 h-5 text-white" />
               </div>
@@ -188,7 +202,7 @@ export function TopNav() {
           </div>
 
           {/* Center: nav links (non-doc) or doc tabs — absolutely centered */}
-          {!isDocPage && (
+          {!isDocPage && !showMilestones && (
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1">
               {NAV_ITEMS.map(({ href, label }) => (
                 <Link
@@ -199,6 +213,26 @@ export function TopNav() {
                   {label}
                 </Link>
               ))}
+            </div>
+          )}
+
+          {showMilestones && (
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+              {milestones.map(({ href, label }) => {
+                const active = pathname === href;
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                      active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    )}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
             </div>
           )}
 

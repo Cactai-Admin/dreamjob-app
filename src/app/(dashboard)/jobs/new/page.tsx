@@ -1,7 +1,7 @@
 "use client";
 
-// ── New Job — Redirects to home page workflow surface ─────
-// The job creation workflow is now handled on the home page (/).
+// ── New Job — Redirects to Home intake surface ─────
+// The job creation workflow is now handled on /home.
 // This redirect handles any direct links to /jobs/new.
 
 import { useEffect } from "react";
@@ -11,7 +11,7 @@ export default function NewJobRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/");
+    router.replace("/home");
   }, [router]);
 
   return (
