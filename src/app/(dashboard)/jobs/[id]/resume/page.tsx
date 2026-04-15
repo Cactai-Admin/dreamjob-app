@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, CreditCard as Edit3, Save, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
+import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
@@ -260,6 +261,20 @@ export default function ResumeBuilderPage({ params }: Props) {
             <GeneratingState title={jobTitle} company={company} />
           ) : (
             <div className="max-w-2xl mx-auto">
+              <div className="mb-4">
+                <ContextPhasePanel
+                  phase={4}
+                  title="Resume"
+                  subtitle="Resume is the active right-panel artifact while chat stays central."
+                  items={[
+                    { label: "Workflow", value: id },
+                    { label: "Role", value: jobTitle || "Untitled role" },
+                    { label: "Company", value: company || "Unknown" },
+                    { label: "Sections", value: `${sections.length}` },
+                    { label: "Status", value: generating ? "Generating" : "Draft/Editable" },
+                  ]}
+                />
+              </div>
               <div className="document-paper overflow-hidden">
                 {sections.map((section, idx) => (
                   <div
