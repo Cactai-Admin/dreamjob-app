@@ -175,6 +175,22 @@ export default function CoverLetterBuilderPage({ params }: Props) {
 
   if (!workflow) return notFound();
 
+  const jobTitle = workflow.listing?.title ?? "this role";
+  const company = workflow.listing?.company_name ?? "the company";
+  const initialMessages = [
+    {
+      id: "cover-letter-greeting",
+      role: "assistant" as const,
+      content: generating
+        ? `I’m drafting your cover letter for **${jobTitle}** at **${company}**. If you share a key achievement now, I can help weave it into the final version.`
+        : `Your cover letter draft is ready for **${jobTitle}** at **${company}**. Tell me what tone or emphasis you want to refine first.`,
+      timestamp: new Date().toISOString(),
+      suggestions: generating
+        ? ["I'll wait for the draft", "Here's my top achievement"]
+        : ["Tighten the opening", "Align with resume highlights", "Make this more concise"],
+    },
+  ];
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-slate-100">
       {confirmDel && (
@@ -191,7 +207,16 @@ export default function CoverLetterBuilderPage({ params }: Props) {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden lg:block")}>
+        <div className="hidden lg:flex lg:flex-1 lg:min-w-0 lg:border-r lg:border-slate-200">
+          <AiChatPanel
+            workflowId={id}
+            surface="application_materials"
+            initialMessages={initialMessages}
+            className="flex-1 h-full"
+          />
+        </div>
+
+        <div className={cn("flex-1 overflow-y-auto p-4 sm:p-8 doc-scroll", chatOpen && "hidden md:block")}>
           {generating ? (
             <div className="flex flex-col items-center justify-center h-full p-8">
               <div className="w-16 h-16 rounded-2xl bg-ocean-300 flex items-center justify-center mb-6">
@@ -257,9 +282,6 @@ export default function CoverLetterBuilderPage({ params }: Props) {
           )}
         </div>
 
-        <div className="hidden lg:flex lg:flex-col lg:w-[340px] lg:border-l lg:border-slate-200">
-          <AiChatPanel workflowId={id} surface="cover_letter" className="flex-1 h-full" />
-        </div>
       </div>
 
       <button
@@ -271,7 +293,13 @@ export default function CoverLetterBuilderPage({ params }: Props) {
       </button>
       {chatOpen && (
         <div className="md:hidden fixed inset-0 z-50">
-          <AiChatPanel workflowId={id} surface="cover_letter" onClose={() => setChatOpen(false)} className="h-full" />
+          <AiChatPanel
+            workflowId={id}
+            surface="application_materials"
+            initialMessages={initialMessages}
+            onClose={() => setChatOpen(false)}
+            className="h-full"
+          />
         </div>
       )}
     </div>
