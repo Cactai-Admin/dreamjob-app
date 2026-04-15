@@ -261,22 +261,13 @@ export default function ResumeBuilderPage({ params }: Props) {
           {generating ? (
             <GeneratingState title={jobTitle} company={company} />
           ) : (
-            <div className="max-w-2xl mx-auto">
-              <div className="mb-4">
-                <ContextPhasePanel
-                  phase={4}
-                  title="Resume"
-                  subtitle="Resume editing is active while the assistant stays persistent on the right."
-                  items={[
-                    { label: "Workflow", value: id },
-                    { label: "Role", value: jobTitle || "Untitled role" },
-                    { label: "Company", value: company || "Unknown" },
-                    { label: "Sections", value: `${sections.length}` },
-                    { label: "Status", value: generating ? "Generating" : "Draft/Editable" },
-                  ]}
-                />
+            <div className="max-w-3xl mx-auto">
+              <div className="mb-2 flex items-center justify-between px-1 gap-2">
+                <p className="text-xs text-slate-500">Click a section to edit inline. Auto-save and assistant prompts keep this draft live.</p>
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
+                  AI draft workspace
+                </span>
               </div>
-              <AlignmentIndicators title="Resume alignment" />
               <div className="document-paper overflow-hidden">
                 {sections.map((section, idx) => (
                   <div
@@ -312,8 +303,9 @@ export default function ResumeBuilderPage({ params }: Props) {
                         )
                       ) : editingId !== section.id ? (
                         <div
-                          className="cursor-text"
+                          className="cursor-text rounded-md border border-dashed border-slate-200/80 px-2 py-1 -mx-2 hover:border-sky-300 hover:bg-sky-50/50 transition-colors"
                           onClick={() => setEditingId(section.id)}
+                          title="Click to edit this section"
                         >
                           <MarkdownDoc content={section.content} />
                         </div>
@@ -325,6 +317,23 @@ export default function ResumeBuilderPage({ params }: Props) {
                 ))}
                 <div className="h-8" />
               </div>
+              <div className="mt-4">
+                <AlignmentIndicators title="Resume alignment" />
+              </div>
+              <div className="mt-3 opacity-80">
+                <ContextPhasePanel
+                  phase={4}
+                  title="Resume metadata"
+                  subtitle="Reference details for this active workspace."
+                  items={[
+                    { label: "Workflow", value: id },
+                    { label: "Role", value: jobTitle || "Untitled role" },
+                    { label: "Company", value: company || "Unknown" },
+                    { label: "Sections", value: `${sections.length}` },
+                    { label: "Status", value: generating ? "Generating" : "Draft/Editable" },
+                  ]}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -332,7 +341,7 @@ export default function ResumeBuilderPage({ params }: Props) {
         <div className="hidden lg:flex lg:w-[360px] lg:min-w-0 lg:border-l lg:border-slate-200">
           <AiChatPanel
             workflowId={id}
-            surface="application_materials"
+            surface="resume_workspace"
             initialMessages={initialMessages}
             className="flex-1 h-full"
           />
@@ -343,7 +352,7 @@ export default function ResumeBuilderPage({ params }: Props) {
           <div className="md:hidden fixed inset-0 z-50">
             <AiChatPanel
               workflowId={id}
-              surface="application_materials"
+              surface="resume_workspace"
               initialMessages={initialMessages}
               onClose={() => setChatOpen(false)}
               className="h-full"

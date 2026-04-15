@@ -40,7 +40,7 @@ export function AppShell({ children }: Props) {
         {/* Page content — overflow-y-auto lets regular pages scroll; editor pages use overflow-hidden on their root to stay viewport-locked */}
         <main className="flex-1 min-w-0 flex overflow-hidden">
           {!isHome && <ContinuitySidebar open={continuityOpen} onToggle={() => setContinuityOpen((value) => !value)} />}
-          <div className="flex-1 min-w-0 flex flex-col overflow-y-auto">
+          <div className={pathname === "/home" ? "flex-1 min-w-0 flex flex-col overflow-y-auto" : "flex-1 min-w-0 flex flex-col overflow-y-auto lg:pl-14"}>
             {children}
           </div>
           {assistantMode && (

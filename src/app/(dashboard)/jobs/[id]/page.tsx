@@ -10,13 +10,14 @@ import {
   ChevronRight, StickyNote, Building2, Users, Calendar,
   CircleCheck as CheckCircle2, Trash2, MessageSquare, TrendingUp,
   PenLine, Save, X, Plus, Star, Link2, RefreshCw,
-  Globe, Check, AlertCircle,
+  Globe, Check, AlertCircle, LifeBuoy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { DocStatusPill } from "@/components/jobs/doc-status-pill";
 import { PageHeader } from "@/components/layout/page-header";
 import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
+import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { workflowToJob, deriveApplicationStatus, deriveAllStatuses } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -60,6 +61,13 @@ const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: stri
   { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
 ];
 
+const PACKET_STATE_COPY: Record<string, { hint: string }> = {
+  not_started: { hint: "Open to begin drafting" },
+  generating: { hint: "AI draft is generating" },
+  draft: { hint: "Review and refine content" },
+  approved: { hint: "Ready for packet use" },
+};
+
 type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
 
 interface Props {
@@ -74,6 +82,7 @@ export default function JobDetailPage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // Listing edit state
   const [editingListing, setEditingListing] = useState(false);
@@ -363,13 +372,19 @@ export default function JobDetailPage({ params }: Props) {
   const outreachActionLabel = hasProgressedBeyondSupport
     ? "Share interview/offer progress with key contacts."
     : "Identify 1–2 team connections for light outreach.";
+  const packetStates = [
+    job.resumeStatus,
+    job.coverLetterStatus,
+    job.interviewGuideStatus,
+    job.negotiationGuideStatus,
+  ];
+  const hasExportableContent = packetStates.some((status) => status === "draft" || status === "approved");
 
   return (
     <div className="page-wrapper max-w-1000px">
       <PageHeader
         title={job.title}
         subtitle={job.company}
-        backHref="/jobs"
         actions={<StatusBadge status={job.status} />}
       />
 
@@ -697,28 +712,41 @@ export default function JobDetailPage({ params }: Props) {
               ]}
           />
 
-          {inApplicationSupport && (
-            <div className="card-base p-5">
-              <h3 className="font-semibold text-slate-900 mb-2">Application Support Chat</h3>
-              <p className="text-xs text-slate-500 mb-3">
-                Use chat for post-submission guidance and next-step planning.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "Draft a concise follow-up email for this application.",
-                  "Help me plan a networking outreach message for this role.",
-                  "What should I track weekly until I hear back?",
-                ].map((prompt) => (
-                  <span
-                    key={prompt}
-                    className="text-xs px-2.5 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
-                  >
-                    {prompt}
-                  </span>
-                ))}
+          <div className="card-base p-5">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <h3 className="font-semibold text-slate-900">Workflow Support</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {inApplicationSupport
+                    ? "Get follow-up and post-send guidance for this application stage."
+                    : "Open support to plan next actions for this application packet."}
+                </p>
               </div>
+              <button
+                onClick={() => setSupportOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-sky-600 text-white text-xs font-semibold hover:bg-sky-700 transition-colors"
+              >
+                <LifeBuoy className="w-3.5 h-3.5" />
+                Open support
+              </button>
             </div>
-          )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {[
+                inApplicationSupport
+                  ? "Draft a concise follow-up email for this application."
+                  : "What should I complete before marking this packet ready?",
+                "Help me prioritize the next workflow step.",
+                "Show me the fastest path to export readiness.",
+              ].map((prompt) => (
+                <span
+                  key={prompt}
+                  className="text-xs px-2.5 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
+                >
+                  {prompt}
+                </span>
+              ))}
+            </div>
+          </div>
 
           {/* Application Packet */}
           <div className="card-base p-5">
@@ -731,7 +759,8 @@ export default function JobDetailPage({ params }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Resume</div>
-                  <DocStatusPill status={job.resumeStatus} label="" />
+                  <DocStatusPill status={job.resumeStatus} />
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.resumeStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -743,7 +772,8 @@ export default function JobDetailPage({ params }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Cover Letter</div>
-                  <DocStatusPill status={job.coverLetterStatus} label="" />
+                  <DocStatusPill status={job.coverLetterStatus} />
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.coverLetterStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -755,7 +785,8 @@ export default function JobDetailPage({ params }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Interview Guide</div>
-                  <DocStatusPill status={job.interviewGuideStatus} label="" />
+                  <DocStatusPill status={job.interviewGuideStatus} />
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.interviewGuideStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
@@ -767,16 +798,31 @@ export default function JobDetailPage({ params }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900 text-sm">Negotiation Guide</div>
-                  <DocStatusPill status={job.negotiationGuideStatus} label="" />
+                  <DocStatusPill status={job.negotiationGuideStatus} />
+                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.negotiationGuideStatus].hint}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
               </Link>
 
               <Link href={`/jobs/${job.id}/export`}
-                className="flex items-center justify-center gap-2 w-full py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 transition-colors">
+                aria-disabled={!hasExportableContent}
+                onClick={(event) => {
+                  if (!hasExportableContent) event.preventDefault();
+                }}
+                className={cn(
+                  "flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold rounded-xl transition-colors",
+                  hasExportableContent
+                    ? "bg-slate-900 text-white hover:bg-slate-800"
+                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                )}>
                 <Download className="w-4 h-4" />
                 Export Packet
               </Link>
+              {!hasExportableContent && (
+                <p className="text-[11px] text-slate-500 text-center">
+                  Export unlocks after at least one packet module has draft or completed content.
+                </p>
+              )}
             </div>
           </div>
 
@@ -992,6 +1038,24 @@ export default function JobDetailPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {supportOpen && (
+        <>
+          <button
+            className="fixed inset-0 z-40 bg-slate-950/35"
+            onClick={() => setSupportOpen(false)}
+            aria-label="Close support drawer"
+          />
+          <div className="fixed z-50 inset-y-0 right-0 w-full max-w-[420px] bg-white border-l border-slate-200 shadow-2xl">
+            <AiChatPanel
+              workflowId={id}
+              surface="application_overview_support"
+              className="h-full"
+              onClose={() => setSupportOpen(false)}
+            />
+          </div>
+        </>
+      )}
 
       {/* ── Add to Profile Modal ── */}
       {addModal && (

@@ -36,6 +36,39 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   const [loadingThread, setLoadingThread] = useState(true);
   const [stageKey, setStageKey] = useState<"stage1" | "stage2" | "support">("stage2");
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
+  const copyBySurface: Partial<Record<string, { subtitle: string; placeholder: string; empty: string }>> = {
+    listing_review: {
+      subtitle: "Listing review assistant",
+      placeholder: "Ask about listing quality, gaps, and parsing fixes…",
+      empty: "Validate the listing context before starting your application workflow.",
+    },
+    resume_workspace: {
+      subtitle: "Resume editing assistant",
+      placeholder: "Ask for resume bullet, summary, or section edits…",
+      empty: "Use chat to co-edit resume content directly in this workspace.",
+    },
+    cover_letter_workspace: {
+      subtitle: "Cover letter assistant",
+      placeholder: "Ask for cover-letter tone, structure, and rewrite edits…",
+      empty: "Use chat to refine your cover letter for this role.",
+    },
+    application_overview_support: {
+      subtitle: "Workflow support",
+      placeholder: "Ask for workflow next steps, follow-ups, and packet readiness…",
+      empty: "Use support to plan next actions for this application workflow.",
+    },
+    interview_guide: {
+      subtitle: "Interview guide assistant",
+      placeholder: "Ask for interview stories, prep questions, and talking points…",
+      empty: "Use chat to strengthen your interview prep for this role.",
+    },
+    negotiation_guide: {
+      subtitle: "Negotiation guide assistant",
+      placeholder: "Ask for offer analysis and negotiation strategy help…",
+      empty: "Use chat to plan negotiation talking points and counters.",
+    },
+  };
+  const surfaceCopy = copyBySurface[surface];
   useEffect(() => {
     let active = true;
     const loadThread = async () => {
@@ -150,9 +183,9 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         onSuggestion={sendMessage}
         onClose={onClose}
         headerTitle="AI Assistant"
-        headerSubtitle={loadingThread ? "Loading thread…" : "Ready to help"}
-        placeholder={stageConfig.placeholder}
-        emptyStateText={stageConfig.emptyStateText}
+        headerSubtitle={loadingThread ? "Loading thread…" : (surfaceCopy?.subtitle ?? "Ready to help")}
+        placeholder={surfaceCopy?.placeholder ?? stageConfig.placeholder}
+        emptyStateText={surfaceCopy?.empty ?? stageConfig.emptyStateText}
         className="h-full border-0 rounded-none"
       />
     </div>

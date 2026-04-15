@@ -59,18 +59,18 @@ export function ContinuitySidebar({ open, onToggle }: Props) {
           "hidden lg:inline-flex fixed z-50 items-center gap-1.5 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-all",
           open ? "left-[280px]" : "left-3"
         )}
-        style={{ top: 78 }}
-        aria-label={open ? "Close continuity drawer" : "Open continuity drawer"}
+        style={{ top: 86 }}
+        aria-label={open ? "Close workflow drawer" : "Open workflow drawer"}
       >
         {open ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-        <span className="text-xs font-medium">{open ? "Close" : "Continuity"}</span>
+        <span className="text-xs font-medium">{open ? "Close" : "Workflows"}</span>
       </button>
 
       {open && (
         <button
           className="hidden lg:block fixed inset-0 z-30 bg-slate-950/20"
           onClick={onToggle}
-          aria-label="Close continuity drawer"
+          aria-label="Close workflow drawer"
         />
       )}
 
@@ -81,7 +81,7 @@ export function ContinuitySidebar({ open, onToggle }: Props) {
         )}
       >
       <div className="px-3 py-3 border-b border-slate-100">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Continuity Drawer</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Workflow Drawer</h2>
       </div>
       <div className="p-3 space-y-3 overflow-y-auto">
         <section className="space-y-2">

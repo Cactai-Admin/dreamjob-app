@@ -100,7 +100,7 @@ export default function HomePage() {
     <div className="page-wrapper max-w-1200px space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Home</h1>
-        <p className="text-sm text-slate-500 mt-1">Intake new listings and track continuity across listings and applications.</p>
+        <p className="text-sm text-slate-500 mt-1">Intake new listings and track workflow progress across listings and applications.</p>
       </div>
 
       {!hasContent && !loading && (
@@ -145,7 +145,7 @@ export default function HomePage() {
       {hasContent && (
         <div className="card-base overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900">Continuity</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Workflow Tracker</h2>
             <div className="text-xs text-slate-500 inline-flex items-center gap-2">
               <span>Sort</span>
               <select
@@ -168,7 +168,7 @@ export default function HomePage() {
             <div className="col-span-2">Created</div>
           </div>
           {loading ? (
-            <div className="p-6 text-sm text-slate-500">Loading continuity table…</div>
+            <div className="p-6 text-sm text-slate-500">Loading workflow table…</div>
           ) : rows.length === 0 ? (
             <div className="p-6 text-sm text-slate-500">No workflows yet.</div>
           ) : (
