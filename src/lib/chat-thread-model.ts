@@ -51,8 +51,8 @@ export const DEFAULT_SHARED_CHAT_STAGE_CONFIG: Record<SharedChatStageConfig['sta
   },
   stage2: {
     stage: 'stage2',
-    placeholder: 'Ask for resume or cover letter refinements…',
-    emptyStateText: 'Ask for refinements and tailoring support.',
+    placeholder: 'Ask for document refinements…',
+    emptyStateText: 'Ask for refinements and tailoring support for this workspace.',
     allowsInput: true,
   },
   stage3: {

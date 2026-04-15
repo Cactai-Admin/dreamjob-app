@@ -277,7 +277,7 @@ export default function CoverLetterBuilderPage({ params }: Props) {
         <div className="hidden lg:flex lg:w-[360px] lg:min-w-0 lg:border-l lg:border-slate-200">
           <AiChatPanel
             workflowId={id}
-            surface="application_materials"
+            surface="cover_letter_workspace"
             initialMessages={initialMessages}
             className="flex-1 h-full"
           />
@@ -296,7 +296,7 @@ export default function CoverLetterBuilderPage({ params }: Props) {
         <div className="md:hidden fixed inset-0 z-50">
           <AiChatPanel
             workflowId={id}
-            surface="application_materials"
+            surface="cover_letter_workspace"
             initialMessages={initialMessages}
             onClose={() => setChatOpen(false)}
             className="h-full"

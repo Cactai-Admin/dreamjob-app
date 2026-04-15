@@ -4,14 +4,13 @@
 // Desktop: sticky top bar with brand + links + (doc tabs when on doc page) + right controls
 // Mobile: top bar (brand / doc-dropdown / avatar) + fixed bottom tab bar
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   User,
   Settings,
   LogOut,
-  ChevronDown,
   Zap,
   Shield,
   Trash2,
@@ -24,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
-import { DOC_TABS, STATUS_OPTIONS, statusColor } from "@/components/documents/doc-subheader";
+import { DOC_TABS } from "@/components/documents/doc-subheader";
 import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
 
 /* Desktop nav links */
@@ -115,7 +114,6 @@ export function TopNav() {
   // before the new page has called setDocControls.
   const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|interview-guide|negotiation-guide)$/);
   const mobileWorkflowId = mobileDocMatch?.[1];
-  const mobileActiveDoc = mobileDocMatch?.[2] as typeof DOC_TABS[number]['type'] | undefined;
   const isDocPage = !!mobileDocMatch;
   const listingMatch = pathname.match(/^\/listings\/([^/]+)/);
   const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
@@ -130,6 +128,11 @@ export function TopNav() {
     { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
   ] : [];
   const milestoneActiveIndex = milestones.findIndex(({ href }) => pathname === href);
+  const milestoneCurrentIndex = milestoneActiveIndex > -1
+    ? milestoneActiveIndex
+    : pathname.startsWith(`/jobs/${milestoneWorkflowId}`)
+      ? 1
+      : 0;
 
   // Profile button — shared across desktop and mobile
   const renderProfileButton = (sizePx?: number) => (
@@ -222,23 +225,34 @@ export function TopNav() {
             <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
               {milestones.map(({ href, label }, idx) => {
                 const active = pathname === href;
-                const completed = milestoneActiveIndex > -1 && idx < milestoneActiveIndex;
-                const locked = milestoneActiveIndex > -1 && idx > milestoneActiveIndex + 1;
-                const clickable = !locked;
+                const completed = idx < milestoneCurrentIndex;
+                const draftAvailable = idx === milestoneCurrentIndex + 1;
+                const unavailable = idx > milestoneCurrentIndex + 1;
+                const clickable = !unavailable;
                 return (
                   <button
                     key={href}
                     onClick={() => clickable && router.push(href)}
                     disabled={!clickable}
                     className={cn(
-                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                      active && "bg-white text-slate-900 shadow-sm",
-                      completed && "text-emerald-700 bg-emerald-50",
-                      !active && !completed && !locked && "text-slate-500 hover:text-slate-700",
-                      locked && "text-slate-400 bg-slate-200/70 cursor-not-allowed"
+                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors border",
+                      active && "bg-sky-50 text-sky-800 border-sky-300 shadow-sm",
+                      completed && "text-emerald-700 bg-emerald-50 border-emerald-300",
+                      draftAvailable && "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100",
+                      !active && !completed && !draftAvailable && !unavailable && "text-slate-600 bg-white border-slate-200 hover:text-slate-800",
+                      unavailable && "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed"
                     )}
                   >
-                    {label}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className={cn(
+                        "w-1.5 h-1.5 rounded-full",
+                        active && "bg-sky-500",
+                        completed && "bg-emerald-500",
+                        draftAvailable && "bg-amber-500",
+                        unavailable && "bg-slate-300"
+                      )} />
+                      {label}
+                    </span>
                   </button>
                 );
               })}
@@ -318,17 +332,8 @@ export function TopNav() {
       <div className="md:hidden sticky top-0 z-40 bg-white border-b border-slate-100 flex items-center px-4 gap-3 transition-all duration-300" style={{ height: scrolled ? 44 : 88 }}>
 
         {mobileWorkflowId ? (
-          /* On doc page: back arrow + right-side controls */
+          /* On doc page: right-side controls */
           <>
-            <button
-              onClick={() => router.push(`/jobs/${mobileWorkflowId}`)}
-              className="text-slate-500 flex-shrink-0 leading-none text-center transition-all duration-300"
-              style={{ fontSize: scrolled ? 20 : 31, width: scrolled ? 34 : 56 }}
-              aria-label="Back"
-            >
-              ←
-            </button>
-
             <div className="flex-1" />
 
             <div className="flex items-center gap-5">

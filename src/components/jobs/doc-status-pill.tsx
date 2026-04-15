@@ -8,14 +8,14 @@ import type { DocumentStatus } from "@/lib/types";
 
 interface Props {
   status: DocumentStatus;
-  label: string;
+  label?: string;
 }
 
 const config: Record<DocumentStatus, { icon: React.ElementType; className: string; text: string }> = {
-  not_started: { icon: FileText,     text: "Not started", className: "text-slate-400 bg-slate-100" },
-  generating:  { icon: Loader2,      text: "Generating",  className: "text-sky-600 bg-sky-50" },
-  draft:       { icon: Clock,        text: "Draft",       className: "text-amber-600 bg-amber-50" },
-  approved:    { icon: CheckCircle2, text: "Approved",    className: "text-emerald-600 bg-emerald-50" },
+  not_started: { icon: FileText,     text: "Not started", className: "text-slate-500 bg-slate-100 border border-slate-200" },
+  generating:  { icon: Loader2,      text: "In progress", className: "text-sky-700 bg-sky-50 border border-sky-200" },
+  draft:       { icon: Clock,        text: "Draft ready", className: "text-amber-700 bg-amber-50 border border-amber-200" },
+  approved:    { icon: CheckCircle2, text: "Completed",   className: "text-emerald-700 bg-emerald-50 border border-emerald-200" },
 };
 
 export function DocStatusPill({ status, label }: Props) {
@@ -26,7 +26,7 @@ export function DocStatusPill({ status, label }: Props) {
       c.className
     )}>
       <c.icon className={cn("w-3 h-3", status === "generating" && "animate-spin")} />
-      <span>{label}: {c.text}</span>
+      <span>{label ? `${label}: ${c.text}` : c.text}</span>
     </div>
   );
 }
