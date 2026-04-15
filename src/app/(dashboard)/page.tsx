@@ -15,7 +15,6 @@ import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, type ChatThreadTurn, type ThreadActio
 import { computeRequirementMatch, parseRequirements } from "@/lib/listing-match";
 import { workflowToJob } from "@/lib/workflow-adapter";
 import type { Workflow, Job } from "@/lib/types";
-import type { WorkflowState } from "@/types/database";
 import { resolveAppEntry } from "@/lib/entry-routing";
 import {
   hasConfirmedOnboardingPreferences,
@@ -33,6 +32,7 @@ type ChatMessage = {
 };
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
+const FIRST_LOGIN_SEEN_KEY = "dreamjob_first_login_seen";
 
 const greetingHour = () => {
   const h = new Date().getHours();
@@ -169,26 +169,19 @@ export default function DashboardPage() {
         }
       }
 
-      const activeWorkflow = activeWorkflows.find((wf) =>
-        !["listing_review", "completed", "archived"].includes(wf.state)
-      );
-      const hasAlerts = activeWorkflows.some((wf) => ["ready", "ready_to_send"].includes(wf.state));
+      const seenFirstLogin = Boolean(localStorage.getItem(FIRST_LOGIN_SEEN_KEY));
+      const isFirstLogin = !seenFirstLogin && activeWorkflows.length === 0;
       const resolution = resolveAppEntry({
+        isFirstLogin,
         onboardingComplete: isOnboardingComplete(onboardingProfile),
-        activeWorkflowId: activeWorkflow?.id,
-        activeWorkflowState: (activeWorkflow?.state as WorkflowState | undefined) ?? null,
-        hasAlerts,
       });
+      localStorage.setItem(FIRST_LOGIN_SEEN_KEY, "1");
 
-      if (resolution.destination === "onboarding_modal") {
+      if (resolution.destination === "chat") {
         return;
       }
-      if (resolution.destination === "resume_active_action" && resolution.workflowId) {
-        router.replace(`/jobs/${resolution.workflowId}`);
-        return;
-      }
-      if (resolution.destination === "dashboard_alerts") {
-        router.replace("/jobs");
+      if (resolution.destination === "home") {
+        router.replace("/home");
       }
     }).catch(() => {});
   }, [router]);
