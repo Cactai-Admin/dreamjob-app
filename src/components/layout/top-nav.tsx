@@ -103,12 +103,17 @@ export function TopNav() {
   const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
   const milestoneWorkflowId = workflowMatch?.[1] ?? listingMatch?.[1];
   const showMilestones = Boolean(milestoneWorkflowId);
+  const resumeStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "resume");
+  const coverLetterStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "cover_letter");
+  const coreDocsReady = resumeStatus !== "not_started" && coverLetterStatus !== "not_started";
   const milestones = milestoneWorkflowId ? [
     { href: `/listings/${milestoneWorkflowId}`, label: "Listing Review" },
     { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
     { href: `/jobs/${milestoneWorkflowId}/cover-letter`, label: "Cover Letter" },
-    { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview" },
-    { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
+    ...(coreDocsReady ? [
+      { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview" },
+      { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
+    ] : []),
   ] : [];
   const milestoneActiveIndex = milestones.findIndex(({ href }) => pathname === href);
   useEffect(() => {
@@ -127,7 +132,6 @@ export function TopNav() {
     return () => { active = false; };
   }, [milestoneWorkflowId]);
 
-  const coverLetterStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "cover_letter");
   const interviewStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "interview_guide");
   const negotiationStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "negotiation_guide");
   const appStatus = milestoneWorkflow

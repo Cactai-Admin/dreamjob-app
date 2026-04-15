@@ -121,6 +121,9 @@ export default function ExportPage({ params }: Props) {
 
   const outputs = workflow.outputs ?? [];
   const getOutput = (type: DocKey) => outputs.find(o => o.type === type && o.is_current);
+  const hasSavedResume = Boolean(getOutput("resume"));
+  const hasSavedCoverLetter = Boolean(getOutput("cover_letter"));
+  const hasCoreSaved = hasSavedResume && hasSavedCoverLetter;
   const company = workflow.listing?.company_name ?? "Company";
   const title = workflow.listing?.title ?? "Role";
   const hasAny = (Object.keys(DOC_CONFIG) as DocKey[]).some(k => getOutput(k));
@@ -155,6 +158,7 @@ export default function ExportPage({ params }: Props) {
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 onClick={handleCopyAll}
+                disabled={!hasCoreSaved}
                 className="flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:border-slate-300 transition-all"
               >
                 {copiedAll ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -162,7 +166,11 @@ export default function ExportPage({ params }: Props) {
               </button>
               <button
                 onClick={handleDownloadAll}
-                className="flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+                disabled={!hasCoreSaved}
+                className={cn(
+                  "flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl transition-colors",
+                  hasCoreSaved ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                )}
               >
                 <Download className="w-4 h-4" />
                 Download All .md
@@ -170,6 +178,11 @@ export default function ExportPage({ params }: Props) {
             </div>
           )}
         </div>
+        {!hasCoreSaved && (
+          <p className="text-xs text-amber-700 mt-2">
+            Save both Resume and Cover Letter to unlock combined export.
+          </p>
+        )}
       </div>
 
       <div className="space-y-4">

@@ -6,9 +6,9 @@ import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, X, Briefcase, MapPin, DollarSign, Building2,
+  ArrowLeft, Plus, X, Briefcase, Building2,
   Users, Star, Sparkles, ExternalLink, RefreshCw, Check, Save,
-  Link2, TrendingUp, AlertCircle, ChevronRight, ChevronDown, Trash2,
+  Link2, TrendingUp, AlertCircle, ChevronRight, Trash2,
   BookmarkPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -274,6 +274,7 @@ export default function ListingReviewPage({ params }: Props) {
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
           <Link href="/listings" className="flex-shrink-0 w-8 h-8 mt-0.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm">
+            <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{title || "Untitled Listing"}</h1>
@@ -302,9 +303,8 @@ export default function ListingReviewPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-5 gap-5">
-        {/* ── Left: Listing data (3/5) ── */}
-        <div className="lg:col-span-3 space-y-5">
+      <div className="grid gap-5">
+        <div className="space-y-5">
           <section className="space-y-1">
             <h2 className="text-sm font-semibold text-slate-800">Core listing details</h2>
             <p className="text-xs text-slate-500">Confirm foundational role and company context before moving forward.</p>
@@ -461,20 +461,28 @@ export default function ListingReviewPage({ params }: Props) {
           </div>
         </div>
 
-        {/* ── Right: Analysis (2/5) ── */}
-        <div className="lg:col-span-2 space-y-5">
-          {/* CTA card */}
+          {/* Core actions */}
           <div className="card-base p-5 bg-slate-900 border-slate-900">
-            <h2 className="font-semibold text-white mb-1">Ready to apply?</h2>
-            <p className="text-slate-400 text-sm mb-4">We&apos;ll build a tailored resume and cover letter with AI assistance.</p>
-            <button
-              onClick={startApplication}
-              disabled={starting}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors disabled:opacity-50 text-sm"
-            >
-              {starting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {starting ? "Starting…" : "Start Application"}
-            </button>
+            <h2 className="font-semibold text-white mb-1">Ready for the next step?</h2>
+            <p className="text-slate-400 text-sm mb-4">Save listing updates or move into the application workflow.</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <button
+                onClick={saveListing}
+                disabled={saving}
+                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors disabled:opacity-50 text-sm border border-white/20"
+              >
+                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {saving ? "Saving…" : "Save for later"}
+              </button>
+              <button
+                onClick={startApplication}
+                disabled={starting}
+                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors disabled:opacity-50 text-sm"
+              >
+                {starting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {starting ? "Starting…" : "Create application"}
+              </button>
+            </div>
           </div>
 
           {/* Match Score */}
@@ -678,7 +686,6 @@ export default function ListingReviewPage({ params }: Props) {
               </button>
             )}
           </div>
-        </div>
       </div>
     </div>
     <div className="hidden xl:flex xl:flex-col xl:w-[360px] xl:border-l xl:border-slate-200">
