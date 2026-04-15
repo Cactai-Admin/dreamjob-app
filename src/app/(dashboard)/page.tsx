@@ -30,6 +30,21 @@ type ChatMessage = {
   content: string;
   actions?: ThreadAction[];
 };
+type ListingReviewDraft = {
+  title: string;
+  company_name: string;
+  location: string;
+  work_mode: string;
+  salary_range: string;
+  benefits: string[];
+  responsibilities: string[];
+  requirements: string[];
+  qualifications: string[];
+  tools_technologies: string[];
+  certifications: string[];
+  company_website_url: string;
+  company_linkedin_url: string;
+};
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
 const FIRST_LOGIN_SEEN_KEY = "dreamjob_first_login_seen";
@@ -72,6 +87,7 @@ export default function DashboardPage() {
     yearsExperience: 0 as number | null,
   });
   const [pendingParsed, setPendingParsed] = useState<Record<string, unknown> | null>(null);
+  const [listingReview, setListingReview] = useState<ListingReviewDraft | null>(null);
   const [pendingSourceUrl, setPendingSourceUrl] = useState<string | undefined>(undefined);
   const [awaitingCollection, setAwaitingCollection] = useState<string | null>(null);
   const [awaitingBranchAction, setAwaitingBranchAction] = useState(false);
@@ -200,6 +216,35 @@ export default function DashboardPage() {
     setChatMessages((prev) => [...prev, message]);
   };
 
+  const parseList = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value
+        .split(/\n|•|-/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const toListingReviewDraft = (parsed: Record<string, unknown>): ListingReviewDraft => ({
+    title: String(parsed.title ?? ""),
+    company_name: String(parsed.company_name ?? parsed.company ?? ""),
+    location: String(parsed.location ?? ""),
+    work_mode: String(parsed.work_mode ?? parsed.employment_type ?? ""),
+    salary_range: String(parsed.salary_range ?? ""),
+    benefits: parseList(parsed.benefits),
+    responsibilities: parseList(parsed.responsibilities),
+    requirements: parseList(parsed.requirements),
+    qualifications: parseList(parsed.qualifications),
+    tools_technologies: parseList(parsed.tools_technologies ?? parsed.tools),
+    certifications: parseList(parsed.certifications),
+    company_website_url: String(parsed.company_website_url ?? ""),
+    company_linkedin_url: String(parsed.company_linkedin_url ?? ""),
+  });
+
   const runIntakeSequence = () => {
     appendChat({
       id: `assistant-ack-${Date.now()}`,
@@ -308,7 +353,13 @@ export default function DashboardPage() {
 
   const runStage1OperationalFlow = async (parsed: Record<string, unknown>) => {
     setPendingParsed(parsed);
+    setListingReview(toListingReviewDraft(parsed));
     appendChat({ id: `assistant-listing-bundle-${Date.now()}`, role: "assistant", content: summarizeListingBundle(parsed) });
+    appendChat({
+      id: `assistant-review-panel-${Date.now()}`,
+      role: "assistant",
+      content: "I’ve populated the **Listing Review panel on the right**. Please correct anything missing or inaccurate there before choosing the next step.",
+    });
 
     const userBundle = summarizeUserContextBundle(parsed);
     appendChat({ id: `assistant-user-bundle-${Date.now()}`, role: "assistant", content: userBundle.message });
@@ -550,14 +601,21 @@ export default function DashboardPage() {
     if (action.id === "start-over") {
       setAwaitingBranchAction(false);
       setPendingParsed(null);
+      setListingReview(null);
       setPendingSourceUrl(undefined);
       appendChat({ id: `assistant-restart-${Date.now()}`, role: "assistant", content: "No problem — let’s start fresh. Paste a URL, listing text, or ask me to find jobs." });
       return;
     }
-    if (!pendingParsed) return;
+    if (!pendingParsed || !listingReview) return;
+
+    const reviewedParsed: Record<string, unknown> = {
+      ...pendingParsed,
+      ...listingReview,
+      employment_type: listingReview.work_mode,
+    };
 
     if (action.id === "proceed-stage2") {
-      const wf = await createWorkflowFromParsed(pendingParsed, pendingSourceUrl, false);
+      const wf = await createWorkflowFromParsed(reviewedParsed, pendingSourceUrl, false);
       setAwaitingBranchAction(false);
       appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Great — moving this opportunity into Stage 2 now." });
       router.push(`/listings/${wf.id}`);
@@ -565,7 +623,7 @@ export default function DashboardPage() {
     }
 
     if (action.id === "save-future-target") {
-      const wf = await createWorkflowFromParsed(pendingParsed, pendingSourceUrl, false);
+      const wf = await createWorkflowFromParsed(reviewedParsed, pendingSourceUrl, false);
       await fetch(`/api/workflows/${wf.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -590,18 +648,83 @@ export default function DashboardPage() {
           <MessageSquare className="w-3.5 h-3.5" />
           Stage 1 guided chat
         </div>
-
-        <SharedChatShell
-          messages={stage1Thread}
-          isTyping={busy}
-          onSend={handleThreadInput}
-          onAction={handleThreadAction}
-          headerTitle="Stage 1 Thread"
-          headerSubtitle={conversationMode === "onboarding" ? "Onboarding in-thread" : "Guided intake"}
-          placeholder={stage1Config.placeholder}
-          emptyStateText={stage1Config.emptyStateText}
-          className="max-h-[320px]"
-        />
+        <div className={listingReview ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]" : ""}>
+          <SharedChatShell
+            messages={stage1Thread}
+            isTyping={busy}
+            onSend={handleThreadInput}
+            onAction={handleThreadAction}
+            headerTitle="Stage 1 Thread"
+            headerSubtitle={conversationMode === "onboarding" ? "Onboarding in-thread" : "Guided intake"}
+            placeholder={stage1Config.placeholder}
+            emptyStateText={stage1Config.emptyStateText}
+            className="max-h-[440px]"
+          />
+          {listingReview && (
+            <aside className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 space-y-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700">Phase 2 · Listing Review</p>
+              <h2 className="text-sm font-semibold text-slate-900">Extracted Listing Context</h2>
+              <p className="text-xs text-slate-600">Edit any field that looks incomplete or inaccurate.</p>
+              <div className="space-y-2">
+                {[
+                  { key: "title", label: "Title" },
+                  { key: "company_name", label: "Company" },
+                  { key: "location", label: "Location" },
+                  { key: "work_mode", label: "Work mode / type" },
+                  { key: "salary_range", label: "Compensation" },
+                  { key: "company_website_url", label: "Company website" },
+                  { key: "company_linkedin_url", label: "Company LinkedIn" },
+                ].map(({ key, label }) => (
+                  <label key={key} className="block">
+                    <span className="text-[11px] font-medium text-slate-600">{label}</span>
+                    <input
+                      value={listingReview[key as keyof ListingReviewDraft] as string}
+                      onChange={(event) => {
+                        setListingReview((current) => current ? { ...current, [key]: event.target.value } : current);
+                      }}
+                      className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </label>
+                ))}
+                {[
+                  { key: "benefits", label: "Benefits" },
+                  { key: "responsibilities", label: "Responsibilities" },
+                  { key: "requirements", label: "Requirements" },
+                  { key: "qualifications", label: "Qualifications" },
+                  { key: "tools_technologies", label: "Tools / technologies" },
+                  { key: "certifications", label: "Certifications" },
+                ].map(({ key, label }) => (
+                  <label key={key} className="block">
+                    <span className="text-[11px] font-medium text-slate-600">{label} (one per line)</span>
+                    <textarea
+                      value={(listingReview[key as keyof ListingReviewDraft] as string[]).join("\n")}
+                      onChange={(event) => {
+                        setListingReview((current) => current ? {
+                          ...current,
+                          [key]: event.target.value.split("\n").map((item) => item.trim()).filter(Boolean),
+                        } : current);
+                      }}
+                      rows={3}
+                      className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
+                <p className="text-[11px] font-medium text-amber-700">Missing / uncertain</p>
+                <p className="text-[11px] text-amber-800">
+                  {[
+                    !listingReview.title ? "title" : null,
+                    !listingReview.company_name ? "company" : null,
+                    !listingReview.location ? "location/work mode" : null,
+                    !listingReview.salary_range ? "compensation" : null,
+                    listingReview.requirements.length === 0 ? "requirements" : null,
+                  ].filter(Boolean).join(", ") || "No critical missing fields detected."}
+                </p>
+              </div>
+            </aside>
+          )}
+        </div>
 
         {error && (
           <div className="flex items-start gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
