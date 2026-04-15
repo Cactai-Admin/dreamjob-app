@@ -192,18 +192,11 @@ export default function InterviewGuidePage({ params }: Props) {
             </div>
           ) : (
             <div className="max-w-2xl mx-auto">
-              <div className="mb-4">
-                <ContextPhasePanel
-                  phase={6}
-                  title="Interview Prep Workspace"
-                  subtitle="Refine this guide while assistant support stays focused on role-specific stories and questions."
-                  items={[
-                    { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
-                    { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
-                    { label: "Word count", value: `${content.split(/\s+/).filter(Boolean).length}` },
-                    { label: "Edit state", value: editing ? "Editing now" : "Click guide to edit" },
-                  ]}
-                />
+              <div className="mb-3 flex items-center justify-between px-1 gap-2">
+                <p className="text-xs text-slate-500">Keep this guide editable and use assistant prompts to expand stories, examples, and question prep.</p>
+                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 whitespace-nowrap">
+                  Interview workspace
+                </span>
               </div>
               <div className="document-paper overflow-hidden">
                 <div className="p-8 sm:p-12">
@@ -227,6 +220,19 @@ export default function InterviewGuidePage({ params }: Props) {
                   )}
                 </div>
               </div>
+              <div className="mt-4">
+                <ContextPhasePanel
+                  phase={6}
+                  title="Interview Metadata"
+                  subtitle="Reference details below the artifact."
+                  items={[
+                    { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
+                    { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
+                    { label: "Word count", value: `${content.split(/\s+/).filter(Boolean).length}` },
+                    { label: "Edit state", value: editing ? "Editing now" : "Click guide to edit" },
+                  ]}
+                />
+              </div>
               <div className="text-right mt-2 text-xs text-slate-400">{content.split(/\s+/).filter(Boolean).length} words</div>
             </div>
           )}
@@ -236,6 +242,18 @@ export default function InterviewGuidePage({ params }: Props) {
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Interview focus</p>
             <p className="mt-1 text-xs text-slate-600">Use the assistant for story framing, mock questions, and role-specific examples.</p>
+          </div>
+          <div className="border-b border-slate-200 bg-white px-4 py-3 space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Suggested next prompts</p>
+            {[
+              "Help me build 3 STAR stories from this resume.",
+              "Create likely interviewer questions for this role.",
+              "Pressure-test weak parts of this draft guide.",
+            ].map((prompt) => (
+              <div key={prompt} className="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-2 text-xs text-violet-800">
+                {prompt}
+              </div>
+            ))}
           </div>
           <AiChatPanel workflowId={id} surface="interview_guide" className="flex-1 h-full min-h-0" />
         </div>

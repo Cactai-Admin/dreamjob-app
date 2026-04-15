@@ -61,11 +61,11 @@ const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: stri
   { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
 ];
 
-const PACKET_STATE_COPY: Record<string, { hint: string; readiness: string }> = {
-  not_started: { hint: "Not started yet", readiness: "Not started" },
-  generating: { hint: "AI draft is in progress", readiness: "Drafting" },
-  draft: { hint: "Editable draft available", readiness: "Draft" },
-  approved: { hint: "Approved for export and send", readiness: "Ready" },
+const PACKET_STATE_COPY: Record<string, { hint: string; readiness: string; exportState: string }> = {
+  not_started: { hint: "No draft exists yet", readiness: "Not started", exportState: "Not exportable" },
+  generating: { hint: "AI draft is in progress", readiness: "Drafting", exportState: "Not exportable" },
+  draft: { hint: "Editable draft available", readiness: "Draft", exportState: "Exportable draft" },
+  approved: { hint: "Approved for export and send", readiness: "Ready", exportState: "Export-ready" },
 };
 
 type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
@@ -389,7 +389,7 @@ export default function JobDetailPage({ params }: Props) {
       : job.resumeStatus === "draft" || job.coverLetterStatus === "draft"
         ? "Refine your core packet modules toward Ready."
         : job.interviewGuideStatus === "not_started"
-          ? "Optional: draft interview guidance for phase continuity."
+          ? "Optional: draft interview guidance for upcoming interviews."
           : job.negotiationGuideStatus === "not_started"
             ? "Optional: add negotiation prep for later phases."
             : "Packet is progressing well — continue refinement or export.";
@@ -398,6 +398,50 @@ export default function JobDetailPage({ params }: Props) {
     : readyModuleCount === 0
       ? "Export is available for drafts. Approve at least one module for final-ready packet quality."
       : "Export is active.";
+  const interviewModuleBlocked = !inApplicationSupport && job.interviewGuideStatus === "not_started";
+  const negotiationModuleBlocked = !activeStatuses.some((status) => ["offer", "negotiating", "hired", "declined"].includes(status)) && job.negotiationGuideStatus === "not_started";
+  const packetModules = [
+    {
+      href: `/jobs/${job.id}/resume`,
+      label: "Resume",
+      iconBg: "bg-sky-100",
+      iconColor: "text-sky-600",
+      Icon: FileText,
+      status: job.resumeStatus,
+      blocked: false,
+      blockedReason: null,
+    },
+    {
+      href: `/jobs/${job.id}/cover-letter`,
+      label: "Cover Letter",
+      iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
+      Icon: Mail,
+      status: job.coverLetterStatus,
+      blocked: false,
+      blockedReason: null,
+    },
+    {
+      href: `/jobs/${job.id}/interview-guide`,
+      label: "Interview Guide",
+      iconBg: "bg-violet-100",
+      iconColor: "text-violet-600",
+      Icon: MessageSquare,
+      status: job.interviewGuideStatus,
+      blocked: interviewModuleBlocked,
+      blockedReason: interviewModuleBlocked ? "Unlocked after you mark the application as applied." : null,
+    },
+    {
+      href: `/jobs/${job.id}/negotiation-guide`,
+      label: "Negotiation Guide",
+      iconBg: "bg-amber-100",
+      iconColor: "text-amber-600",
+      Icon: TrendingUp,
+      status: job.negotiationGuideStatus,
+      blocked: negotiationModuleBlocked,
+      blockedReason: negotiationModuleBlocked ? "Unlocked when an offer context exists." : null,
+    },
+  ];
 
   return (
     <div className="page-wrapper max-w-1000px">
@@ -707,30 +751,6 @@ export default function JobDetailPage({ params }: Props) {
 
         {/* Right column */}
         <div className="space-y-4">
-          <ContextPhasePanel
-            phase={inApplicationSupport ? 7 : 3}
-            title={inApplicationSupport ? "Application Support" : "Applicable User Profile Data"}
-            subtitle={inApplicationSupport
-              ? "Support context after send/mark-applied."
-              : "Trusted profile context currently applied to this workflow."}
-            items={inApplicationSupport
-              ? [
-                { label: "Application status", value: deriveApplicationStatus(workflow.state, workflow.status_events ?? []) },
-                { label: "Date sent", value: sentDateLabel },
-                { label: "Follow-up timing", value: followUpLabel },
-                { label: "Reminders", value: reminderLabel },
-                { label: "Support actions", value: supportActionLabel },
-                { label: "Outreach suggestions", value: outreachActionLabel },
-              ]
-              : [
-                { label: "Profile skills", value: `${profSkills.length}` },
-                { label: "Keywords", value: `${profKeywords.length}` },
-                { label: "Tools", value: `${profTools.length}` },
-                { label: "Clearances", value: `${profClearances.length}` },
-                { label: "Workflow state", value: workflow.state },
-              ]}
-          />
-
           <div className="card-base p-5">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
@@ -753,58 +773,57 @@ export default function JobDetailPage({ params }: Props) {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Next useful action</p>
               <p className="text-xs text-slate-700 mt-1">{nextPacketAction}</p>
             </div>
+            <ContextPhasePanel
+              phase={inApplicationSupport ? 7 : 3}
+              title={inApplicationSupport ? "Support Snapshot" : "Current Workflow Snapshot"}
+              subtitle={inApplicationSupport
+                ? "Current support context for follow-up and outreach."
+                : "Current packet and profile context for this workflow."}
+              items={inApplicationSupport
+                ? [
+                  { label: "Application status", value: deriveApplicationStatus(workflow.state, workflow.status_events ?? []) },
+                  { label: "Date sent", value: sentDateLabel },
+                  { label: "Follow-up timing", value: followUpLabel },
+                  { label: "Reminders", value: reminderLabel },
+                  { label: "Support actions", value: supportActionLabel },
+                  { label: "Outreach suggestions", value: outreachActionLabel },
+                ]
+                : [
+                  { label: "Profile skills", value: `${profSkills.length}` },
+                  { label: "Keywords", value: `${profKeywords.length}` },
+                  { label: "Tools", value: `${profTools.length}` },
+                  { label: "Clearances", value: `${profClearances.length}` },
+                  { label: "Workflow state", value: workflow.state },
+                ]}
+            />
             <div className="space-y-3">
-              <Link href={`/jobs/${job.id}/resume`}
-                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-sky-100 flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-4 h-4 text-sky-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900 text-sm">Resume</div>
-                  <DocStatusPill status={job.resumeStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.resumeStatus].readiness} · {PACKET_STATE_COPY[job.resumeStatus].hint}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
-              </Link>
-
-              <Link href={`/jobs/${job.id}/cover-letter`}
-                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900 text-sm">Cover Letter</div>
-                  <DocStatusPill status={job.coverLetterStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.coverLetterStatus].readiness} · {PACKET_STATE_COPY[job.coverLetterStatus].hint}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
-              </Link>
-
-              <Link href={`/jobs/${job.id}/interview-guide`}
-                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
-                  <MessageSquare className="w-4 h-4 text-violet-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900 text-sm">Interview Guide</div>
-                  <DocStatusPill status={job.interviewGuideStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.interviewGuideStatus].readiness} · {PACKET_STATE_COPY[job.interviewGuideStatus].hint}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
-              </Link>
-
-              <Link href={`/jobs/${job.id}/negotiation-guide`}
-                className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-sky-300 hover:bg-sky-50 transition-all group">
-                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-slate-900 text-sm">Negotiation Guide</div>
-                  <DocStatusPill status={job.negotiationGuideStatus} />
-                  <p className="mt-1 text-[11px] text-slate-500">{PACKET_STATE_COPY[job.negotiationGuideStatus].readiness} · {PACKET_STATE_COPY[job.negotiationGuideStatus].hint}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-500 transition-colors" />
-              </Link>
+              {packetModules.map((module) => (
+                <Link
+                  key={module.label}
+                  href={module.href}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl border transition-all group",
+                    module.blocked
+                      ? "border-slate-200 bg-slate-50/70"
+                      : "border-slate-200 hover:border-sky-300 hover:bg-sky-50"
+                  )}
+                >
+                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", module.iconBg)}>
+                    <module.Icon className={cn("w-4 h-4", module.iconColor)} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-900 text-sm">{module.label}</div>
+                    <DocStatusPill status={module.status} />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {module.blocked
+                        ? `Blocked · ${module.blockedReason}`
+                        : `${PACKET_STATE_COPY[module.status].readiness} · ${PACKET_STATE_COPY[module.status].hint}`}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">{PACKET_STATE_COPY[module.status].exportState}</p>
+                  </div>
+                  <ChevronRight className={cn("w-4 h-4 transition-colors", module.blocked ? "text-slate-300" : "text-slate-400 group-hover:text-sky-500")} />
+                </Link>
+              ))}
 
               <Link href={`/jobs/${job.id}/export`}
                 aria-disabled={!hasExportableContent}

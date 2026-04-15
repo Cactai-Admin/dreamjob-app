@@ -150,6 +150,8 @@ export function TopNav() {
         : coverLetterStatus !== "not_started"
           ? 2
           : 1;
+  const hasApplied = ["applied", "received", "interviewing", "offer", "negotiating", "hired", "declined", "ghosted", "rejected"].includes(appStatus);
+  const hasOfferContext = ["offer", "negotiating", "hired", "declined"].includes(appStatus);
 
   // Profile button — shared across desktop and mobile
   const renderProfileButton = (sizePx?: number) => (
@@ -228,14 +230,28 @@ export function TopNav() {
               {milestones.map(({ href, label }, idx) => {
                 const active = pathname === href;
                 const completed = !active && idx <= furthestReachedIndex - 1;
-                const available = !completed && !active && idx <= furthestReachedIndex + 1;
+                const prerequisiteUnlocked = idx <= furthestReachedIndex + 1;
+                const stageUnlocked = idx === 3
+                  ? hasApplied || interviewStatus !== "not_started"
+                  : idx === 4
+                    ? hasOfferContext || negotiationStatus !== "not_started"
+                    : true;
+                const available = !completed && !active && prerequisiteUnlocked && stageUnlocked;
                 const blocked = !active && !completed && !available;
                 const clickable = !blocked;
+                const stageStateLabel = active
+                  ? "Current stage"
+                  : completed
+                    ? "Completed stage"
+                    : available
+                      ? "Available stage"
+                      : "Blocked stage";
                 return (
                   <button
                     key={href}
                     onClick={() => clickable && router.push(href)}
                     disabled={!clickable}
+                    title={stageStateLabel}
                     className={cn(
                       "px-3 py-1.5 rounded-md text-xs font-medium transition-colors border",
                       active && "bg-sky-50 text-sky-800 border-sky-300 shadow-sm",

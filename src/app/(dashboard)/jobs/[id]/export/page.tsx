@@ -4,7 +4,7 @@
 
 import { useState, useEffect, use } from "react";
 import { notFound } from "next/navigation";
-import { Copy, Download, CheckCircle2, FileText, Mail, MessageSquare, TrendingUp, ArrowLeft } from "lucide-react";
+import { Copy, Download, CheckCircle2, FileText, Mail, MessageSquare, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
 import type { Workflow, Output } from "@/lib/types";
@@ -146,9 +146,6 @@ export default function ExportPage({ params }: Props) {
   return (
     <div className="page-wrapper max-w-3xl">
       <div className="mb-6">
-        <a href={`/jobs/${id}`} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back to application
-        </a>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Export Packet</h1>
