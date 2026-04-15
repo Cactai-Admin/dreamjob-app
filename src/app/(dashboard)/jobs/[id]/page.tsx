@@ -338,6 +338,31 @@ export default function JobDetailPage({ params }: Props) {
     manuallyMarked,
   });
   const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
+  const inApplicationSupport = activeStatuses.includes("applied");
+  const sentEvent = (workflow.status_events ?? []).find((event) => event.event_type === "sent" || event.event_type === "submitted");
+  const sentDateLabel = sentEvent
+    ? new Date(sentEvent.occurred_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "Not recorded";
+  const followUpTargetDate = sentEvent
+    ? new Date(new Date(sentEvent.occurred_at).getTime() + (7 * 24 * 60 * 60 * 1000))
+    : null;
+  const hasProgressedBeyondSupport = activeStatuses.some((status) => ["received", "interviewing", "offer", "negotiating", "hired", "declined", "ghosted", "rejected"].includes(status));
+  const followUpLabel = !sentEvent
+    ? "Mark as applied to start follow-up timing."
+    : hasProgressedBeyondSupport
+      ? "Status progressed — adjust cadence to current stage."
+      : `Follow up by ${followUpTargetDate?.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  const reminderLabel = !sentEvent
+    ? "No reminder yet"
+    : hasProgressedBeyondSupport
+      ? "Update reminders based on latest status."
+      : "Reminder: polite check-in + value update.";
+  const supportActionLabel = hasProgressedBeyondSupport
+    ? "Update timeline notes and next checkpoint."
+    : "Prepare a concise follow-up message.";
+  const outreachActionLabel = hasProgressedBeyondSupport
+    ? "Share interview/offer progress with key contacts."
+    : "Identify 1–2 team connections for light outreach.";
 
   return (
     <div className="page-wrapper max-w-1000px">
@@ -649,19 +674,51 @@ export default function JobDetailPage({ params }: Props) {
         {/* Right column */}
         <div className="space-y-4">
           <ContextPhasePanel
-            phase={activeStatuses.includes("applied") ? 7 : 3}
-            title={activeStatuses.includes("applied") ? "Application Support" : "Applicable User Profile Data"}
-            subtitle={activeStatuses.includes("applied")
+            phase={inApplicationSupport ? 7 : 3}
+            title={inApplicationSupport ? "Application Support" : "Applicable User Profile Data"}
+            subtitle={inApplicationSupport
               ? "Support context after send/mark-applied."
               : "Trusted profile context currently applied to this workflow."}
-            items={[
-              { label: "Profile skills", value: `${profSkills.length}` },
-              { label: "Keywords", value: `${profKeywords.length}` },
-              { label: "Tools", value: `${profTools.length}` },
-              { label: "Clearances", value: `${profClearances.length}` },
-              { label: "Workflow state", value: workflow.state },
-            ]}
+            items={inApplicationSupport
+              ? [
+                { label: "Application status", value: deriveApplicationStatus(workflow.state, workflow.status_events ?? []) },
+                { label: "Date sent", value: sentDateLabel },
+                { label: "Follow-up timing", value: followUpLabel },
+                { label: "Reminders", value: reminderLabel },
+                { label: "Support actions", value: supportActionLabel },
+                { label: "Outreach suggestions", value: outreachActionLabel },
+              ]
+              : [
+                { label: "Profile skills", value: `${profSkills.length}` },
+                { label: "Keywords", value: `${profKeywords.length}` },
+                { label: "Tools", value: `${profTools.length}` },
+                { label: "Clearances", value: `${profClearances.length}` },
+                { label: "Workflow state", value: workflow.state },
+              ]}
           />
+
+          {inApplicationSupport && (
+            <div className="card-base p-5">
+              <h3 className="font-semibold text-slate-900 mb-2">Application Support Chat</h3>
+              <p className="text-xs text-slate-500 mb-3">
+                Use chat for post-submission guidance and next-step planning.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  "Draft a concise follow-up email for this application.",
+                  "Help me plan a networking outreach message for this role.",
+                  "What should I track weekly until I hear back?",
+                ].map((prompt) => (
+                  <span
+                    key={prompt}
+                    className="text-xs px-2.5 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
+                  >
+                    {prompt}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Application Packet */}
           <div className="card-base p-5">
