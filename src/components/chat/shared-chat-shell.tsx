@@ -133,8 +133,13 @@ export function SharedChatShell({
 
   const sendMessage = async (text: string) => {
     if (!onSend || !text.trim()) return;
-    await onSend(text);
+    const message = text;
     setInput("");
+    try {
+      await onSend(message);
+    } catch {
+      setInput(message);
+    }
   };
 
   return (

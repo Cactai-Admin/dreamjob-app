@@ -56,6 +56,10 @@ type ProfileReviewDraft = {
   yearsExperience: string;
   location: string;
 };
+type Phase3CollectionItem = {
+  key: "accomplishment" | "summary" | "skills";
+  prompt: string;
+};
 const ONBOARDING_STORAGE_KEY = "dreamjob_onboarding_preferences";
 const ONBOARDING_COMPLETED_AT_KEY = "dreamjob_onboarding_completed_at";
 const FIRST_LOGIN_SEEN_KEY = "dreamjob_first_login_seen";
@@ -101,6 +105,8 @@ export default function DashboardPage() {
   const [listingReview, setListingReview] = useState<ListingReviewDraft | null>(null);
   const [pendingSourceUrl, setPendingSourceUrl] = useState<string | undefined>(undefined);
   const [awaitingCollection, setAwaitingCollection] = useState<string | null>(null);
+  const [awaitingCollectionKey, setAwaitingCollectionKey] = useState<Phase3CollectionItem["key"] | null>(null);
+  const [phase3SatisfiedAsks, setPhase3SatisfiedAsks] = useState<Phase3CollectionItem["key"][]>([]);
   const [activeReviewPhase, setActiveReviewPhase] = useState<2 | 3 | null>(null);
   const [profileReview, setProfileReview] = useState<ProfileReviewDraft | null>(null);
   const [awaitingPhase2Approval, setAwaitingPhase2Approval] = useState(false);
@@ -243,6 +249,8 @@ export default function DashboardPage() {
     return [];
   };
 
+  const uniqueStrings = (values: string[]) => Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+
   const toListingReviewDraft = (parsed: Record<string, unknown>): ListingReviewDraft => ({
     title: String(parsed.title ?? ""),
     company_name: String(parsed.company_name ?? parsed.company ?? ""),
@@ -259,17 +267,30 @@ export default function DashboardPage() {
     company_linkedin_url: String(parsed.company_linkedin_url ?? ""),
   });
 
-  const toProfileReviewDraft = (): ProfileReviewDraft => ({
-    headline: trustedProfile.headline,
-    summary: trustedProfile.summary,
-    skills: trustedProfile.skills,
-    keywords: trustedProfile.keywords,
-    tools: trustedProfile.tools,
-    certifications: trustedProfile.certifications,
-    clearances: trustedProfile.clearances,
-    yearsExperience: trustedProfile.yearsExperience ? String(trustedProfile.yearsExperience) : "",
-    location: onboardingDraft.location || "",
-  });
+  const toProfileReviewDraft = (parsed?: Record<string, unknown>): ProfileReviewDraft => {
+    const requirements = parseRequirements(parsed?.requirements as string[] | string | null | undefined);
+    const requirementHints = requirements.slice(0, 3);
+    return {
+      headline: trustedProfile.headline || "Gap: Add a role-relevant headline.",
+      summary: trustedProfile.summary || "Gap: Add a concise summary tied to this listing.",
+      skills: uniqueStrings([
+        ...trustedProfile.skills,
+        ...requirementHints.map((item) => `Needs evidence: ${item}`),
+      ]),
+      keywords: uniqueStrings([
+        ...trustedProfile.keywords,
+        ...requirementHints,
+      ]),
+      tools: uniqueStrings([
+        ...trustedProfile.tools,
+        ...requirements.filter((item) => /(salesforce|hubspot|excel|crm|python|sql|tableau|power bi|jira)/i.test(item)).slice(0, 3),
+      ]),
+      certifications: trustedProfile.certifications,
+      clearances: trustedProfile.clearances,
+      yearsExperience: trustedProfile.yearsExperience ? String(trustedProfile.yearsExperience) : "Gap: confirm years of experience",
+      location: onboardingDraft.location || "Gap: confirm location",
+    };
+  };
 
   const runIntakeSequence = () => {
     appendChat({
@@ -369,18 +390,10 @@ export default function DashboardPage() {
     };
   };
 
-  const derivePositioningOutcome = (score: number) => {
-    if (score >= 90 && (trustedProfile.yearsExperience ?? 0) >= 8) return "Overqualified";
-    if (score >= 75) return "Strong Fit";
-    if (score >= 60) return "Healthy Stretch";
-    if (score >= 40) return "Big Stretch";
-    return "Future Role Target";
-  };
-
   const runStage1OperationalFlow = async (parsed: Record<string, unknown>) => {
     setPendingParsed(parsed);
     setListingReview(toListingReviewDraft(parsed));
-    setProfileReview(toProfileReviewDraft());
+    setProfileReview(toProfileReviewDraft(parsed));
     setActiveReviewPhase(2);
     appendChat({ id: `assistant-listing-bundle-${Date.now()}`, role: "assistant", content: summarizeListingBundle(parsed) });
     appendChat({
@@ -403,34 +416,50 @@ export default function DashboardPage() {
   };
 
   const runPhase3OperationalFlow = (parsed: Record<string, unknown>) => {
+    const review = profileReview ?? toProfileReviewDraft(parsed);
     const userBundle = summarizeUserContextBundle(parsed);
-    if (!trustedProfile.summary || userBundle.match.missing.length > 4) {
-      const prompt = !trustedProfile.summary
-        ? "Targeted collection: share one recent accomplishment most relevant to this role."
-        : `Targeted collection: confirm one requirement you can strongly support: ${userBundle.match.missing[0]}`;
+    const collectionQueue: Phase3CollectionItem[] = [
+      {
+        key: "accomplishment",
+        prompt: "Targeted collection: share one recent accomplishment most relevant to this role.",
+      },
+      {
+        key: "summary",
+        prompt: "Targeted collection: give me one sentence describing your executive-facing or solution-selling experience.",
+      },
+      {
+        key: "skills",
+        prompt: `Targeted collection: confirm one requirement you can strongly support: ${userBundle.match.missing[0] ?? "core role requirements"}`,
+      },
+    ];
+    const missingItem = collectionQueue.find((item) => {
+      if (phase3SatisfiedAsks.includes(item.key)) return false;
+      if (item.key === "accomplishment") return userBundle.match.missing.length > 0;
+      if (item.key === "summary") return !review.summary || review.summary.startsWith("Gap:");
+      return review.skills.length < 3 || userBundle.match.missing.length > 4;
+    });
+
+    if (missingItem) {
+      const prompt = missingItem.prompt;
       setAwaitingCollection(prompt);
+      setAwaitingCollectionKey(missingItem.key);
       appendChat({ id: `assistant-collect-${Date.now()}`, role: "assistant", content: prompt });
       return;
     }
+    setAwaitingCollection(null);
+    setAwaitingCollectionKey(null);
     appendChat({
       id: `assistant-phase3-validation-${Date.now()}`,
       role: "assistant",
-      content: `**Phase 3 profile readiness**\nStrong: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited approved matches yet"}\nWeak or missing: ${userBundle.match.missing.slice(0, 4).join(", ") || "no major missing items"}\nI can help tailor anything in the right panel before we start resume generation.`,
-    });
-    const outcome = derivePositioningOutcome(userBundle.match.score);
-    appendChat({
-      id: `assistant-phase3-position-${Date.now()}`,
-      role: "assistant",
-      content: `**Positioning outcome: ${outcome}**\nWhy: estimated match score ${userBundle.match.score}% with current trusted context.\nBest next move: ${outcome === "Future Role Target" ? "save this role as a future target and gather evidence for gaps." : "proceed to Stage 2 and tailor artifacts."}`,
+      content: `**Phase 3 profile readiness**\nStrong: ${userBundle.match.matched.slice(0, 4).join(", ") || "limited approved matches yet"}\nWeak or missing: ${userBundle.match.missing.slice(0, 4).join(", ") || "no major missing items"}\nYou have enough applicable profile context to move into resume generation, and you can still refine the right panel before proceeding.`,
     });
     appendChat({
       id: `assistant-phase3-actions-${Date.now()}`,
       role: "assistant",
-      content: "Confirm when you are ready for resume generation, or go back to listing review.",
+      content: "When you’re ready, use **Proceed to Resume Generation**. You can also return to listing review.",
       actions: [
-        { id: "phase3-confirm-ready", kind: "action_card", label: "Ready for resume generation" },
+        { id: "phase3-confirm-ready", kind: "action_card", label: "Proceed to Resume Generation" },
         { id: "phase3-back-to-listing", kind: "action_card", label: "Back to listing review" },
-        { id: "save-future-target", kind: "action_card", label: "Save as Future Role Target" },
       ],
     });
     setAwaitingPhase3Approval(true);
@@ -542,8 +571,36 @@ export default function DashboardPage() {
     appendChat({ id: `user-${Date.now()}`, role: "user", content: value });
 
     if (awaitingCollection) {
+      const interpretedKeywords = uniqueStrings([
+        /(executive|c-suite|vp|director)/i.test(value) ? "Executive-facing sales" : "",
+        /(enterprise|strategic|high[- ]value|expensive)/i.test(value) ? "Enterprise / high-value solution selling" : "",
+        /(value[- ]led|consultative|discovery)/i.test(value) ? "Value-led sales motion" : "",
+      ]);
+      setProfileReview((current) => {
+        if (!current) return current;
+        const nextSummary = current.summary.startsWith("Gap:")
+          ? value
+          : uniqueStrings([current.summary, value]).join(" ");
+        return {
+          ...current,
+          summary: awaitingCollectionKey === "summary" ? value : nextSummary,
+          skills: uniqueStrings([
+            ...current.skills.filter((item) => !item.startsWith("Needs evidence:")),
+            ...(awaitingCollectionKey === "skills" ? [value] : []),
+            ...interpretedKeywords,
+          ]),
+          keywords: uniqueStrings([
+            ...current.keywords,
+            ...interpretedKeywords,
+          ]),
+        };
+      });
+      if (awaitingCollectionKey) {
+        setPhase3SatisfiedAsks((current) => uniqueStrings([...current, awaitingCollectionKey]) as Phase3CollectionItem["key"][]);
+      }
       setAwaitingCollection(null);
-      appendChat({ id: `assistant-collect-thanks-${Date.now()}`, role: "assistant", content: "Great — that helps tighten your positioning confidence." });
+      setAwaitingCollectionKey(null);
+      appendChat({ id: `assistant-collect-thanks-${Date.now()}`, role: "assistant", content: "Great — captured. I’ve updated your applicable profile panel for this run." });
       if (pendingParsed) {
         runPhase3OperationalFlow(pendingParsed);
       }
@@ -621,6 +678,8 @@ export default function DashboardPage() {
       setProfileReview(null);
       setActiveReviewPhase(null);
       setPendingSourceUrl(undefined);
+      setAwaitingCollectionKey(null);
+      setPhase3SatisfiedAsks([]);
       appendChat({ id: `assistant-restart-${Date.now()}`, role: "assistant", content: "No problem — let’s start fresh. Paste a URL, listing text, or ask me to find jobs." });
       return;
     }
@@ -629,6 +688,8 @@ export default function DashboardPage() {
       if (!awaitingPhase2Approval || !pendingParsed || !listingReview) return;
       setAwaitingPhase2Approval(false);
       setActiveReviewPhase(3);
+      setPhase3SatisfiedAsks([]);
+      setAwaitingCollectionKey(null);
       appendChat({
         id: `assistant-phase3-open-${Date.now()}`,
         role: "assistant",
@@ -669,17 +730,6 @@ export default function DashboardPage() {
       appendChat({ id: `assistant-proceed-${Date.now()}`, role: "assistant", content: "Confirmed — Phase 3 is complete enough. I’m now moving into resume generation." });
       router.push(`/listings/${wf.id}`);
       return;
-    }
-
-    if (action.id === "save-future-target") {
-      const wf = await createWorkflowFromParsed(reviewedParsed, pendingSourceUrl, false);
-      await fetch(`/api/workflows/${wf.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: "archived", is_active: false, notes: "Saved as future role target from Stage 1 chat." }),
-      });
-      setAwaitingPhase3Approval(false);
-      appendChat({ id: `assistant-future-${Date.now()}`, role: "assistant", content: "Saved as a Future Role Target. You can revisit it any time from your listings/workflows." });
     }
   };
 
