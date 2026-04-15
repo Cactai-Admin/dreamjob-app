@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/jobs/status-badge";
 import { DocStatusPill } from "@/components/jobs/doc-status-pill";
 import { PageHeader } from "@/components/layout/page-header";
+import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { workflowToJob, deriveApplicationStatus, deriveAllStatuses } from "@/lib/workflow-adapter";
 import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -153,8 +154,9 @@ export default function JobDetailPage({ params }: Props) {
             ? fetch(`/api/linkedin/company?listing_id=${wf.listing_id}`).then(r => r.json()).catch(() => ({}))
             : Promise.resolve({}),
           fetch("/api/profile").then(r => r.json()).catch(() => ({})),
-        setEditReqs(parseRequirements(l.requirements));
+          fetch("/api/profile/employment").then(r => r.json()).catch(() => ([])),
         ]);
+        setEditReqs(parseRequirements(l.requirements));
         if (liRes && !liRes.error) setLinkedInActive(liRes.isAuthenticated);
         if (connRes?.connections) setConnections(connRes.connections);
         if (profRes && !profRes.error) {
@@ -337,16 +339,7 @@ export default function JobDetailPage({ params }: Props) {
   });
   const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
 
-  const match = computeRequirementMatch({
-    requirements: editReqs,
-    skills: profSkills,
-    keywords: profKeywords,
-    tools: profTools,
-    certifications: profCerts,
-    clearances: profClearances,
-    technologies: empTech,
-    manuallyMarked,
-  });
+  return (
     <div className="page-wrapper max-w-1000px">
       <PageHeader
         title={job.title}
@@ -655,6 +648,21 @@ export default function JobDetailPage({ params }: Props) {
 
         {/* Right column */}
         <div className="space-y-4">
+          <ContextPhasePanel
+            phase={activeStatuses.includes("applied") ? 7 : 3}
+            title={activeStatuses.includes("applied") ? "Application Support" : "Applicable User Profile Data"}
+            subtitle={activeStatuses.includes("applied")
+              ? "Support context after send/mark-applied."
+              : "Trusted profile context currently applied to this workflow."}
+            items={[
+              { label: "Profile skills", value: `${profSkills.length}` },
+              { label: "Keywords", value: `${profKeywords.length}` },
+              { label: "Tools", value: `${profTools.length}` },
+              { label: "Clearances", value: `${profClearances.length}` },
+              { label: "Workflow state", value: workflow.state },
+            ]}
+          />
+
           {/* Application Packet */}
           <div className="card-base p-5">
             <h3 className="font-semibold text-slate-900 mb-3">Application Packet</h3>

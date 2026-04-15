@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { MarkdownDoc } from "@/components/documents/markdown-doc";
+import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
@@ -203,6 +204,20 @@ export default function CoverLetterBuilderPage({ params }: Props) {
             </div>
           ) : (
             <div className="max-w-2xl mx-auto">
+              <div className="mb-4">
+                <ContextPhasePanel
+                  phase={5}
+                  title="Cover Letter"
+                  subtitle="Cover letter is the active right-panel artifact while chat stays central."
+                  items={[
+                    { label: "Workflow", value: id },
+                    { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
+                    { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
+                    { label: "Length", value: `${content.split(/\\s+/).filter(Boolean).length} words` },
+                    { label: "Status", value: generating ? "Generating" : "Draft/Editable" },
+                  ]}
+                />
+              </div>
               <div className="document-paper overflow-hidden">
                 <div className="p-8 sm:p-12">
                   <div className="mb-8 pb-6 border-b border-slate-100">

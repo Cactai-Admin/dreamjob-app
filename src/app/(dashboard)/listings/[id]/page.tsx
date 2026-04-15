@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
 import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
+import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -124,7 +125,7 @@ export default function ListingReviewPage({ params }: Props) {
     const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
     const isDup = existing.some(e => norm(e) === norm(term.trim()));
     if (!isDup) {
-        setReqs(parseRequirements(l.requirements));
+      const updated = [...existing, term.trim()];
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -262,19 +263,6 @@ export default function ListingReviewPage({ params }: Props) {
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3 min-w-0">
           <Link href="/listings" className="flex-shrink-0 w-8 h-8 mt-0.5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm">
-  const match = computeRequirementMatch(
-    {
-      requirements: reqs,
-      skills,
-      keywords,
-      tools: profileTools,
-      certifications: profileCerts,
-      clearances: profileClearances,
-      technologies: tech,
-      manuallyMarked,
-    },
-    { includeAllMissingWhenNoProfileTerms: true }
-  );
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{title || "Untitled Listing"}</h1>
@@ -453,6 +441,18 @@ export default function ListingReviewPage({ params }: Props) {
 
         {/* ── Right: Analysis (2/5) ── */}
         <div className="lg:col-span-2 space-y-5">
+          <ContextPhasePanel
+            phase={2}
+            title="Listing Extracted Information"
+            subtitle="Review/edit extracted listing context before creating an application."
+            items={[
+              { label: "Role", value: title || "Untitled Listing" },
+              { label: "Company", value: companyName || "Unknown" },
+              { label: "Location", value: location || "Not specified" },
+              { label: "Experience", value: expLevel || "Unknown" },
+              { label: "Requirements", value: `${reqs.length} captured` },
+            ]}
+          />
 
           {/* CTA card */}
           <div className="card-base p-5 bg-slate-900 border-slate-900">

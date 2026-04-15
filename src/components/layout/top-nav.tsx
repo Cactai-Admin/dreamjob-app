@@ -29,9 +29,12 @@ import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
 
 /* Desktop nav links */
 const NAV_ITEMS = [
-  { href: "/",         label: "Dashboard",    icon: LayoutDashboard },
-  { href: "/listings", label: "Analyze",      icon: Zap },
-  { href: "/jobs",     label: "Applications", icon: Briefcase },
+  { href: "/home",      label: "Home",                  icon: LayoutDashboard },
+  { href: "/listings",  label: "Listings",              icon: Zap },
+  { href: "/jobs",      label: "Applications",          icon: Briefcase },
+  { href: "/career-advancement", label: "Career Advancement", icon: Zap },
+  { href: "/documents", label: "Documents",             icon: Save },
+  { href: "/archive",   label: "Archive",               icon: Save },
 ];
 
 /* Mobile bottom tab bar */
@@ -40,8 +43,9 @@ const MOBILE_NAV_ITEMS = NAV_ITEMS;
 const USER_MENU_ITEMS = [
   { href: "/profile",  label: "Profile",  icon: User },
   { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/admin",    label: "Admin",    icon: Shield },
+  { href: "/archive",  label: "Archive",  icon: Save },
   { href: "/trash",    label: "Trash",    icon: Trash2 },
+  { href: "/admin",    label: "Admin",    icon: Shield },
 ];
 
 export function TopNav() {
@@ -96,8 +100,11 @@ export function TopNav() {
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
+    if (href === "/home") return pathname === "/home";
     if (href === "/jobs") return pathname === "/jobs" || (pathname.startsWith("/jobs/") && !pathname.startsWith("/listings"));
     if (href === "/listings") return pathname.startsWith("/listings");
+    if (href === "/archive") return pathname.startsWith("/archive");
+    if (href === "/documents") return pathname.startsWith("/documents");
     return pathname.startsWith(href);
   };
 
