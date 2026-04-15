@@ -5,6 +5,7 @@ import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { QA_SYSTEM_PROMPT, buildQAUserMessage } from '@/lib/ai/prompts/qa-guidance'
 import { getAdminClient } from '@/lib/supabase/admin'
 import type { StatusEvent } from '@/types/database'
+import { computeRequirementMatch, parseRequirements } from '@/lib/listing-match'
 
 const supabaseAdmin = getAdminClient()
 const APPLICATION_SUPPORT_SYSTEM_PROMPT = `You are DreamJob's post-submission application support assistant.
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const [{ data: qaAnswers }, { data: reusableFacts }] = await Promise.all([
+  const [{ data: qaAnswers }, { data: reusableFacts }, { data: profile }, { data: employment }] = await Promise.all([
     supabaseAdmin
       .from('qa_answers')
       .select('question_text, answer_text, is_accepted')
@@ -175,6 +176,15 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(25),
+    supabaseAdmin
+      .from('profiles')
+      .select('first_name, last_name, headline, summary, location, skills, keywords, tools, certifications, clearances')
+      .eq('account_id', accountId)
+      .single(),
+    supabaseAdmin
+      .from('employment_history')
+      .select('technologies')
+      .eq('account_id', accountId),
   ])
 
   const eventTypes = (workflow.status_events ?? []).map((event: StatusEvent) => event.event_type)
@@ -193,22 +203,68 @@ export async function POST(request: NextRequest) {
     ? APPLICATION_SUPPORT_SYSTEM_PROMPT
     : QA_SYSTEM_PROMPT
 
+  const requirements = parseRequirements(workflow.listing.requirements)
+  const profileSkills = Array.isArray(profile?.skills) ? profile.skills : []
+  const profileKeywords = Array.isArray(profile?.keywords) ? profile.keywords : []
+  const profileTools = Array.isArray(profile?.tools) ? profile.tools : []
+  const profileCertifications = Array.isArray(profile?.certifications) ? profile.certifications : []
+  const profileClearances = Array.isArray(profile?.clearances) ? profile.clearances : []
+  const technologies = Array.isArray(employment)
+    ? employment.flatMap((entry) => (Array.isArray(entry?.technologies) ? entry.technologies : []))
+    : []
+  const matchSummary = computeRequirementMatch(
+    {
+      requirements,
+      skills: profileSkills,
+      keywords: profileKeywords,
+      tools: profileTools,
+      certifications: profileCertifications,
+      clearances: profileClearances,
+      technologies,
+    },
+    { includeAllMissingWhenNoProfileTerms: true }
+  )
+
+  const profileSummaryLines = [
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim(),
+    profile?.headline ? `Headline: ${profile.headline}` : null,
+    profile?.summary ? `Summary: ${profile.summary}` : null,
+    profile?.location ? `Location: ${profile.location}` : null,
+  ].filter(Boolean)
+
+  const workflowStatusSummary = eventTypes.length > 0 ? eventTypes.join(', ') : 'none recorded'
+  const workflowPhase = inApplicationSupport
+    ? 'application_support'
+    : surface === 'listing_review'
+      ? 'listing_review'
+      : 'active_workflow'
+
   const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
       content: buildQAUserMessage({
+        workflowId: workflow.id,
         workflowState: workflow.state,
         surface,
+        workflowPhase,
+        workflowStatusSummary,
         listing: {
           title: workflow.listing.title,
           company_name: workflow.listing.company_name,
+          location: workflow.listing.location,
+          salary_range: workflow.listing.salary_range,
+          employment_type: workflow.listing.employment_type,
+          experience_level: workflow.listing.experience_level,
           description: workflow.listing.description,
           requirements: workflow.listing.requirements,
           responsibilities: workflow.listing.responsibilities,
+          benefits: workflow.listing.benefits,
         },
         qaAnswers: qaAnswers ?? [],
         reusableFacts: reusableFacts ?? [],
+        profileSummary: profileSummaryLines.join('\n') || null,
+        matchSummary,
       }),
     },
   ]

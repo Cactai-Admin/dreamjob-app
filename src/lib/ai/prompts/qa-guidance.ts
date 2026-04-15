@@ -20,26 +20,47 @@ STAGE BEHAVIOR:
 When enough run-specific context exists to generate materials safely, explicitly say the user can continue to generation.`
 
 interface QAContextInput {
+  workflowId: string
   workflowState: string
   surface: string
+  workflowPhase?: string | null
+  workflowStatusSummary?: string | null
   listing: {
     title: string
     company_name: string
+    location?: string | null
+    salary_range?: string | null
+    employment_type?: string | null
+    experience_level?: string | null
     description: string | null
     requirements: string | null
     responsibilities?: string | null
+    benefits?: string | null
   }
   qaAnswers: { question_text: string; answer_text: string; is_accepted?: boolean }[]
   reusableFacts: { type: string; content: string; context?: string | null }[]
+  profileSummary?: string | null
+  matchSummary?: {
+    score: number
+    matched: string[]
+    missing: string[]
+  } | null
 }
 
 export function buildQAUserMessage(input: QAContextInput) {
-  let context = `WORKFLOW STATE: ${input.workflowState}\nSURFACE: ${input.surface}`
+  let context = `WORKFLOW ID: ${input.workflowId}\nWORKFLOW STATE: ${input.workflowState}\nSURFACE: ${input.surface}`
+  if (input.workflowPhase) context += `\nWORKFLOW PHASE: ${input.workflowPhase}`
+  if (input.workflowStatusSummary) context += `\nWORKFLOW STATUS EVENTS: ${input.workflowStatusSummary}`
 
   context += `\n\nLISTING:\nTitle: ${input.listing.title}\nCompany: ${input.listing.company_name}`
+  if (input.listing.location) context += `\nLocation: ${input.listing.location}`
+  if (input.listing.salary_range) context += `\nSalary range: ${input.listing.salary_range}`
+  if (input.listing.employment_type) context += `\nEmployment type: ${input.listing.employment_type}`
+  if (input.listing.experience_level) context += `\nSeniority / level: ${input.listing.experience_level}`
   if (input.listing.description) context += `\nDescription: ${input.listing.description}`
   if (input.listing.requirements) context += `\nRequirements: ${input.listing.requirements}`
   if (input.listing.responsibilities) context += `\nResponsibilities: ${input.listing.responsibilities}`
+  if (input.listing.benefits) context += `\nBenefits: ${input.listing.benefits}`
 
   const accepted = input.qaAnswers.filter((qa) => qa.is_accepted !== false)
   if (accepted.length) {
@@ -58,6 +79,17 @@ export function buildQAUserMessage(input: QAContextInput) {
     }
   } else {
     context += '\n\nREUSABLE PROFILE FACTS: none available'
+  }
+
+  if (input.profileSummary) {
+    context += `\n\nPROFILE SUMMARY IN ACTIVE WORKFLOW:\n${input.profileSummary}`
+  }
+
+  if (input.matchSummary) {
+    context += '\n\nALIGNMENT SUMMARY FROM CURRENT WORKFLOW:'
+    context += `\nMatch score: ${input.matchSummary.score}%`
+    context += `\nMatched terms: ${input.matchSummary.matched.join(', ') || 'none'}`
+    context += `\nMissing requirement highlights: ${input.matchSummary.missing.join(' | ') || 'none'}`
   }
 
   context += '\n\nAnswer the latest user message using this context.'
