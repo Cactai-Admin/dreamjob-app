@@ -16,13 +16,26 @@ interface Props {
   initialMessages?: ChatMessage[];
 }
 
+const LISTING_REVIEW_ASSISTANT_SEED: ChatMessage[] = [
+  {
+    id: "listing-review-guide",
+    role: "assistant",
+    content: "I can help you validate the parsed listing, spot missing context, and decide what to fix before starting your application packet.",
+    timestamp: "seed",
+    suggestions: [
+      "Which listing fields should I verify first before proceeding?",
+      "Help me tighten requirements into concise bullets.",
+      "What should I check for compensation or employment gaps?",
+    ],
+  },
+];
+
 export function AiChatPanel({ workflowId, surface = "document", onClose, className, initialMessages }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [isTyping, setIsTyping] = useState(false);
   const [loadingThread, setLoadingThread] = useState(true);
   const [stageKey, setStageKey] = useState<"stage2" | "support">("stage2");
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
-
   useEffect(() => {
     let active = true;
     const loadThread = async () => {
@@ -44,7 +57,8 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
           eventTypes.includes("submitted") ||
           workflow?.state === "sent" ||
           workflow?.state === "completed";
-        setStageKey(isApplicationSupport ? "support" : "stage2");
+        const nextStageKey = isApplicationSupport ? "support" : surface === "listing_review" ? "stage1" : "stage2";
+        setStageKey(nextStageKey);
 
         if (threadRes.ok && Array.isArray(data.messages)) {
           if (data.messages.length > 0) {
@@ -55,7 +69,12 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
               timestamp: message.created_at,
             })));
           } else {
-            setMessages(initialMessages ?? []);
+            setMessages(
+              initialMessages
+                ?? (surface === "listing_review"
+                  ? LISTING_REVIEW_ASSISTANT_SEED.map((message) => ({ ...message, timestamp: new Date().toISOString() }))
+                  : [])
+            );
           }
         }
       } finally {

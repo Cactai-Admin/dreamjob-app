@@ -2,12 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Briefcase, Layers } from "lucide-react";
+import { ChevronDown, ChevronRight, Briefcase, Layers, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { Workflow } from "@/lib/types";
 import { routeForWorkflow, splitContinuity } from "@/lib/continuity";
 import { cn } from "@/lib/utils";
 
-export function ContinuitySidebar() {
+interface Props {
+  open: boolean;
+  onToggle: () => void;
+}
+
+export function ContinuitySidebar({ open, onToggle }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
@@ -47,9 +52,36 @@ export function ContinuitySidebar() {
   };
 
   return (
-    <aside className="hidden lg:flex lg:w-72 lg:flex-col lg:border-r lg:border-slate-200 bg-white/90">
+    <>
+      <button
+        onClick={onToggle}
+        className={cn(
+          "hidden lg:inline-flex fixed z-50 items-center gap-1.5 px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition-all",
+          open ? "left-[280px]" : "left-3"
+        )}
+        style={{ top: 78 }}
+        aria-label={open ? "Close continuity drawer" : "Open continuity drawer"}
+      >
+        {open ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+        <span className="text-xs font-medium">{open ? "Close" : "Continuity"}</span>
+      </button>
+
+      {open && (
+        <button
+          className="hidden lg:block fixed inset-0 z-30 bg-slate-950/20"
+          onClick={onToggle}
+          aria-label="Close continuity drawer"
+        />
+      )}
+
+      <aside
+        className={cn(
+          "hidden lg:flex lg:w-72 lg:flex-col lg:border-r lg:border-slate-200 bg-white/95 fixed left-0 z-40 top-[64px] bottom-0 transition-transform",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
       <div className="px-3 py-3 border-b border-slate-100">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Continuity</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Continuity Drawer</h2>
       </div>
       <div className="p-3 space-y-3 overflow-y-auto">
         <section className="space-y-2">
@@ -82,6 +114,7 @@ export function ContinuitySidebar() {
           )}
         </section>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
