@@ -90,7 +90,26 @@ export async function POST(request: NextRequest) {
       try {
         return NextResponse.json(JSON.parse(urlResult))
       } catch {
-        return NextResponse.json({ error: 'Could not fetch or analyze the listing URL' }, { status: 422 })
+        const fallbackHost = (() => {
+          try {
+            return new URL(body.url).hostname.replace(/^www\./, '')
+          } catch {
+            return 'unknown'
+          }
+        })()
+        return NextResponse.json({
+          title: 'Review and complete listing details',
+          company_name: fallbackHost === 'unknown' ? 'Unknown Company' : fallbackHost,
+          description: 'Listing parse was partial. Please review and edit this listing before generating documents.',
+          requirements: [],
+          location: null,
+          salary_range: null,
+          employment_type: null,
+          experience_level: null,
+          responsibilities: null,
+          company_website_url: listingDomainUrl,
+          parse_quality: 'partial',
+        })
       }
     }
 
