@@ -21,7 +21,6 @@ import {
 import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
-import { DOC_TABS } from "@/components/documents/doc-subheader";
 import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
 
 const USER_MENU_ITEMS = [
@@ -219,26 +218,6 @@ export function TopNav() {
                   </button>
                 );
               })}
-            </div>
-          )}
-
-          {controls && (
-            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5 p-1 bg-slate-100 rounded-lg">
-              {DOC_TABS.map(({ type, label, icon: Icon }) => (
-                <button
-                  key={type}
-                  onClick={() => type !== controls.activeDoc && router.push(`/jobs/${controls.workflowId}/${type}`)}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                    type === controls.activeDoc
-                      ? 'bg-white text-slate-900 shadow-sm font-semibold'
-                      : 'text-slate-500 hover:text-slate-700'
-                  )}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {label}
-                </button>
-              ))}
             </div>
           )}
 
