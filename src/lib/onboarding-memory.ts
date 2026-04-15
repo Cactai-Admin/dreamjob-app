@@ -1,3 +1,5 @@
+import type { TrustedMemorySource } from '@/lib/memory-architecture'
+
 export interface OnboardingContactPreferences {
   includeEmail: boolean
   includePhone: boolean
@@ -39,7 +41,7 @@ export function hasConfirmedOnboardingPreferences(
 export interface ApprovedMemoryRecord {
   key: string
   value: string
-  source: 'onboarding' | 'listing_review' | 'qa' | 'chat'
+  source: TrustedMemorySource
   approvedAt: string
 }
 
