@@ -47,7 +47,7 @@ export default function NegotiationGuidePage({ params }: Props) {
     setIsDirty(false);
   }, [id]);
 
-  const fetchWorkflow = async () => {
+  const fetchWorkflow = useCallback(async () => {
     try {
       const wf: Workflow = await fetch(`/api/workflows/${id}`).then(r => r.json());
       if (!wf?.id) { setLoading(false); return; }
@@ -78,29 +78,31 @@ export default function NegotiationGuidePage({ params }: Props) {
       }
       setLoading(false);
     } catch { setLoading(false); }
-  };
+  }, [generating, id]);
 
   useEffect(() => {
-    fetchWorkflow();
+    const timer = setTimeout(() => {
+      void fetchWorkflow();
+    }, 0);
     return () => {
+      clearTimeout(timer);
       if (pollRef.current) clearInterval(pollRef.current);
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
-  }, [id]);
+  }, [fetchWorkflow]);
 
   useEffect(() => {
     if (!generating || pollRef.current) return;
     pollRef.current = setInterval(fetchWorkflow, 3000);
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  }, [generating]);
+  }, [fetchWorkflow, generating]);
 
   useEffect(() => {
     if (initialContent.current) { initialContent.current = false; return; }
-    if (generating || !content) return;
-    setIsDirty(true);
+    if (generating || !content || !isDirty) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveContent(content), 2000);
-  }, [content, saveContent]);
+  }, [content, generating, isDirty, saveContent]);
 
   const handleSave = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -147,7 +149,7 @@ export default function NegotiationGuidePage({ params }: Props) {
       onDelete: () => setConfirmDel(true),
     });
     return () => clearDocControls();
-  }, [workflow, appStatus, isDirty, handleSave, handleStatusChange]);
+  }, [appStatus, clearDocControls, handleSave, handleStatusChange, id, isDirty, setDocControls, workflow]);
 
   useEffect(() => {
     if (editing) textareaRef.current?.focus();
@@ -223,7 +225,10 @@ export default function NegotiationGuidePage({ params }: Props) {
                     <textarea
                       ref={textareaRef}
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
+                      onChange={(e) => {
+                        setContent(e.target.value);
+                        setIsDirty(true);
+                      }}
                       onBlur={handleBlur}
                       className="w-full text-slate-800 text-sm leading-loose bg-sky-50/40 border border-sky-200 outline-none resize-none rounded-lg p-2 transition-colors"
                       rows={Math.max(20, content.split("\n").length + 2)}

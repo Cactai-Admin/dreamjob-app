@@ -25,35 +25,29 @@ function getSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+function getInitialTheme(): Theme {
+  if (typeof window === 'undefined') return 'system'
+  const stored = localStorage.getItem('dreamjob-theme')
+  return stored === 'dark' || stored === 'light' || stored === 'system' ? stored : 'system'
+}
+
 function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('system')
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setThemeState] = useState<Theme>(() => getInitialTheme())
+  const resolvedTheme: 'light' | 'dark' = theme === 'system' ? getSystemTheme() : theme
 
   useEffect(() => {
-    const stored = localStorage.getItem('dreamjob-theme') as Theme | null
-    if (stored) {
-      setThemeState(stored)
-    }
-  }, [])
-
-  useEffect(() => {
-    const resolved = theme === 'system' ? getSystemTheme() : theme
-    setResolvedTheme(resolved)
-
     const root = document.documentElement
-    root.classList.toggle('dark', resolved === 'dark')
+    root.classList.toggle('dark', resolvedTheme === 'dark')
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = () => {
       if (theme === 'system') {
-        const newResolved = getSystemTheme()
-        setResolvedTheme(newResolved)
-        root.classList.toggle('dark', newResolved === 'dark')
+        root.classList.toggle('dark', getSystemTheme() === 'dark')
       }
     }
     mediaQuery.addEventListener('change', handler)
     return () => mediaQuery.removeEventListener('change', handler)
-  }, [theme])
+  }, [theme, resolvedTheme])
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t)

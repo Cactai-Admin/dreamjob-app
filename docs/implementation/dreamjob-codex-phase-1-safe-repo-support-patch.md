@@ -42,7 +42,7 @@ This phase should:
 Use these files as governing inputs:
 
 1. DreamJob locked rules document, revised UI version
-2. repo-tree.md
+2. docs/repo-audit/repo-tree.md
 3. architecture-map.md
 4. key-files.md
 5. schema-map.md
