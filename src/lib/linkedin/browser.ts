@@ -84,7 +84,19 @@ export async function launchLinkedInBrowser(
 
 // ─── Local session map (never used in serverless) ─────────────────────────────
 
-type LocalSession = { browser: any; context: any; page: any }
+type LinkedInBrowserHandle = {
+  close: () => Promise<void>
+}
+
+type LinkedInPageHandle = {
+  url: () => string
+}
+
+type LocalSession = {
+  browser: LinkedInBrowserHandle
+  context: object
+  page: LinkedInPageHandle
+}
 const localSessions = new Map<string, LocalSession>()
 
 // ─── Verify ───────────────────────────────────────────────────────────────────

@@ -30,9 +30,8 @@ export function setStoredDefaultProvider(name: ProviderName) {
 }
 
 export function useDefaultProvider(): [ProviderName, (p: ProviderName) => void] {
-  const [value, setValue] = useState<ProviderName>('openai')
+  const [value, setValue] = useState<ProviderName>(() => getStoredDefaultProvider())
   useEffect(() => {
-    setValue(getStoredDefaultProvider())
     const handler = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && (e.newValue === 'openai' || e.newValue === 'anthropic')) {
         setValue(e.newValue)

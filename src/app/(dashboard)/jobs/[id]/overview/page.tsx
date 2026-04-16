@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Circle, FileText, Loader2, Mail, Sparkles } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
@@ -45,17 +45,20 @@ export default function ApplicationHubPage({ params }: Props) {
   const [savingOffer, setSavingOffer] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
 
-  const loadWorkflow = async () => {
+  const loadWorkflow = useCallback(async () => {
     setLoading(true);
     const wf = await fetch(`/api/workflows/${id}`).then((res) => res.json());
     if (wf?.id) setWorkflow(wf as Workflow);
     setLoading(false);
     return wf as Workflow | null;
-  };
+  }, [id]);
 
   useEffect(() => {
-    void loadWorkflow().catch(() => setLoading(false));
-  }, [id]);
+    const timer = setTimeout(() => {
+      void loadWorkflow().catch(() => setLoading(false));
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadWorkflow]);
 
   const resumeSaved = Boolean(workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
   const coverSaved = Boolean(workflow?.outputs?.find((o) => o.type === "cover_letter" && o.is_current));

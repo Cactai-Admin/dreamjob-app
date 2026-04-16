@@ -22,23 +22,27 @@ export function DocumentEditor({ sections: initialSections, status, onApprove, o
   const [docStatus, setDocStatus] = useState(status);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialRender = useRef(true);
 
-  // Auto-save 2s after any edit
-  useEffect(() => {
-    if (initialRender.current) { initialRender.current = false; return; }
+  const scheduleAutoSave = (nextSections: DocumentSection[]) => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     setSaveState("saving");
     autoSaveTimer.current = setTimeout(async () => {
-      await onSave?.(sections);
+      await onSave?.(nextSections);
       setSaveState("saved");
       setTimeout(() => setSaveState("idle"), 2000);
     }, 2000);
+  };
+
+  useEffect(() => {
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
-  }, [sections]);
+  }, []);
 
   const updateSection = (id: string, content: string) => {
-    setSections((prev) => prev.map((s) => (s.id === id ? { ...s, content } : s)));
+    setSections((prev) => {
+      const nextSections = prev.map((s) => (s.id === id ? { ...s, content } : s));
+      scheduleAutoSave(nextSections);
+      return nextSections;
+    });
   };
 
   const handleManualSave = async () => {

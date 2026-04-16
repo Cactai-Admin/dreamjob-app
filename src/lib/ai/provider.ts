@@ -1,3 +1,6 @@
+import { AnthropicProvider } from './anthropic'
+import { OpenAIProvider } from './openai'
+
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -28,10 +31,8 @@ export function getDefaultProvider(): ProviderName {
 
 function instantiate(name: ProviderName): AIProvider {
   if (name === 'anthropic') {
-    const { AnthropicProvider } = require('./anthropic')
     return new AnthropicProvider()
   }
-  const { OpenAIProvider } = require('./openai')
   return new OpenAIProvider()
 }
 
