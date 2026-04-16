@@ -25,7 +25,14 @@ function CallbackHandler() {
       }
 
       // Ensure account record exists
-      await fetch('/api/auth/callback', { method: 'POST' })
+      const callbackRes = await fetch('/api/auth/callback', { method: 'POST' })
+
+      if (!callbackRes.ok) {
+        const callbackData = await callbackRes.json().catch(() => null)
+        const callbackError = callbackData?.error || 'Unable to complete sign-in.'
+        router.push(`/login?error=${encodeURIComponent(callbackError)}`)
+        return
+      }
 
       router.push(redirect)
       router.refresh()
