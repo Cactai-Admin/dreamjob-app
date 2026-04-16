@@ -39,10 +39,15 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
       placeholder: "Ask for cover-letter tone, structure, and rewrite edits…",
       empty: "Use chat to refine your cover letter for this role.",
     },
-    application_overview_support: {
-      subtitle: "Workflow support",
+    application_hub_support: {
+      subtitle: "Application hub assistant",
       placeholder: "Ask for workflow next steps, follow-ups, and packet readiness…",
       empty: "Use support to plan next actions for this application workflow.",
+    },
+    follow_up_support: {
+      subtitle: "Follow-up assistant",
+      placeholder: "Ask for follow-up timing, outreach wording, and cadence…",
+      empty: "Use this support thread to plan post-submission follow-up.",
     },
     interview_guide: {
       subtitle: "Interview guide assistant",

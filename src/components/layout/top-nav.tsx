@@ -97,21 +97,30 @@ export function TopNav() {
   // Doc page detection from pathname — used for both mobile and desktop nav hiding.
   // Derived from pathname (not controls) so it's accurate during page transitions
   // before the new page has called setDocControls.
-  const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|overview|interview-guide|negotiation-guide)$/);
+  const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|overview|follow-up|interview-guide|negotiation-guide)$/);
   const mobileWorkflowId = mobileDocMatch?.[1];
-  const listingMatch = pathname.match(/^\/listings\/([^/]+)/);
   const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
-  const milestoneWorkflowId = workflowMatch?.[1] ?? listingMatch?.[1];
-  const showMilestones = Boolean(milestoneWorkflowId);
+  const milestoneWorkflowId = workflowMatch?.[1];
+  const inSupportWorkflow = Boolean(pathname.match(/^\/jobs\/[^/]+\/(follow-up|interview-guide|negotiation-guide)$/));
+  const showMilestones = Boolean(milestoneWorkflowId) && !inSupportWorkflow;
+  const showSupportNav = Boolean(milestoneWorkflowId) && inSupportWorkflow;
   const resumeStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "resume");
   const coverLetterStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "cover_letter");
   const coreDocsReady = resumeStatus !== "not_started" && coverLetterStatus !== "not_started";
   const milestones = milestoneWorkflowId ? [
-    { href: `/listings/${milestoneWorkflowId}`, label: "Listing Review" },
     { href: `/jobs/${milestoneWorkflowId}`, label: "Work History" },
     { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
     { href: `/jobs/${milestoneWorkflowId}/cover-letter`, label: "Cover Letter" },
-    { href: `/jobs/${milestoneWorkflowId}/overview`, label: "Overview" },
+    { href: `/jobs/${milestoneWorkflowId}/overview`, label: "Application Hub" },
+  ] : [];
+  const interviewEvent = milestoneWorkflow?.status_events?.find((event) => event.event_type === "interview_scheduled");
+  const offerEvent = milestoneWorkflow?.status_events?.find((event) => event.event_type === "offer_received");
+  const interviewUnlocked = coreDocsReady && Boolean(interviewEvent?.notes && interviewEvent.notes.includes("date") && interviewEvent.notes.includes("time"));
+  const negotiationUnlocked = coreDocsReady && Boolean(offerEvent?.notes && offerEvent.notes.includes("amount") && offerEvent.notes.includes("details"));
+  const supportSteps = milestoneWorkflowId ? [
+    { href: `/jobs/${milestoneWorkflowId}/follow-up`, label: "Follow Up", unlocked: coreDocsReady },
+    { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview", unlocked: interviewUnlocked },
+    { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation", unlocked: negotiationUnlocked },
   ] : [];
   const milestoneActiveIndex = milestones.findIndex(({ href }) => pathname === href);
   useEffect(() => {
@@ -133,26 +142,25 @@ export function TopNav() {
   const fallbackFurthest = milestoneActiveIndex > -1
     ? milestoneActiveIndex
     : pathname.startsWith(`/jobs/${milestoneWorkflowId}/overview`)
-      ? 4
+      ? 3
       : pathname.startsWith(`/jobs/${milestoneWorkflowId}/cover-letter`)
-        ? 3
+        ? 2
         : pathname.startsWith(`/jobs/${milestoneWorkflowId}/resume`)
-          ? 2
+          ? 1
           : pathname.startsWith(`/jobs/${milestoneWorkflowId}`)
-            ? 1
+            ? 0
             : 0
-  const overviewReady = resumeStatus !== "not_started" && coverLetterStatus !== "not_started";
   const furthestReachedIndex = !milestoneWorkflow
     ? fallbackFurthest
     : milestoneWorkflow.state === "listing_review"
     ? 0
-    : overviewReady
-      ? 4
+    : coreDocsReady
+      ? 3
       : coverLetterStatus !== "not_started"
-        ? 3
+        ? 2
         : resumeStatus !== "not_started"
-          ? 2
-          : 1;
+          ? 1
+          : 0;
 
   // Profile button — shared across desktop and mobile
   const renderProfileButton = (sizePx?: number) => (
@@ -232,7 +240,7 @@ export function TopNav() {
                 const active = pathname === href;
                 const completed = !active && idx <= furthestReachedIndex - 1;
                 const prerequisiteUnlocked = idx <= furthestReachedIndex + 1;
-                const stageUnlocked = idx === 4
+                const stageUnlocked = idx === 3
                   ? coreDocsReady
                   : true;
                 const available = !completed && !active && prerequisiteUnlocked && stageUnlocked;
@@ -269,6 +277,32 @@ export function TopNav() {
                       ) : (
                         <Lock className="w-3 h-3 text-slate-400" />
                       )}
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {showSupportNav && (
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+              {supportSteps.map(({ href, label, unlocked }) => {
+                const active = pathname === href;
+                const clickable = unlocked || active;
+                return (
+                  <button
+                    key={href}
+                    onClick={() => clickable && router.push(href)}
+                    disabled={!clickable}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-xs font-medium transition-colors border",
+                      active && "bg-sky-50 text-sky-800 border-sky-300 shadow-sm",
+                      !active && unlocked && "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100",
+                      !active && !unlocked && "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed"
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      {active ? <Circle className="w-3 h-3 fill-sky-500 text-sky-500" /> : unlocked ? <Circle className="w-3 h-3 text-amber-500" /> : <Lock className="w-3 h-3 text-slate-400" />}
                       {label}
                     </span>
                   </button>
