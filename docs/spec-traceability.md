@@ -43,8 +43,9 @@ Maps spec requirements to their implementation locations in the codebase.
 | Document generation (cover letter) | Done | `src/app/api/ai/generate/route.ts` |
 | Interview guide generation | Done | `src/app/api/ai/generate/route.ts` |
 | Negotiation guide generation | Done | `src/app/api/ai/generate/route.ts` |
-| Resume editor | Done | `src/app/(dashboard)/jobs/[id]/resume/page.tsx` |
-| Cover letter editor | Done | `src/app/(dashboard)/jobs/[id]/cover-letter/page.tsx` |
+| Run workspace (center-state progression) | Done | `src/app/(dashboard)/jobs/[id]/page.tsx` |
+| Legacy resume route redirect | Done | `src/app/(dashboard)/jobs/[id]/resume/page.tsx` (redirect to Run workspace) |
+| Legacy cover letter route redirect | Done | `src/app/(dashboard)/jobs/[id]/cover-letter/page.tsx` (redirect to Run workspace) |
 | Interview guide editor | Done | `src/app/(dashboard)/jobs/[id]/interview-guide/page.tsx` |
 | Negotiation guide editor | Done | `src/app/(dashboard)/jobs/[id]/negotiation-guide/page.tsx` |
 | AI chat panel (per document) | Done | `src/components/documents/ai-chat-panel.tsx` |

@@ -1,15 +1,15 @@
 # DreamJob
 
-AI-assisted job application platform for mid-career professionals. DreamJob guides you from discovering a job listing through submitting a polished, tailored application packet — resume, cover letter, interview guide, and negotiation guide — all generated and refined with AI assistance.
+AI-assisted job application platform for mid-career professionals. DreamJob now runs as a single persistent Run workspace per opportunity: Listing Review (2-column) transitions into a state-driven 3-column Run shell where the center phase changes while left reference context and right chat remain persistent.
 
 ## Features
 
 - **Listing intake** — Paste a job URL for AI-powered parsing, or enter details manually. AI auto-discovers company website and scrapes LinkedIn URL from the footer.
 - **Listing review** — Edit all parsed fields, view a live match score against your profile skills, find LinkedIn connections at the company.
 - **AI document generation** — Resume, cover letter, interview guide, and negotiation guide — each tailored to the specific listing.
-- **4-tab document editor** — Switch between all four documents in a single editor view with an embedded AI chat panel for revisions.
-- **Approve / unapprove toggle** — Mark documents ready; click again to re-open for editing.
-- **Export page** — Copy or download any or all four documents as plain text.
+- **Persistent Run workspace** — After Listing Review, users stay in one 3-column shell (left reference context, center active state/artifact, right persistent chat).
+- **Center-state progression** — Listing analysis loading → listing analysis → resume loading/workspace → optional cover-letter decision/loading/workspace → Application Overview.
+- **Trustworthy export gating** — Resume export requires saved resume, cover-letter export requires saved cover letter, combined export requires both saved.
 - **Application state persistence** — Documents auto-save every 2 seconds; approved status persists across sessions.
 - **LinkedIn integration** — Browser-based company research, connection discovery (1st/2nd/3rd degree), and LinkedIn URL scraping.
 - **Status tracking** — Track applications from sent through hired/rejected with a full event timeline.
@@ -63,9 +63,9 @@ src/
 │       ├── jobs/             # Active applications
 │       │   ├── page.tsx      # Applications list
 │       │   └── [id]/         # Application detail + doc editors
-│       │       ├── page.tsx          # Overview, document status cards
-│       │       ├── resume/           # Resume editor
-│       │       ├── cover-letter/     # Cover letter editor
+│       │       ├── page.tsx          # Persistent Run workspace + center-state controller
+│       │       ├── resume/           # Legacy compatibility redirect to Run workspace
+│       │       ├── cover-letter/     # Legacy compatibility redirect to Run workspace
 │       │       ├── interview-guide/  # Interview guide editor
 │       │       ├── negotiation-guide/ # Negotiation guide editor
 │       │       └── export/           # Copy / download all docs
@@ -119,15 +119,14 @@ Analyze page
 Listings page
   → select listing → review match score, connections → Start Application
 
-Application detail
-  → opens resume editor (transitions state to "draft")
-  → 4-tab toggle: Resume | Cover Letter | Interview | Negotiation
-  → AI generates each doc on first visit; edits auto-save
-  → Approve each doc when satisfied
-  → Export → copy or download all docs
-
-Post-send
-  → update status: Sent → Interviewing → Offer → Hired / Rejected
+Application detail (persistent Run workspace)
+  → center shows listing analysis states, then resume workspace
+  → optional cover letter decision keeps shell loaded
+  → center inline loading transitions occur between major phases
+  → left sidebar accumulates retained context only (Listing, Fit & Evidence, saved outputs)
+  → Application Overview becomes the post-creation hub
+    - Submission Materials spoke (resume/cover/export readiness)
+    - Application Support spoke (interview/follow-up/negotiation), gated until core materials complete
 ```
 
 ## Documentation

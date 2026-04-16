@@ -1,1213 +1,352 @@
 "use client";
 
-// ── Job Detail — Full view of a job application with all actions ──
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { notFound } from "next/navigation";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useState, useEffect, use, useRef } from "react";
-import {
-  MapPin, DollarSign, ExternalLink, FileText, Mail, Download,
-  ChevronRight, StickyNote, Building2, Users, Calendar,
-  CircleCheck as CheckCircle2, Trash2, MessageSquare, TrendingUp,
-  PenLine, Save, X, Plus, Star, Link2, RefreshCw,
-  Globe, Check, AlertCircle, LifeBuoy,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { StatusBadge } from "@/components/jobs/status-badge";
-import { DocStatusPill } from "@/components/jobs/doc-status-pill";
-import { PageHeader } from "@/components/layout/page-header";
-import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
+import { notFound, useRouter } from "next/navigation";
+import { FileText, Mail, Sparkles, Loader2, CheckCircle2, Circle, ArrowRight } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
-import { workflowToJob, deriveApplicationStatus, deriveAllStatuses } from "@/lib/workflow-adapter";
-import type { ApplicationStatus, Job, Workflow } from "@/lib/types";
+import { MarkdownDoc } from "@/components/documents/markdown-doc";
+import type { DocumentSection, Output, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
-
-const EXCLUSIVE_GROUP = new Set<ApplicationStatus>(["hired", "declined", "ghosted", "rejected"]);
-
-const PREREQUISITES: Partial<Record<ApplicationStatus, ApplicationStatus[]>> = {
-  received:     ["applied"],
-  interviewing: ["applied"],
-  offer:        ["applied"],
-  negotiating:  ["applied", "offer"],
-  hired:        ["applied", "offer"],
-  declined:     ["applied", "offer"],
-};
-
-// event_type values used in the DB status_event_type enum
-const EVENT_MAP: Partial<Record<ApplicationStatus, string>> = {
-  ready:        "ready",
-  applied:      "sent",
-  received:     "received",
-  interviewing: "interview",
-  offer:        "offer",
-  negotiating:  "negotiation",
-  hired:        "hired",
-  declined:     "declined",
-  ghosted:      "ghosted",
-  rejected:     "rejected",
-};
-
-const STATUS_GRID: { status: ApplicationStatus; label: string; activeClass: string }[] = [
-  { status: "ready",        label: "Ready",        activeClass: "border-blue-400 bg-blue-50 text-blue-700" },
-  { status: "applied",      label: "Applied",      activeClass: "border-sky-400 bg-sky-50 text-sky-700" },
-  { status: "received",     label: "Received",     activeClass: "border-violet-400 bg-violet-50 text-violet-700" },
-  { status: "interviewing", label: "Interviewing", activeClass: "border-amber-400 bg-amber-50 text-amber-700" },
-  { status: "offer",        label: "Offer",        activeClass: "border-emerald-400 bg-emerald-50 text-emerald-700" },
-  { status: "negotiating",  label: "Negotiating",  activeClass: "border-teal-400 bg-teal-50 text-teal-700" },
-  { status: "hired",        label: "Hired",        activeClass: "border-green-400 bg-green-50 text-green-700" },
-  { status: "declined",     label: "Declined",     activeClass: "border-orange-400 bg-orange-50 text-orange-700" },
-  { status: "ghosted",      label: "Ghosted",      activeClass: "border-slate-300 bg-slate-100 text-slate-500" },
-  { status: "rejected",     label: "Rejected",     activeClass: "border-red-300 bg-red-50 text-red-600" },
-];
-
-const PACKET_STATE_COPY: Record<string, { hint: string; readiness: string; exportState: string }> = {
-  not_started: { hint: "No draft exists yet", readiness: "Not started", exportState: "Not exportable" },
-  generating: { hint: "AI draft is in progress", readiness: "Drafting", exportState: "Not exportable" },
-  draft: { hint: "Editable draft available", readiness: "Draft", exportState: "Exportable draft" },
-  approved: { hint: "Approved for export and send", readiness: "Ready", exportState: "Export-ready" },
-};
-
-type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
-export default function JobDetailPage({ params }: Props) {
+type RunPhase =
+  | "listing_analysis_loading"
+  | "listing_analysis"
+  | "resume_loading"
+  | "resume_workspace"
+  | "optional_cover_letter_decision"
+  | "cover_letter_loading"
+  | "cover_letter_workspace"
+  | "application_overview";
+
+function parseSections(output?: Output): DocumentSection[] {
+  if (!output) return [];
+  try {
+    const parsed = JSON.parse(output.content);
+    if (Array.isArray(parsed)) return parsed as DocumentSection[];
+  } catch {
+    // fallthrough
+  }
+  return [{ id: "main", title: "Resume", content: output.content }];
+}
+
+function LoadingState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center px-6">
+      <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center mb-4">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+      <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+      <p className="mt-2 text-sm text-slate-500 max-w-md">{detail}</p>
+    </div>
+  );
+}
+
+export default function RunWorkspacePage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
-  const [job, setJob] = useState<Job | null>(null);
+  const [phase, setPhase] = useState<RunPhase>("listing_analysis_loading");
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [includeCoverLetter, setIncludeCoverLetter] = useState(true);
+  const [resumeSections, setResumeSections] = useState<DocumentSection[]>([]);
+  const [coverLetterContent, setCoverLetterContent] = useState("");
+  const [resumeDirty, setResumeDirty] = useState(false);
+  const [coverDirty, setCoverDirty] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Listing edit state
-  const [editingListing, setEditingListing] = useState(false);
-  const [savingListing, setSavingListing] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editCompany, setEditCompany] = useState("");
-  const [editLocation, setEditLocation] = useState("");
-  const [editSalary, setEditSalary] = useState("");
-  const [editEmpType, setEditEmpType] = useState("");
-  const [editExpLevel, setEditExpLevel] = useState("");
-  const [editWebsite, setEditWebsite] = useState("");
-  const [editLinkedIn, setEditLinkedIn] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editReqs, setEditReqs] = useState<string[]>([]);
-  const [newReq, setNewReq] = useState("");
-  const [editAdditional, setEditAdditional] = useState("");
-
-  // Notes
-  const [notes, setNotes] = useState("");
-  const [notesSaved, setNotesSaved] = useState(false);
-  const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // LinkedIn connections
-  const [linkedInActive, setLinkedInActive] = useState(false);
-  const [fetchingConns, setFetchingConns] = useState(false);
-  type ConnPerson = { name: string; profileUrl: string };
-  type Connections = {
-    first: ConnPerson[];
-    second: ConnPerson[];
-    third: ConnPerson[];
-    counts: { first: number; second: number; third: number; total: number };
-  };
-  const [connections, setConnections] = useState<Connections | null>(null);
-  const [connError, setConnError] = useState<string | null>(null);
-  const [modalDegree, setModalDegree] = useState<"first" | "second" | "third" | null>(null);
-
-  // Profile match
-  const [profSkills, setProfSkills] = useState<string[]>([]);
-  const [profKeywords, setProfKeywords] = useState<string[]>([]);
-  const [profTools, setProfTools] = useState<string[]>([]);
-  const [profCerts, setProfCerts] = useState<string[]>([]);
-  const [profClearances, setProfClearances] = useState<string[]>([]);
-  const [empTech, setEmpTech] = useState<string[]>([]);
-  const [addModal, setAddModal] = useState<{ term: string; editedTerm: string } | null>(null);
-  const [addingSaving, setAddingSaving] = useState(false);
-  const [manuallyMarked, setManuallyMarked] = useState<string[]>([]);
-
-  const loadWorkflow = () => {
-    fetch(`/api/workflows/${id}`)
-      .then(r => r.json())
-      .then(async (wf) => {
-        if (!wf?.id) { setLoading(false); return; }
-        if (wf.state === "listing_review") {
-          router.replace(`/listings/${id}`);
-          return;
-        }
-        setWorkflow(wf);
-        setJob(workflowToJob(wf));
-        // Populate edit fields
-        const l = wf.listing ?? {};
-        setEditTitle(l.title ?? wf.title ?? "");
-        setEditCompany(l.company_name ?? wf.company?.name ?? "");
-        setEditLocation(l.location ?? "");
-        setEditSalary(l.salary_range ?? "");
-        setEditEmpType(l.employment_type ?? "");
-        setEditExpLevel(l.experience_level ?? "");
-        setEditWebsite(l.company_website_url ?? wf.company?.website_url ?? "");
-        setEditLinkedIn(wf.company?.linkedin_url ?? "");
-        setEditDescription(l.description ?? "");
-        setEditReqs(parseRequirements(l.requirements));
-        setEditAdditional(l.responsibilities ?? "");
-        setNotes(wf.notes ?? "");
-
-        // Load stored connections + LinkedIn session + profile in parallel
-        const [liRes, connRes, profRes, empRes] = await Promise.all([
-          fetch("/api/linkedin/session").then(r => r.json()).catch(() => ({})),
-          wf.listing_id
-            ? fetch(`/api/linkedin/company?listing_id=${wf.listing_id}`).then(r => r.json()).catch(() => ({}))
-            : Promise.resolve({}),
-          fetch("/api/profile").then(r => r.json()).catch(() => ({})),
-          fetch("/api/profile/employment").then(r => r.json()).catch(() => ([])),
-        ]);
-        setEditReqs(parseRequirements(l.requirements));
-        if (liRes && !liRes.error) setLinkedInActive(liRes.isAuthenticated);
-        if (connRes?.connections) setConnections(connRes.connections);
-        if (profRes && !profRes.error) {
-          setProfSkills(Array.isArray(profRes.skills) ? profRes.skills : []);
-          setProfKeywords(Array.isArray(profRes.keywords) ? profRes.keywords : []);
-          setProfTools(Array.isArray(profRes.tools) ? profRes.tools : []);
-          setProfCerts(Array.isArray(profRes.certifications) ? profRes.certifications : []);
-          setProfClearances(Array.isArray(profRes.clearances) ? profRes.clearances : []);
-        }
-        if (Array.isArray(empRes)) {
-          setEmpTech(empRes.flatMap((e: { technologies?: string[] }) => Array.isArray(e.technologies) ? e.technologies : []));
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  };
-
-  useEffect(() => { loadWorkflow(); }, [id]);
-
-  const addToProfile = async (category: ProfileCategory, term: string) => {
-    if (!term.trim()) return;
-    setAddingSaving(true);
-    const currentMap: Record<ProfileCategory, string[]> = {
-      skills: profSkills, keywords: profKeywords, tools: profTools, certifications: profCerts, clearances: profClearances,
-    };
-    const existing = currentMap[category];
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const isDup = existing.some(e => norm(e) === norm(term.trim()));
-    if (!isDup) {
-      const updated = [...existing, term.trim()];
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [category]: updated }),
-      });
-      const data = await res.json();
-      if (!data.error) {
-        if (category === "skills") setProfSkills(updated);
-        else if (category === "keywords") setProfKeywords(updated);
-        else if (category === "tools") setProfTools(updated);
-        else if (category === "certifications") setProfCerts(updated);
-        else if (category === "clearances") setProfClearances(updated);
-      }
-    }
-    setAddingSaving(false);
-    setAddModal(null);
-  };
-
-  const toggleStatus = async (status: ApplicationStatus) => {
-    if (!workflow) return;
-    const eventType = EVENT_MAP[status];
-    if (!eventType) return;
-
-    const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
-    const isActive = activeStatuses.includes(status);
-
-    if (isActive) {
-      await fetch(`/api/workflows/${id}/status?event_type=${eventType}`, { method: "DELETE" });
-      // 'applied' also stamps workflow.state = 'sent' — reset it so deriveAllStatuses won't re-show it
-      if (status === "applied") {
-        await fetch(`/api/workflows/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ state: "active" }),
-        });
-      }
-    } else {
-      // Remove mutually exclusive statuses first
-      const toRemove = EXCLUSIVE_GROUP.has(status)
-        ? [...EXCLUSIVE_GROUP].filter(s => s !== status && activeStatuses.includes(s))
-        : [];
-      await Promise.all(toRemove.map(s => {
-        const et = EVENT_MAP[s];
-        return et ? fetch(`/api/workflows/${id}/status?event_type=${et}`, { method: "DELETE" }) : Promise.resolve();
-      }));
-
-      // Add prerequisites not yet active, then add the selected status
-      const prereqs = (PREREQUISITES[status] ?? []).filter(p => !activeStatuses.includes(p));
-      await Promise.all([...prereqs, status].map(s => {
-        const et = EVENT_MAP[s];
-        return et ? fetch(`/api/workflows/${id}/status`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event_type: et }),
-        }) : Promise.resolve();
-      }));
-    }
-    loadWorkflow();
-  };
-
-  const saveListingEdits = async () => {
-    setSavingListing(true);
-    await fetch(`/api/workflows/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: `${editCompany} - ${editTitle}`,
-        listing: {
-          title: editTitle || undefined,
-          company_name: editCompany || undefined,
-          location: editLocation || null,
-          salary_range: editSalary || null,
-          employment_type: editEmpType || null,
-          experience_level: editExpLevel || null,
-          description: editDescription || null,
-          requirements: editReqs.length > 0 ? JSON.stringify(editReqs) : null,
-          responsibilities: editAdditional || null,
-          company_website_url: editWebsite || null,
-        },
-        company: (editLinkedIn || editWebsite) ? {
-          ...(editLinkedIn ? { linkedin_url: editLinkedIn } : {}),
-          ...(editWebsite ? { website_url: editWebsite } : {}),
-        } : undefined,
-      }),
-    });
-    setSavingListing(false);
-    setEditingListing(false);
-    loadWorkflow();
-  };
-
-  const saveNotes = async (value: string) => {
-    await fetch(`/api/workflows/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: value }),
-    });
-    setNotesSaved(true);
-    setTimeout(() => setNotesSaved(false), 2000);
-  };
-
-  const fetchConnections = async () => {
-    const linkedInUrl = editLinkedIn || workflow?.company?.linkedin_url;
-    if (!linkedInUrl) return;
-    setFetchingConns(true);
-    setConnError(null);
+  const loadWorkflow = async () => {
     try {
-      const res = await fetch("/api/linkedin/company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_linkedin_url: linkedInUrl,
-          company_name: editCompany || workflow?.company?.name,
-          listing_id: workflow?.listing_id,
-          company_id: workflow?.company_id,
-        }),
-      });
-      const data = await res.json();
-      if (data.error) setConnError(data.error);
-      else if (data.connections) setConnections(data.connections);
-    } catch (e) { setConnError(e instanceof Error ? e.message : "Failed to fetch connections"); }
-    setFetchingConns(false);
+      const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
+      if (!wf?.id) {
+        setLoading(false);
+        return;
+      }
+      if (wf.state === "listing_review") {
+        router.replace(`/listings/${id}`);
+        return;
+      }
+      setWorkflow(wf);
+      const resumeOut = wf.outputs?.find((o) => o.type === "resume" && o.is_current);
+      const coverOut = wf.outputs?.find((o) => o.type === "cover_letter" && o.is_current);
+      if (resumeOut) {
+        setResumeSections(parseSections(resumeOut));
+      }
+      if (coverOut) {
+        setCoverLetterContent(coverOut.content);
+      }
+      setLoading(false);
+      if (!resumeOut) {
+        setPhase("resume_loading");
+      } else if (!coverOut) {
+        setPhase("optional_cover_letter_decision");
+      } else {
+        setPhase("application_overview");
+      }
+    } catch {
+      setLoading(false);
+    }
   };
 
-  const deleteWorkflow = async () => {
-    setDeleting(true);
-    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
-    router.push("/jobs");
+  useEffect(() => {
+    void loadWorkflow();
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (phase !== "listing_analysis_loading") return;
+    const timer = setTimeout(() => setPhase("listing_analysis"), 1200);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  const ensureGeneration = async (outputType: "resume" | "cover_letter") => {
+    let provider: string | undefined;
+    try {
+      const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
+      if (s.aiProvider) provider = s.aiProvider;
+    } catch {
+      // ignore
+    }
+    await fetch("/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow_id: id, output_type: outputType, provider }),
+    });
   };
+
+  useEffect(() => {
+    if (phase !== "resume_loading") return;
+    void ensureGeneration("resume");
+    pollingRef.current = setInterval(async () => {
+      const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
+      const resumeOut = wf.outputs?.find((o) => o.type === "resume" && o.is_current);
+      if (resumeOut) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        setResumeSections(parseSections(resumeOut));
+        setWorkflow(wf);
+        setPhase("resume_workspace");
+      }
+    }, 2500);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [phase, id]);
+
+  useEffect(() => {
+    if (phase !== "cover_letter_loading") return;
+    void ensureGeneration("cover_letter");
+    pollingRef.current = setInterval(async () => {
+      const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
+      const coverOut = wf.outputs?.find((o) => o.type === "cover_letter" && o.is_current);
+      if (coverOut) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        setCoverLetterContent(coverOut.content);
+        setWorkflow(wf);
+        setPhase("cover_letter_workspace");
+      }
+    }, 2500);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [phase, id]);
+
+  const saveResume = async () => {
+    await fetch(`/api/workflows/${id}/outputs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "resume", content: JSON.stringify(resumeSections) }),
+    });
+    setResumeDirty(false);
+    await loadWorkflow();
+  };
+
+  const saveCoverLetter = async () => {
+    await fetch(`/api/workflows/${id}/outputs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "cover_letter", content: coverLetterContent }),
+    });
+    setCoverDirty(false);
+    await loadWorkflow();
+  };
+
+  const resumeSaved = Boolean(workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
+  const coverSaved = Boolean(workflow?.outputs?.find((o) => o.type === "cover_letter" && o.is_current));
+  const supportUnlocked = resumeSaved && (!includeCoverLetter || coverSaved);
+
+  const sideContext = useMemo(() => {
+    const context = ["Listing", "Fit & Evidence", "Employment History Evidence"];
+    if (resumeSaved) context.push("Saved Resume");
+    if (coverSaved) context.push("Saved Cover Letter");
+    return context;
+  }, [resumeSaved, coverSaved]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-6 h-6 border-2 border-slate-300 border-t-slate-900 rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
 
-  if (!job || !workflow) return notFound();
+  if (!workflow) return notFound();
 
-  const linkedInUrl = editLinkedIn || workflow.company?.linkedin_url || "";
-  const match = computeRequirementMatch({
-    requirements: editReqs,
-    skills: profSkills,
-    keywords: profKeywords,
-    tools: profTools,
-    certifications: profCerts,
-    clearances: profClearances,
-    technologies: empTech,
-    manuallyMarked,
-  });
-  const activeStatuses = deriveAllStatuses(workflow.state, workflow.status_events ?? []);
-  const inApplicationSupport = activeStatuses.includes("applied");
-  const sentEvent = (workflow.status_events ?? []).find((event) => event.event_type === "sent" || event.event_type === "submitted");
-  const sentDateLabel = sentEvent
-    ? new Date(sentEvent.occurred_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-    : "Not recorded";
-  const followUpTargetDate = sentEvent
-    ? new Date(new Date(sentEvent.occurred_at).getTime() + (7 * 24 * 60 * 60 * 1000))
-    : null;
-  const hasProgressedBeyondSupport = activeStatuses.some((status) => ["received", "interviewing", "offer", "negotiating", "hired", "declined", "ghosted", "rejected"].includes(status));
-  const followUpLabel = !sentEvent
-    ? "Mark as applied to start follow-up timing."
-    : hasProgressedBeyondSupport
-      ? "Status progressed — adjust cadence to current stage."
-      : `Follow up by ${followUpTargetDate?.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-  const reminderLabel = !sentEvent
-    ? "No reminder yet"
-    : hasProgressedBeyondSupport
-      ? "Update reminders based on latest status."
-      : "Reminder: polite check-in + value update.";
-  const supportActionLabel = hasProgressedBeyondSupport
-    ? "Update timeline notes and next checkpoint."
-    : "Prepare a concise follow-up message.";
-  const outreachActionLabel = hasProgressedBeyondSupport
-    ? "Share interview/offer progress with key contacts."
-    : "Identify 1–2 team connections for light outreach.";
-  const packetStates = [
-    job.resumeStatus,
-    job.coverLetterStatus,
-    job.interviewGuideStatus,
-    job.negotiationGuideStatus,
-  ];
-  const readyModuleCount = packetStates.filter((status) => status === "approved").length;
-  const draftModuleCount = packetStates.filter((status) => status === "draft").length;
-  const notStartedModuleCount = packetStates.filter((status) => status === "not_started").length;
-  const hasSavedResume = job.resumeStatus === "draft" || job.resumeStatus === "approved";
-  const hasSavedCoverLetter = job.coverLetterStatus === "draft" || job.coverLetterStatus === "approved";
-  const coreMaterialsReady = hasSavedResume && hasSavedCoverLetter;
-  const hasExportableContent = hasSavedResume || hasSavedCoverLetter;
-  const nextPacketAction = job.resumeStatus === "not_started"
-    ? "Start your resume first."
-    : job.coverLetterStatus === "not_started"
-      ? "Draft the cover letter to complete your core packet."
-      : job.resumeStatus === "draft" || job.coverLetterStatus === "draft"
-        ? "Refine your core packet modules toward Ready."
-        : job.interviewGuideStatus === "not_started"
-          ? "Optional: draft interview guidance for upcoming interviews."
-          : job.negotiationGuideStatus === "not_started"
-            ? "Optional: add negotiation prep for later phases."
-            : "Packet is progressing well — continue refinement or export.";
-  const exportDisabledReason = !hasExportableContent
-    ? "Save Resume or Cover Letter to unlock individual exports."
-    : !coreMaterialsReady
-      ? "Save both Resume and Cover Letter to unlock combined export."
-      : readyModuleCount === 0
-        ? "Export is available for saved drafts. Approve modules for final-ready quality."
-        : "Export is active.";
-  const interviewModuleBlocked = !inApplicationSupport && job.interviewGuideStatus === "not_started";
-  const negotiationModuleBlocked = !activeStatuses.some((status) => ["offer", "negotiating", "hired", "declined"].includes(status)) && job.negotiationGuideStatus === "not_started";
-  const packetModules = [
-    {
-      href: `/jobs/${job.id}/resume`,
-      label: "Resume",
-      iconBg: "bg-sky-100",
-      iconColor: "text-sky-600",
-      Icon: FileText,
-      status: job.resumeStatus,
-      blocked: false,
-      blockedReason: null,
-    },
-    {
-      href: `/jobs/${job.id}/cover-letter`,
-      label: "Cover Letter",
-      iconBg: "bg-emerald-100",
-      iconColor: "text-emerald-600",
-      Icon: Mail,
-      status: job.coverLetterStatus,
-      blocked: false,
-      blockedReason: null,
-    },
-    ...(coreMaterialsReady ? [{
-      href: `/jobs/${job.id}/interview-guide`,
-      label: "Interview Guide",
-      iconBg: "bg-violet-100",
-      iconColor: "text-violet-600",
-      Icon: MessageSquare,
-      status: job.interviewGuideStatus,
-      blocked: interviewModuleBlocked,
-      blockedReason: interviewModuleBlocked ? "Unlocked after you mark the application as applied." : null,
-    }, {
-      href: `/jobs/${job.id}/negotiation-guide`,
-      label: "Negotiation Guide",
-      iconBg: "bg-amber-100",
-      iconColor: "text-amber-600",
-      Icon: TrendingUp,
-      status: job.negotiationGuideStatus,
-      blocked: negotiationModuleBlocked,
-      blockedReason: negotiationModuleBlocked ? "Unlocked when an offer context exists." : null,
-    }] : []),
-  ];
+  const surface =
+    phase === "application_overview"
+      ? "application_overview_support"
+      : phase === "cover_letter_workspace" || phase === "cover_letter_loading"
+        ? "cover_letter_workspace"
+        : phase === "listing_analysis" || phase === "listing_analysis_loading"
+          ? "listing_review"
+          : "resume_workspace";
 
   return (
-    <div className="page-wrapper max-w-none">
-      <PageHeader
-        title={job.title}
-        subtitle={job.company}
-        actions={<StatusBadge status={job.status} />}
-      />
+    <div className="flex flex-1 overflow-hidden bg-slate-100">
+      <aside className="hidden lg:block w-[240px] border-r border-slate-200 bg-white p-4 overflow-y-auto">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Run context</p>
+        <div className="mt-3 space-y-2">
+          {sideContext.map((item) => (
+            <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{item}</div>
+          ))}
+        </div>
+        <p className="text-[11px] text-slate-500 mt-4">Reference only — active work stays in the center panel.</p>
+      </aside>
 
-      <div className="grid lg:grid-cols-[220px_minmax(0,1fr)_360px] gap-5">
-        <aside className="hidden lg:block">
-          <div className="card-base p-4 sticky top-24">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">Reference tabs</p>
-            <div className="space-y-2">
-              <Link href={`/listings/${id}`} className="block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                Listing
-              </Link>
-              <button
-                type="button"
-                className="w-full text-left rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-800"
-              >
-                Fit &amp; Evidence
-              </button>
+      <main className={cn("flex-1 overflow-y-auto p-4 sm:p-6", chatOpen && "hidden md:block")}>
+        {phase === "listing_analysis_loading" && <LoadingState title="Preparing listing analysis" detail="Keeping your Run workspace loaded while analysis context initializes." />}
+
+        {phase === "listing_analysis" && (
+          <div className="max-w-3xl mx-auto space-y-4">
+            <h1 className="text-xl font-bold text-slate-900">Listing Analysis</h1>
+            <p className="text-sm text-slate-600">Role: {workflow.listing?.title} at {workflow.listing?.company_name}.</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">Fit & Evidence summary</p>
+              <p className="text-sm text-slate-700 mt-2">Review listing requirements, validate critical evidence, then continue into resume generation without leaving this workspace.</p>
             </div>
-            <p className="mt-3 text-[11px] text-slate-500">
-              The active workspace stays in the center panel.
-            </p>
+            <button onClick={() => setPhase("resume_loading")} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2">
+              Continue to Resume <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
-        </aside>
+        )}
 
-        <div className="space-y-5 min-w-0">
-          <section className="card-base p-4">
-            <h2 className="text-sm font-semibold text-slate-900">Fit &amp; Evidence Review</h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Review match fit, extracted line items, profile evidence, and listing-specific draft guidance before editing artifacts.
-            </p>
-          </section>
+        {phase === "resume_loading" && <LoadingState title="Building resume" detail="Generating a role-tailored resume draft in the center panel." />}
 
-          <div className="grid lg:grid-cols-3 gap-5">
-            {/* Main column */}
-            <div className="lg:col-span-2 space-y-5">
-
-          {editingListing ? (
-            /* ── Edit mode ── */
-            <>
-              <div className="card-base p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-slate-900 flex items-center gap-2">
-                    <PenLine className="w-4 h-4 text-sky-500" />
-                    Edit Listing Details
-                  </h2>
-                  <button
-                    onClick={() => setEditingListing(false)}
-                    className="text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Job Title</label>
-                    <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Company</label>
-                    <input value={editCompany} onChange={e => setEditCompany(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Location</label>
-                    <input value={editLocation} onChange={e => setEditLocation(e.target.value)}
-                      placeholder="City, State or Remote"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Salary Range</label>
-                    <input value={editSalary} onChange={e => setEditSalary(e.target.value)}
-                      placeholder="e.g. $120k–$160k"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Employment Type</label>
-                    <select value={editEmpType} onChange={e => setEditEmpType(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white" style={{ minHeight: 44 }}>
-                      <option value="">Unknown</option>
-                      <option value="full-time">Full-time</option>
-                      <option value="part-time">Part-time</option>
-                      <option value="contract">Contract</option>
-                      <option value="freelance">Freelance</option>
-                      <option value="internship">Internship</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Experience Level</label>
-                    <select value={editExpLevel} onChange={e => setEditExpLevel(e.target.value)}
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200 bg-white" style={{ minHeight: 44 }}>
-                      <option value="">Unknown</option>
-                      <option value="entry">Entry level</option>
-                      <option value="mid">Mid level</option>
-                      <option value="senior">Senior</option>
-                      <option value="lead">Lead / Principal</option>
-                      <option value="manager">Manager</option>
-                      <option value="director">Director+</option>
-                    </select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Company Website</label>
-                    <input value={editWebsite} onChange={e => setEditWebsite(e.target.value)}
-                      placeholder="https://company.com"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-xs font-medium text-slate-500 mb-1 block">Company LinkedIn URL</label>
-                    <input value={editLinkedIn} onChange={e => setEditLinkedIn(e.target.value)}
-                      placeholder="https://linkedin.com/company/…"
-                      className="w-full text-sm border border-slate-200 rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-sky-200" style={{ minHeight: 44 }} />
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
-                  <button
-                    onClick={saveListingEdits}
-                    disabled={savingListing}
-                    className="flex items-center gap-1.5 text-sm font-semibold px-4 py-3 rounded-xl bg-slate-900 text-white disabled:opacity-50" style={{ minHeight: 44 }}
-                  >
-                    {savingListing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    {savingListing ? "Saving…" : "Save Changes"}
-                  </button>
-                  <button
-                    onClick={() => setEditingListing(false)}
-                    className="text-sm px-4 py-3 rounded-xl border border-slate-200 text-slate-600" style={{ minHeight: 44 }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-
-              {/* Requirements edit */}
-              <div className="card-base p-5">
-                <h2 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-sky-500" />
-                  Requirements
-                </h2>
-                <div className="space-y-1.5 mb-3">
-                  {editReqs.length === 0 && (
-                    <p className="text-slate-400 text-sm py-2">No requirements. Add them below.</p>
-                  )}
-                  {editReqs.map((req, i) => (
-                    <div key={i} className="flex items-start gap-2 group py-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-sky-400 mt-2 flex-shrink-0" />
-                      <span className="flex-1 text-sm text-slate-700 leading-snug">{req}</span>
-                      <button
-                        onClick={() => setEditReqs(p => p.filter((_, idx) => idx !== i))}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500 flex-shrink-0 mt-0.5"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={newReq}
-                    onChange={e => setNewReq(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && newReq.trim()) { setEditReqs(p => [...p, newReq.trim()]); setNewReq(""); } }}
-                    placeholder="Add a requirement and press Enter…"
-                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200"
+        {phase === "resume_workspace" && (
+          <div className="max-w-3xl mx-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-slate-900">Resume Workspace</h1>
+              <button onClick={saveResume} disabled={!resumeDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">Save resume</button>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+              {resumeSections.map((section) => (
+                <div key={section.id}>
+                  <p className="text-xs font-semibold uppercase text-slate-500 mb-1">{section.title}</p>
+                  <textarea
+                    value={section.content}
+                    onChange={(e) => {
+                      setResumeSections((prev) => prev.map((s) => s.id === section.id ? { ...s, content: e.target.value } : s));
+                      setResumeDirty(true);
+                    }}
+                    className="w-full min-h-[120px] rounded-lg border border-slate-200 p-3 text-sm"
                   />
-                  <button
-                    onClick={() => { if (newReq.trim()) { setEditReqs(p => [...p, newReq.trim()]); setNewReq(""); } }}
-                    disabled={!newReq.trim()}
-                    className="flex items-center gap-1 text-sm px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition-colors disabled:opacity-30"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add
-                  </button>
                 </div>
-              </div>
-
-              {/* Description edit */}
-              <div className="card-base p-5">
-                <h2 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-sky-500" />
-                  Job Description
-                </h2>
-                <textarea
-                  value={editDescription}
-                  ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
-                  onChange={e => { setEditDescription(e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-                  rows={1}
-                  style={{ minHeight: "7rem" }}
-                  placeholder="Paste or edit the job description…"
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none overflow-hidden leading-relaxed"
-                />
-              </div>
-
-              {/* Additional details edit */}
-              <div className="card-base p-5">
-                <h2 className="font-semibold text-slate-900 mb-1">Additional Details</h2>
-                <p className="text-xs text-slate-400 mb-3">Responsibilities, benefits, interview process, deadlines, etc.</p>
-                <textarea
-                  value={editAdditional}
-                  ref={el => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
-                  onChange={e => { setEditAdditional(e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-                  rows={1}
-                  style={{ minHeight: "5rem" }}
-                  placeholder="Paste extra listing content here…"
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none overflow-hidden"
-                />
-              </div>
-            </>
-          ) : (
-            /* ── View mode ── */
-            <>
-              {/* Company + Role info */}
-              <div className="card-base p-5">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="w-14 h-14 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
-                    {job.companyLogo ? (
-                      <img src={job.companyLogo} alt={job.company} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500 font-bold text-2xl">
-                        {job.company[0]}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="font-bold text-slate-900 text-lg leading-tight">{job.title}</h2>
-                    <p className="text-slate-600 font-medium">{job.company}</p>
-                    <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate-500">
-                      {job.location && (
-                        <span className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5" />
-                          {job.location}
-                        </span>
-                      )}
-                      {job.salary && (
-                        <span className="flex items-center gap-1.5">
-                          <DollarSign className="w-3.5 h-3.5" />
-                          {job.salary}
-                        </span>
-                      )}
-                    </div>
-                    {/* Website + LinkedIn links */}
-                    <div className="flex flex-wrap gap-3 mt-2">
-                      {editWebsite && (
-                        <a href={editWebsite} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-600 transition-colors">
-                          <Globe className="w-3 h-3" />
-                          {editWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                        </a>
-                      )}
-                      {linkedInUrl && (
-                        <a href={linkedInUrl} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-600 transition-colors">
-                          <Link2 className="w-3 h-3" />
-                          LinkedIn page
-                        </a>
-                      )}
-                      {job.url && (
-                        <a href={job.url} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-600 transition-colors">
-                          <ExternalLink className="w-3 h-3" />
-                          Job listing
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setEditingListing(true)}
-                    className="flex-shrink-0 flex items-center gap-1.5 text-xs text-slate-600 border border-slate-200 bg-slate-50 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-                  >
-                    <PenLine className="w-3 h-3" />
-                    Edit
-                  </button>
-                </div>
-              </div>
-
-              {/* Description + Requirements */}
-              {(job.description || (job.requirements ?? []).length > 0) && (
-                <div className="card-base p-5">
-                  <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-sky-500" />
-                    About the role
-                  </h3>
-                  {job.description && (
-                    <p className="text-slate-600 text-sm leading-relaxed">{job.description}</p>
-                  )}
-                  {(job.requirements ?? []).length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">Requirements</h4>
-                      <ul className="space-y-2">
-                        {(job.requirements ?? []).map((req, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 mt-2 flex-shrink-0" />
-                            {req}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Notes */}
-              <div className="card-base p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                    <StickyNote className="w-4 h-4 text-sky-500" />
-                    Notes
-                  </h3>
-                  {notesSaved && (
-                    <span className="text-xs text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Saved
-                    </span>
-                  )}
-                </div>
-                <textarea
-                  value={notes}
-                  onChange={e => {
-                    setNotes(e.target.value);
-                    setNotesSaved(false);
-                    if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current);
-                    notesSaveTimer.current = setTimeout(() => saveNotes(e.target.value), 1000);
-                  }}
-                  onBlur={e => saveNotes(e.target.value)}
-                  placeholder="Add notes, reminders, or anything relevant to this application…"
-                  rows={4}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none leading-relaxed text-slate-700 placeholder:text-slate-400"
-                />
-              </div>
-            </>
-          )}
-        </div>
-
-            {/* Right column */}
-            <div className="space-y-4">
-          <div className="card-base p-5">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="font-semibold text-slate-900">Application Packet</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  {readyModuleCount > 0
-                    ? `${readyModuleCount} ready · ${draftModuleCount} draft · ${notStartedModuleCount} not started`
-                    : `${draftModuleCount} draft · ${notStartedModuleCount} not started`}
-                </p>
-              </div>
-              {!coreMaterialsReady && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium">
-                  <LifeBuoy className="w-3 h-3" />
-                  Support unlocks after Resume + Cover Letter are saved
-                </span>
-              )}
-            </div>
-            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Next useful action</p>
-              <p className="text-xs text-slate-700 mt-1">{nextPacketAction}</p>
-            </div>
-            <ContextPhasePanel
-              phase={inApplicationSupport ? 7 : 3}
-              title={inApplicationSupport ? "Support Snapshot" : "Current Workflow Snapshot"}
-              subtitle={inApplicationSupport
-                ? "Current support context for follow-up and outreach."
-                : "Current packet and profile context for this workflow."}
-              items={inApplicationSupport
-                ? [
-                  { label: "Application status", value: deriveApplicationStatus(workflow.state, workflow.status_events ?? []) },
-                  { label: "Date sent", value: sentDateLabel },
-                  { label: "Follow-up timing", value: followUpLabel },
-                  { label: "Reminders", value: reminderLabel },
-                  { label: "Support actions", value: supportActionLabel },
-                  { label: "Outreach suggestions", value: outreachActionLabel },
-                ]
-                : [
-                  { label: "Profile skills", value: `${profSkills.length}` },
-                  { label: "Keywords", value: `${profKeywords.length}` },
-                  { label: "Tools", value: `${profTools.length}` },
-                  { label: "Clearances", value: `${profClearances.length}` },
-                  { label: "Workflow state", value: workflow.state },
-                ]}
-            />
-            <div className="space-y-3">
-              {packetModules.map((module) => (
-                <Link
-                  key={module.label}
-                  href={module.href}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl border transition-all group",
-                    module.blocked
-                      ? "border-slate-200 bg-slate-50/70"
-                      : "border-slate-200 hover:border-sky-300 hover:bg-sky-50"
-                  )}
-                >
-                  <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", module.iconBg)}>
-                    <module.Icon className={cn("w-4 h-4", module.iconColor)} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-slate-900 text-sm">{module.label}</div>
-                    <DocStatusPill status={module.status} />
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      {module.blocked
-                        ? `Blocked · ${module.blockedReason}`
-                        : `${PACKET_STATE_COPY[module.status].readiness} · ${PACKET_STATE_COPY[module.status].hint}`}
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{PACKET_STATE_COPY[module.status].exportState}</p>
-                  </div>
-                  <ChevronRight className={cn("w-4 h-4 transition-colors", module.blocked ? "text-slate-300" : "text-slate-400 group-hover:text-sky-500")} />
-                </Link>
-              ))}
-
-              <Link href={`/jobs/${job.id}/export`}
-                aria-disabled={!coreMaterialsReady}
-                onClick={(event) => {
-                  if (!coreMaterialsReady) event.preventDefault();
-                }}
-                className={cn(
-                  "flex items-center justify-center gap-2 w-full py-2.5 text-sm font-semibold rounded-xl transition-colors",
-                  coreMaterialsReady
-                    ? "bg-slate-900 text-white hover:bg-slate-800"
-                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                )}>
-                <Download className="w-4 h-4" />
-                Export Packet
-              </Link>
-              <p className={cn(
-                "text-[11px] text-center",
-                coreMaterialsReady ? "text-slate-500" : "text-amber-700"
-              )}>
-                {exportDisabledReason}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-3">
-              {[
-                inApplicationSupport
-                  ? "Draft a concise follow-up email for this application."
-                  : "What should I complete before marking this packet ready?",
-                "Help me prioritize the next workflow step.",
-                "Show me the fastest path to export readiness.",
-              ].map((prompt) => (
-                <span
-                  key={prompt}
-                  className="text-xs px-2.5 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200"
-                >
-                  {prompt}
-                </span>
               ))}
             </div>
+            <button onClick={() => setPhase("optional_cover_letter_decision")} className="btn-ocean px-4 py-2 rounded-lg text-white">Continue</button>
           </div>
+        )}
 
-          {/* Profile Match */}
-          {editReqs.length > 0 && (
-            <div className="card-base p-5">
-              <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-sky-500" />
-                Profile Match
-              </h3>
-              {profSkills.length === 0 && profKeywords.length === 0 && profTools.length === 0 && empTech.length === 0 ? (
-                <Link href="/profile?tab=skills" className="text-sm text-sky-500 hover:underline">Add skills to your profile</Link>
-              ) : (
-                <>
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className={cn(
-                      "w-[64px] h-[64px] rounded-full flex items-center justify-center text-xl font-bold border-4 flex-shrink-0",
-                      match.score >= 70 ? "border-emerald-400 text-emerald-700 bg-emerald-50" :
-                      match.score >= 40 ? "border-amber-400 text-amber-700 bg-amber-50" :
-                                          "border-red-300 text-red-600 bg-red-50"
-                    )}>
-                      {match.score}%
-                    </div>
-                    <div>
-                      <p className={cn(
-                        "font-semibold text-sm",
-                        match.score >= 70 ? "text-emerald-700" : match.score >= 40 ? "text-amber-700" : "text-red-600"
-                      )}>
-                        {match.score >= 70 ? "Strong match" : match.score >= 40 ? "Partial match" : "Low match"}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {match.matched.length} term{match.matched.length !== 1 ? "s" : ""} matched · {match.missing.length} gap{match.missing.length !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  {(match.matched.length > 0 || manuallyMarked.length > 0) && (
-                    <div className="mb-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-1.5">You have</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {match.matched.map(s => (
-                          <span key={s} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Check className="w-2.5 h-2.5" />{s}
-                          </span>
-                        ))}
-                        {manuallyMarked.map(s => (
-                          <button
-                            key={s}
-                            onClick={() => setManuallyMarked(prev => prev.filter(x => x !== s))}
-                            title="Click to undo"
-                            className="text-xs bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-slate-200 transition-colors"
-                          >
-                            <Check className="w-2.5 h-2.5" />{s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {match.missing.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1.5">Not yet covered</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {match.missing.map(s => (
-                          <button
-                            key={s}
-                            onClick={() => setAddModal({ term: s, editedTerm: s })}
-                            className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1 hover:bg-amber-100 transition-colors cursor-pointer"
-                          >
-                            <AlertCircle className="w-2.5 h-2.5" />{s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* LinkedIn Connections */}
-          <div className="card-base p-5">
-            <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4 text-sky-500" />
-              Connections at {editCompany || job.company}
-            </h3>
-            {!linkedInActive ? (
-              <div className="space-y-2">
-                <p className="text-sm text-slate-500">Connect LinkedIn to see who you know here.</p>
-                <Link href="/settings" className="flex items-center gap-1.5 text-sky-600 text-sm font-medium hover:underline">
-                  <Link2 className="w-3.5 h-3.5" />Connect LinkedIn in Settings
-                </Link>
-              </div>
-            ) : connections !== null ? (
-              <div className="space-y-3">
-                {[
-                  { key: "first" as const,  label: "1st degree", cls: "text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100" },
-                  { key: "second" as const, label: "2nd degree", cls: "text-sky-700 bg-sky-50 border-sky-200 hover:bg-sky-100" },
-                  { key: "third" as const,  label: "3rd degree", cls: "text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100" },
-                ].map(({ key, label, cls }) => {
-                  const count = connections.counts[key];
-                  return (
-                    <button key={key} onClick={() => count > 0 ? setModalDegree(key) : undefined}
-                      disabled={count === 0}
-                      className={cn(
-                        "w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-colors text-sm",
-                        count > 0 ? cls : "text-slate-400 bg-slate-50 border-slate-200 opacity-50 cursor-default"
-                      )}>
-                      <span className="font-medium">{label}</span>
-                      <span className="flex items-center gap-1 font-bold">
-                        {count} {count > 0 && <ChevronRight className="w-3.5 h-3.5 opacity-60" />}
-                      </span>
-                    </button>
-                  );
-                })}
-                <button onClick={fetchConnections} disabled={fetchingConns || !linkedInUrl}
-                  className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 transition-colors disabled:opacity-40">
-                  <RefreshCw className={cn("w-3 h-3", fetchingConns && "animate-spin")} />
-                  {fetchingConns ? "Searching…" : "Refresh"}
-                </button>
-                {connError && <p className="text-xs text-red-500">{connError}</p>}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {!linkedInUrl && (
-                  <p className="text-xs text-slate-400">Add the Company LinkedIn URL by clicking Edit on the listing above.</p>
-                )}
-                <button onClick={fetchConnections} disabled={fetchingConns || !linkedInUrl}
-                  className="w-full flex items-center justify-center gap-2 text-sm py-2.5 rounded-xl bg-sky-600 text-white hover:bg-sky-700 transition-colors disabled:opacity-50">
-                  {fetchingConns ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-                  {fetchingConns ? "Searching LinkedIn…" : "Find Connections"}
-                </button>
-                {connError && <p className="text-xs text-red-500">{connError}</p>}
-              </div>
-            )}
-          </div>
-
-          {/* Key dates */}
-          <div className="card-base p-5">
-            <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-sky-500" />
-              Dates
-            </h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Created</span>
-                <span className="font-medium text-slate-800">
-                  {new Date(job.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Last updated</span>
-                <span className="font-medium text-slate-800">
-                  {new Date(job.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </span>
-              </div>
+        {phase === "optional_cover_letter_decision" && (
+          <div className="max-w-2xl mx-auto space-y-4">
+            <h1 className="text-xl font-bold text-slate-900">Cover Letter Decision</h1>
+            <p className="text-sm text-slate-600">Choose whether to generate a cover letter before moving to Application Overview.</p>
+            <div className="flex gap-3">
+              <button onClick={() => { setIncludeCoverLetter(true); setPhase("cover_letter_loading"); }} className="px-4 py-2 rounded-lg bg-slate-900 text-white">Generate cover letter</button>
+              <button onClick={() => { setIncludeCoverLetter(false); setPhase("application_overview"); }} className="px-4 py-2 rounded-lg border border-slate-200 bg-white">Skip for now</button>
             </div>
           </div>
+        )}
 
-          {/* Status */}
-          <div className="card-base p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-slate-900">Status</h3>
-              <span className="text-xs text-slate-400">Click to toggle</span>
+        {phase === "cover_letter_loading" && <LoadingState title="Building cover letter" detail="Generating a tailored letter while keeping this Run active." />}
+
+        {phase === "cover_letter_workspace" && (
+          <div className="max-w-3xl mx-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-slate-900">Cover Letter Workspace</h1>
+              <button onClick={saveCoverLetter} disabled={!coverDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">Save cover letter</button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {STATUS_GRID.map(({ status, label, activeClass }) => {
-                const isActive = activeStatuses.includes(status);
-                return (
-                  <button
-                    key={status}
-                    onClick={() => toggleStatus(status)}
-                    style={{ minHeight: 44 }}
-                    className={cn(
-                      "text-sm font-medium py-2.5 px-3 rounded-lg border text-left",
-                      isActive
-                        ? activeClass
-                        : "border-slate-200 text-slate-500 bg-white",
-                    )}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <textarea
+                value={coverLetterContent}
+                onChange={(e) => { setCoverLetterContent(e.target.value); setCoverDirty(true); }}
+                className="w-full min-h-[360px] rounded-lg border border-slate-200 p-3 text-sm"
+              />
             </div>
+            <button onClick={() => setPhase("application_overview")} className="btn-ocean px-4 py-2 rounded-lg text-white">Continue to overview</button>
           </div>
+        )}
 
-          {/* Delete */}
-          <div className="card-base p-5 border-red-100">
-            {confirmDelete ? (
-              <div className="space-y-3">
-                <p className="text-sm text-red-700 font-medium">Move to trash?</p>
-                <p className="text-xs text-slate-500">You can restore it within 30 days from Trash.</p>
-                <div className="flex gap-2">
-                  <button onClick={deleteWorkflow} disabled={deleting}
-                    className="flex-1 flex items-center justify-center gap-1.5 text-sm py-3 rounded-lg bg-red-600 text-white disabled:opacity-50" style={{ minHeight: 44 }}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                    {deleting ? "Deleting…" : "Yes, delete"}
-                  </button>
-                  <button onClick={() => setConfirmDelete(false)}
-                    className="flex-1 text-sm py-3 rounded-lg border border-slate-200 text-slate-600" style={{ minHeight: 44 }}>
-                    Cancel
-                  </button>
+        {phase === "application_overview" && (
+          <div className="max-w-4xl mx-auto space-y-5">
+            <h1 className="text-2xl font-bold text-slate-900">Application Overview</h1>
+            <p className="text-sm text-slate-600">Post-creation hub for this Run.</p>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h2 className="font-semibold text-slate-900">Submission Materials</h2>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between"><span className="inline-flex items-center gap-2"><FileText className="w-4 h-4" />Resume</span>{resumeSaved ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-slate-300" />}</div>
+                  <div className="flex items-center justify-between"><span className="inline-flex items-center gap-2"><Mail className="w-4 h-4" />Cover Letter</span>{coverSaved ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-slate-300" />}</div>
                 </div>
-              </div>
-            ) : (
-              <button onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 transition-colors w-full">
-                <Trash2 className="w-4 h-4" />
-                Delete application
-              </button>
-            )}
-          </div>
-        </div>
-          </div>
-        </div>
+                <div className="mt-3 space-y-2">
+                  <Link href={`/jobs/${id}/export`} className={cn("inline-flex px-3 py-2 rounded-lg text-sm", resumeSaved ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 pointer-events-none")}>Export Resume</Link>
+                  <div>
+                    <button disabled={!coverSaved} className={cn("px-3 py-2 rounded-lg text-sm", coverSaved ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")}>Export Cover Letter</button>
+                  </div>
+                  <div>
+                    <button disabled={!(resumeSaved && coverSaved)} className={cn("px-3 py-2 rounded-lg text-sm", resumeSaved && coverSaved ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400")}>Combined Export</button>
+                  </div>
+                </div>
+              </section>
 
-        <aside className="hidden xl:flex xl:flex-col xl:border-l xl:border-slate-200">
-          <AiChatPanel workflowId={id} surface="application_creation" className="h-full" />
-        </aside>
+              <section className="rounded-xl border border-slate-200 bg-white p-4">
+                <h2 className="font-semibold text-slate-900">Application Support</h2>
+                <p className="mt-1 text-xs text-slate-500">Support unlocks after required core materials are complete.</p>
+                <div className="mt-3 space-y-2">
+                  <Link href={`/jobs/${id}/interview-guide`} className={cn("block px-3 py-2 rounded-lg text-sm", supportUnlocked ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 pointer-events-none")}>Interview support</Link>
+                  <button disabled={!supportUnlocked} className={cn("w-full text-left px-3 py-2 rounded-lg text-sm", supportUnlocked ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")}>Follow-up support</button>
+                  <Link href={`/jobs/${id}/negotiation-guide`} className={cn("block px-3 py-2 rounded-lg text-sm", supportUnlocked ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 pointer-events-none")}>Negotiation support</Link>
+                </div>
+              </section>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Saved preview</p>
+              <MarkdownDoc content={coverLetterContent || "No cover letter saved yet."} />
+            </div>
+          </div>
+        )}
+      </main>
+
+      <div className="hidden lg:flex lg:w-[360px] lg:min-w-0 lg:border-l lg:border-slate-200">
+        <AiChatPanel workflowId={id} surface={surface} className="flex-1 h-full" />
       </div>
 
-      {/* ── Add to Profile Modal ── */}
-      {addModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => setAddModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">Add to Profile</h3>
-              <button onClick={() => setAddModal(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-500 mb-1 block">Term to add (edit if needed)</label>
-                <input
-                  value={addModal.editedTerm}
-                  onChange={e => setAddModal(m => m ? { ...m, editedTerm: e.target.value } : null)}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-sky-400"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 mb-2 block">Add to category</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    { key: "skills" as ProfileCategory,         label: "Skills",         color: "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100" },
-                    { key: "keywords" as ProfileCategory,       label: "Keywords",       color: "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100" },
-                    { key: "tools" as ProfileCategory,          label: "Tools",          color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
-                    { key: "certifications" as ProfileCategory, label: "Certifications", color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
-                    { key: "clearances" as ProfileCategory,     label: "Clearances",     color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
-                  ] as const).map(({ key, label, color }) => (
-                    <button
-                      key={key}
-                      onClick={() => addToProfile(key, addModal.editedTerm)}
-                      disabled={addingSaving || !addModal.editedTerm.trim()}
-                      className={cn(
-                        "text-sm font-medium border rounded-lg px-3 py-2 transition-colors disabled:opacity-40 text-left",
-                        color
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => {
-                      setManuallyMarked(prev => prev.includes(addModal!.term) ? prev : [...prev, addModal!.term]);
-                      setAddModal(null);
-                    }}
-                    className="col-span-2 text-sm font-medium border border-slate-200 rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors text-center"
-                  >
-                    Don&apos;t add to profile — mark as covered
-                  </button>
-                </div>
-              </div>
-              {addingSaving && <p className="text-xs text-slate-400 text-center">Saving…</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Connections Modal ── */}
-      {modalDegree && connections && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => setModalDegree(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col overflow-hidden"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-900">
-                {modalDegree === "first" ? "1st" : modalDegree === "second" ? "2nd" : "3rd"} Degree Connections at {editCompany || job.company}
-              </h3>
-              <button onClick={() => setModalDegree(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 px-5 py-3 space-y-2">
-              {connections[modalDegree].length === 0 ? (
-                <p className="text-slate-400 text-sm py-4 text-center">No connections found for this degree.</p>
-              ) : (
-                connections[modalDegree].map((person, i) => (
-                  <a key={i} href={person.profileUrl} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group">
-                    <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 font-semibold text-sm flex-shrink-0">
-                      {person.name[0]?.toUpperCase() ?? "?"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-slate-900 text-sm truncate">{person.name}</div>
-                      <div className="text-xs text-sky-500 truncate group-hover:underline">View profile →</div>
-                    </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-sky-400 flex-shrink-0 transition-colors" />
-                  </a>
-                ))
-              )}
-            </div>
-          </div>
+      <button
+        onClick={() => setChatOpen(!chatOpen)}
+        className="md:hidden fixed z-30 btn-ocean w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center"
+        style={{ top: "calc(var(--mobile-nav-height, 88px) + 6px)", right: "1rem" }}
+      >
+        <Sparkles className="w-4 h-4" />
+      </button>
+      {chatOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <AiChatPanel workflowId={id} surface={surface} onClose={() => setChatOpen(false)} className="h-full" />
         </div>
       )}
     </div>
