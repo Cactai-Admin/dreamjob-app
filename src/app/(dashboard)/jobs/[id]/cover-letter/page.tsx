@@ -107,7 +107,16 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
   }, [loading, coverSaved, coverLetterContent]);
 
   const continueToHub = async () => {
-    if (coverDirty) {
+    const hasMeaningfulContent = coverLetterContent.trim().length > 0;
+    if (hasMeaningfulContent && (coverDirty || !coverSaved)) {
+      await saveCoverLetter();
+    }
+    router.push(`/jobs/${id}/overview`);
+  };
+
+  const leaveToHub = async () => {
+    const hasMeaningfulContent = coverLetterContent.trim().length > 0;
+    if (hasMeaningfulContent && (coverDirty || !coverSaved)) {
       await saveCoverLetter();
     }
     router.push(`/jobs/${id}/overview`);
@@ -173,7 +182,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
           )}
 
           <div className="flex items-center justify-end gap-2">
-            <button onClick={() => router.push(`/jobs/${id}/overview`)} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm">Skip for now</button>
+            <button onClick={leaveToHub} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm">Skip for now</button>
             <button onClick={continueToHub} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={!coverLetterContent || generating}>
               Continue to Application Hub <ArrowRight className="w-4 h-4" />
             </button>

@@ -198,6 +198,7 @@ export interface JobListing {
   responsibilities?: string;
   benefits?: string;
   company_website_url?: string | null;
+  parsed_data?: Record<string, unknown> | null;
 }
 
 export interface Company {
