@@ -1,10 +1,13 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Plus, X } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
+import { EvidenceAlignmentReferenceView, ListingReferenceView } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { parseRequirements } from "@/lib/listing-match";
@@ -23,9 +26,13 @@ interface EmploymentRecord {
 }
 
 type EvidenceMatch = {
+  key: string;
+  source: string;
   item: string;
   matchedProfileData: string[];
   matchedWorkHistory: string[];
+  customEvidence: string[];
+  note: string;
   missing: boolean;
 };
 
@@ -71,6 +78,10 @@ export default function WorkHistoryPage({ params }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
   const [profileTerms, setProfileTerms] = useState<string[]>([]);
   const [employment, setEmployment] = useState<EmploymentRecord[]>([]);
+  const [alignmentSaving, setAlignmentSaving] = useState(false);
+  const [alignmentSaved, setAlignmentSaved] = useState(false);
+  const [customEvidenceByItem, setCustomEvidenceByItem] = useState<Record<string, string[]>>({});
+  const [notesByItem, setNotesByItem] = useState<Record<string, string>>({});
 
   useEffect(() => {
     Promise.all([
@@ -136,26 +147,77 @@ export default function WorkHistoryPage({ params }: Props) {
       ...responsibilities.map((item) => ({ source: "Responsibility", item })),
     ];
 
-    const mapped: Array<EvidenceMatch & { source: string }> = listingItems.map(({ source, item }) => {
+    const mapped: EvidenceMatch[] = listingItems.map(({ source, item }) => {
+      const key = `${source}:${item}`;
       const matchedProfileData = profileTerms.filter((term) => hasSharedSignal(item, term)).slice(0, 4);
       const matchedWorkHistory = employmentEvidence.filter((entry) => hasSharedSignal(item, entry)).slice(0, 3);
+      const customEvidence = (customEvidenceByItem[key] ?? []).map((entry) => entry.trim()).filter(Boolean);
 
       return {
+        key,
         source,
         item,
         matchedProfileData,
         matchedWorkHistory,
-        missing: matchedProfileData.length === 0 && matchedWorkHistory.length === 0,
+        customEvidence,
+        note: notesByItem[key] ?? "",
+        missing: matchedProfileData.length === 0 && matchedWorkHistory.length === 0 && customEvidence.length === 0,
       };
     });
 
     return mapped;
-  }, [requirements, responsibilities, profileTerms, employmentEvidence]);
+  }, [requirements, responsibilities, profileTerms, employmentEvidence, customEvidenceByItem, notesByItem]);
 
-  const missingEvidence = useMemo(
-    () => evidenceMap.filter((entry) => entry.missing).map((entry) => entry.item),
-    [evidenceMap],
-  );
+  useEffect(() => {
+    if (!workflow?.notes) return;
+    try {
+      const parsed = JSON.parse(workflow.notes) as {
+        evidence_alignment?: Array<{ key: string; customEvidence?: string[]; note?: string }>;
+      };
+      const alignment = parsed?.evidence_alignment ?? [];
+      if (alignment.length === 0) return;
+      const evidenceDrafts: Record<string, string[]> = {};
+      const notesDrafts: Record<string, string> = {};
+      alignment.forEach((entry) => {
+        evidenceDrafts[entry.key] = Array.isArray(entry.customEvidence) ? entry.customEvidence : [];
+        notesDrafts[entry.key] = entry.note ?? "";
+      });
+      setCustomEvidenceByItem(evidenceDrafts);
+      setNotesByItem(notesDrafts);
+    } catch {
+      // legacy notes format
+    }
+  }, [workflow?.notes]);
+
+  const saveAlignment = async () => {
+    if (!workflow) return;
+    setAlignmentSaving(true);
+    setAlignmentSaved(false);
+    const evidenceAlignment = evidenceMap.map((entry) => ({
+      key: entry.key,
+      source: entry.source,
+      item: entry.item,
+      matchedProfileData: entry.matchedProfileData,
+      matchedWorkHistory: entry.matchedWorkHistory,
+      customEvidence: entry.customEvidence,
+      note: entry.note,
+      missing: entry.missing,
+    }));
+    const nextNotes = JSON.stringify({ evidence_alignment: evidenceAlignment });
+    const wf = await fetch(`/api/workflows/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: nextNotes }),
+    }).then((res) => res.json());
+    if (wf?.id) setWorkflow(wf as Workflow);
+    setAlignmentSaving(false);
+    setAlignmentSaved(true);
+  };
+
+  const continueToResume = async () => {
+    await saveAlignment();
+    router.push(`/jobs/${id}/resume`);
+  };
 
   if (loading) {
     return (
@@ -178,75 +240,15 @@ export default function WorkHistoryPage({ params }: Props) {
           {
             value: "listing",
             label: "Listing",
-            content: (
-              <div className="space-y-2 text-xs text-slate-700">
-                <p className="text-sm font-semibold text-slate-900">{workflow.listing?.title}</p>
-                <p className="text-xs text-slate-500">{workflow.listing?.company_name}</p>
-              </div>
-            ),
+            content: <ListingReferenceView workflow={workflow} />,
           },
           {
-            value: "requirements",
-            label: "Requirements",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {requirements.length === 0 ? <li className="text-slate-400">No requirements parsed yet.</li> : requirements.map((requirement, index) => (
-                  <li key={`${requirement}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{requirement}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "responsibilities",
-            label: "Responsibilities",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {responsibilities.length === 0 ? <li className="text-slate-400">No responsibilities parsed yet.</li> : responsibilities.map((responsibility, index) => (
-                  <li key={`${responsibility}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{responsibility}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "profile-matches",
-            label: "Profile Matches",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {profileTerms.length === 0 ? <li className="text-slate-400">No profile terms captured yet.</li> : profileTerms.slice(0, 24).map((term) => (
-                  <li key={term} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{term}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "evidence",
-            label: "Evidence",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {employmentEvidence.length === 0 ? <li className="text-slate-400">No work history evidence added yet.</li> : employmentEvidence.slice(0, 24).map((entry) => (
-                  <li key={entry} className="rounded-md border border-slate-200 bg-slate-50 p-2">{entry}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "gaps",
-            label: "Gaps",
-            content: (
-              <div className="space-y-2 text-xs text-slate-700">
-                {missingEvidence.length === 0 ? <p className="text-emerald-700">No major evidence gaps detected.</p> : (
-                  <ul className="space-y-2">
-                    {missingEvidence.map((item) => (
-                      <li key={item} className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">{item}</li>
-                    ))}
-                  </ul>
-                )}
-                <p className="text-slate-500">Use these gaps to recover quantified outcomes before generating documents.</p>
-              </div>
-            ),
+            value: "evidence-alignment",
+            label: "Evidence Alignment",
+            content: <EvidenceAlignmentReferenceView evidence={evidenceMap} emptyMessage="No evidence alignment items yet." />,
           },
         ]}
-        footerNote="Reference-only context. Editing happens in listing review and document steps."
+        footerNote="Reference-only context for listing and alignment."
       />
 
       <main className={cn("flex-1 overflow-y-auto p-4 sm:p-6", chatOpen && "hidden md:block")}>
@@ -287,16 +289,77 @@ export default function WorkHistoryPage({ params }: Props) {
 
                     <div>
                       <p className="text-xs font-semibold text-slate-700">Matched work-history evidence</p>
-                      {entry.matchedWorkHistory.length === 0 ? (
+                      {entry.matchedWorkHistory.length === 0 && entry.customEvidence.length === 0 ? (
                         <p className="text-xs text-slate-400 mt-1">No matching employment entry found yet.</p>
                       ) : (
                         <ul className="mt-1 space-y-1 text-xs text-slate-600">
                           {entry.matchedWorkHistory.map((match) => (
                             <li key={match} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{match}</li>
                           ))}
+                          {entry.customEvidence.map((match, customIdx) => (
+                            <li key={`${entry.key}-custom-${customIdx}`} className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sky-900">{match}</li>
+                          ))}
                         </ul>
                       )}
                     </div>
+                  </div>
+
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">Refine evidence alignment</p>
+                    {(customEvidenceByItem[entry.key] ?? []).map((value, customIdx) => (
+                      <div key={`${entry.key}-edit-${customIdx}`} className="flex items-center gap-2">
+                        <input
+                          value={value}
+                          onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setCustomEvidenceByItem((prev) => ({
+                              ...prev,
+                              [entry.key]: (prev[entry.key] ?? []).map((item, idx) => (idx === customIdx ? nextValue : item)),
+                            }));
+                            setAlignmentSaved(false);
+                          }}
+                          className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                          placeholder="Add concrete evidence for this requirement"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomEvidenceByItem((prev) => ({
+                              ...prev,
+                              [entry.key]: (prev[entry.key] ?? []).filter((_, idx) => idx !== customIdx),
+                            }));
+                            setAlignmentSaved(false);
+                          }}
+                          className="rounded border border-slate-200 bg-white p-1 text-slate-500"
+                          aria-label="Remove evidence entry"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomEvidenceByItem((prev) => ({
+                          ...prev,
+                          [entry.key]: [...(prev[entry.key] ?? []), ""],
+                        }));
+                        setAlignmentSaved(false);
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add evidence item
+                    </button>
+                    <textarea
+                      value={notesByItem[entry.key] ?? ""}
+                      onChange={(event) => {
+                        setNotesByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
+                        setAlignmentSaved(false);
+                      }}
+                      className="w-full min-h-[68px] rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                      placeholder="Add alignment note: how this evidence supports the listing item."
+                    />
                   </div>
 
                   {entry.missing && (
@@ -314,10 +377,18 @@ export default function WorkHistoryPage({ params }: Props) {
             </div>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
             <button
-              onClick={() => router.push(`/jobs/${id}/resume`)}
+              onClick={saveAlignment}
+              disabled={alignmentSaving}
+              className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50"
+            >
+              {alignmentSaving ? "Saving..." : alignmentSaved ? "Saved" : "Save alignment"}
+            </button>
+            <button
+              onClick={continueToResume}
               className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2"
+              disabled={alignmentSaving}
             >
               Continue to Resume <ArrowRight className="w-4 h-4" />
             </button>

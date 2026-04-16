@@ -4,12 +4,12 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
+import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { DocumentSection, Output, Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { parseRequirements } from "@/lib/listing-match";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -36,6 +36,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
   const [chatOpen, setChatOpen] = useState(false);
   const [resumeSections, setResumeSections] = useState<DocumentSection[]>([]);
   const [resumeDirty, setResumeDirty] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
 
   const loadWorkflow = async () => {
     const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
@@ -58,17 +59,18 @@ export default function ResumeWorkspacePage({ params }: Props) {
   }, [id]);
 
   const resumeSaved = Boolean(workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
-  const requirements = useMemo(() => parseRequirements(workflow?.listing?.requirements), [workflow?.listing?.requirements]);
-  const responsibilities = useMemo(() => {
-    if (!workflow?.listing?.responsibilities) return [];
-    return workflow.listing.responsibilities.split(/\n|•|\*/).map((value) => value.trim()).filter(Boolean);
-  }, [workflow?.listing?.responsibilities]);
   const alignedEvidence = useMemo(() => {
-    const lines = workflow?.notes?.split("\n").map((line) => line.trim()).filter(Boolean) ?? [];
-    return lines.length > 0 ? lines : ["Work history alignment captured in this run feeds the resume draft."];
+    if (!workflow?.notes) return [];
+    try {
+      const parsed = JSON.parse(workflow.notes) as { evidence_alignment?: EvidenceReferenceItem[] };
+      return Array.isArray(parsed.evidence_alignment) ? parsed.evidence_alignment : [];
+    } catch {
+      return [];
+    }
   }, [workflow?.notes]);
 
   const ensureGeneration = async () => {
+    if (generating) return;
     setGenerating(true);
     let provider: string | undefined;
     try {
@@ -97,24 +99,29 @@ export default function ResumeWorkspacePage({ params }: Props) {
   };
 
   const saveResume = async () => {
+    setSaveState("saving");
     await fetch(`/api/workflows/${id}/outputs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "resume", content: JSON.stringify(resumeSections) }),
     });
     setResumeDirty(false);
+    setSaveState("saved");
     await loadWorkflow();
   };
 
-  const leftContext = useMemo(() => {
-    const blocks = [
-      `Role: ${workflow?.listing?.title ?? "Unknown"}`,
-      `Company: ${workflow?.listing?.company_name ?? "Unknown"}`,
-    ];
-    if (workflow?.listing?.requirements) blocks.push("Parsed requirements available");
-    if (workflow?.listing?.responsibilities) blocks.push("Parsed responsibilities available");
-    return blocks;
-  }, [workflow?.listing]);
+  useEffect(() => {
+    if (!loading && !resumeSaved && resumeSections.length === 0) {
+      void ensureGeneration();
+    }
+  }, [loading, resumeSaved, resumeSections.length]);
+
+  const continueToCoverLetter = async () => {
+    if (resumeDirty) {
+      await saveResume();
+    }
+    router.push(`/jobs/${id}/cover-letter`);
+  };
 
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -129,64 +136,12 @@ export default function ResumeWorkspacePage({ params }: Props) {
           {
             value: "listing",
             label: "Listing",
-            content: (
-              <div className="space-y-2 text-xs text-slate-700">
-                {leftContext.map((item) => (
-                  <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">{item}</div>
-                ))}
-              </div>
-            ),
+            content: <ListingReferenceView workflow={workflow} />,
           },
           {
-            value: "requirements",
-            label: "Requirements",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {requirements.length === 0 ? <li className="text-slate-400">No requirements parsed yet.</li> : requirements.map((item, idx) => (
-                  <li key={`${item}-${idx}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{item}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "responsibilities",
-            label: "Responsibilities",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {responsibilities.length === 0 ? <li className="text-slate-400">No responsibilities parsed yet.</li> : responsibilities.map((item, idx) => (
-                  <li key={`${item}-${idx}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{item}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "work-history",
-            label: "Work History",
-            content: (
-              <ul className="space-y-2 text-xs text-slate-700">
-                {alignedEvidence.map((line) => (
-                  <li key={line} className="rounded-md border border-slate-200 bg-slate-50 p-2">{line}</li>
-                ))}
-              </ul>
-            ),
-          },
-          {
-            value: "matched-evidence",
-            label: "Key Matches",
-            content: (
-              <p className="text-xs text-slate-600 rounded-md border border-sky-200 bg-sky-50 p-3">
-                Resume drafting should prioritize the strongest matched evidence from Work History and listing requirements.
-              </p>
-            ),
-          },
-          {
-            value: "alignment-notes",
-            label: "Alignment Notes",
-            content: (
-              <p className="text-xs text-slate-600 rounded-md border border-slate-200 bg-slate-50 p-3">
-                Keep role keywords, quantified outcomes, and ownership signals aligned with the listing before exporting.
-              </p>
-            ),
+            value: "evidence-alignment",
+            label: "Evidence Alignment",
+            content: <EvidenceAlignmentReferenceView evidence={alignedEvidence} emptyMessage="Save work-history alignment to see evidence context." />,
           },
         ]}
       />
@@ -195,20 +150,11 @@ export default function ResumeWorkspacePage({ params }: Props) {
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-slate-900">Resume Workspace</h1>
-            <button onClick={saveResume} disabled={!resumeDirty || generating} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">Save resume</button>
+            <button onClick={saveResume} disabled={generating || saveState === "saving" || !resumeDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">{saveState === "saving" ? "Saving..." : saveState === "saved" && !resumeDirty ? "Saved" : "Save"}</button>
           </div>
           <p className="text-sm text-slate-600 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2">
             This draft inherits listing priorities plus your Work History evidence alignment from the previous milestone.
           </p>
-
-          {!resumeSaved && resumeSections.length === 0 && !generating && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
-              <p className="text-sm text-slate-600">Generate a role-tailored resume draft after completing Work History evidence mapping.</p>
-              <button onClick={ensureGeneration} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2">
-                Generate Resume <Sparkles className="w-4 h-4" />
-              </button>
-            </div>
-          )}
 
           {generating && (
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center">
@@ -227,6 +173,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
                     onChange={(e) => {
                       setResumeSections((prev) => prev.map((s) => s.id === section.id ? { ...s, content: e.target.value } : s));
                       setResumeDirty(true);
+                      setSaveState("idle");
                     }}
                     className="w-full min-h-[120px] rounded-lg border border-slate-200 p-3 text-sm"
                   />
@@ -236,7 +183,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
           )}
 
           <div className="flex justify-end">
-            <button onClick={() => router.push(`/jobs/${id}/cover-letter`)} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={resumeSections.length === 0}>
+            <button onClick={continueToCoverLetter} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={resumeSections.length === 0 || generating}>
               Continue to Cover Letter <ArrowRight className="w-4 h-4" />
             </button>
           </div>
