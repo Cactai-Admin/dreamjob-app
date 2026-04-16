@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
+import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import type { Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { parseRequirements } from "@/lib/listing-match";
@@ -151,6 +152,11 @@ export default function WorkHistoryPage({ params }: Props) {
     return mapped;
   }, [requirements, responsibilities, profileTerms, employmentEvidence]);
 
+  const missingEvidence = useMemo(
+    () => evidenceMap.filter((entry) => entry.missing).map((entry) => entry.item),
+    [evidenceMap],
+  );
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -165,41 +171,83 @@ export default function WorkHistoryPage({ params }: Props) {
 
   return (
     <div className="flex flex-1 overflow-hidden bg-slate-100">
-      <aside className="hidden lg:block w-[280px] border-r border-slate-200 bg-white p-4 overflow-y-auto">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Listing reference</p>
-        <h2 className="mt-2 text-sm font-semibold text-slate-900">{workflow.listing?.title}</h2>
-        <p className="text-xs text-slate-500">{workflow.listing?.company_name}</p>
-
-        <div className="mt-4 space-y-4">
-          <section>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Parsed requirements</p>
-            <ul className="mt-2 space-y-2 text-xs text-slate-700">
-              {requirements.length === 0 ? (
-                <li className="text-slate-400">No requirements parsed yet.</li>
-              ) : (
-                requirements.map((requirement, index) => (
+      <ReferenceSidebar
+        title="Work history references"
+        defaultTab="listing"
+        tabs={[
+          {
+            value: "listing",
+            label: "Listing",
+            content: (
+              <div className="space-y-2 text-xs text-slate-700">
+                <p className="text-sm font-semibold text-slate-900">{workflow.listing?.title}</p>
+                <p className="text-xs text-slate-500">{workflow.listing?.company_name}</p>
+              </div>
+            ),
+          },
+          {
+            value: "requirements",
+            label: "Requirements",
+            content: (
+              <ul className="space-y-2 text-xs text-slate-700">
+                {requirements.length === 0 ? <li className="text-slate-400">No requirements parsed yet.</li> : requirements.map((requirement, index) => (
                   <li key={`${requirement}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{requirement}</li>
-                ))
-              )}
-            </ul>
-          </section>
-
-          <section>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Parsed responsibilities</p>
-            <ul className="mt-2 space-y-2 text-xs text-slate-700">
-              {responsibilities.length === 0 ? (
-                <li className="text-slate-400">No responsibilities parsed yet.</li>
-              ) : (
-                responsibilities.map((responsibility, index) => (
+                ))}
+              </ul>
+            ),
+          },
+          {
+            value: "responsibilities",
+            label: "Responsibilities",
+            content: (
+              <ul className="space-y-2 text-xs text-slate-700">
+                {responsibilities.length === 0 ? <li className="text-slate-400">No responsibilities parsed yet.</li> : responsibilities.map((responsibility, index) => (
                   <li key={`${responsibility}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{responsibility}</li>
-                ))
-              )}
-            </ul>
-          </section>
-        </div>
-
-        <p className="text-[11px] text-slate-500 mt-4">Reference-only context. Editing happens in listing review and document steps.</p>
-      </aside>
+                ))}
+              </ul>
+            ),
+          },
+          {
+            value: "profile-matches",
+            label: "Profile Matches",
+            content: (
+              <ul className="space-y-2 text-xs text-slate-700">
+                {profileTerms.length === 0 ? <li className="text-slate-400">No profile terms captured yet.</li> : profileTerms.slice(0, 24).map((term) => (
+                  <li key={term} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{term}</li>
+                ))}
+              </ul>
+            ),
+          },
+          {
+            value: "evidence",
+            label: "Evidence",
+            content: (
+              <ul className="space-y-2 text-xs text-slate-700">
+                {employmentEvidence.length === 0 ? <li className="text-slate-400">No work history evidence added yet.</li> : employmentEvidence.slice(0, 24).map((entry) => (
+                  <li key={entry} className="rounded-md border border-slate-200 bg-slate-50 p-2">{entry}</li>
+                ))}
+              </ul>
+            ),
+          },
+          {
+            value: "gaps",
+            label: "Gaps",
+            content: (
+              <div className="space-y-2 text-xs text-slate-700">
+                {missingEvidence.length === 0 ? <p className="text-emerald-700">No major evidence gaps detected.</p> : (
+                  <ul className="space-y-2">
+                    {missingEvidence.map((item) => (
+                      <li key={item} className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">{item}</li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-slate-500">Use these gaps to recover quantified outcomes before generating documents.</p>
+              </div>
+            ),
+          },
+        ]}
+        footerNote="Reference-only context. Editing happens in listing review and document steps."
+      />
 
       <main className={cn("flex-1 overflow-y-auto p-4 sm:p-6", chatOpen && "hidden md:block")}>
         <div className="max-w-4xl mx-auto space-y-4">

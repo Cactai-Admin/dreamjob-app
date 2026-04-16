@@ -51,7 +51,9 @@ async function captureRunFact(input: {
     'listing_review',
     'resume_workspace',
     'cover_letter_workspace',
+    'application_hub_support',
     'application_overview_support',
+    'follow_up_support',
     'interview_guide',
     'negotiation_guide',
   ])

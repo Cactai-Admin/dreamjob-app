@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, use } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Sparkles, MessageSquare, Trash2 } from "lucide-react";
@@ -161,6 +162,20 @@ export default function InterviewGuidePage({ params }: Props) {
   }
 
   if (!workflow) return notFound();
+  const interviewEvent = workflow.status_events?.find((event) => event.event_type === "interview_scheduled");
+  const interviewUnlocked = Boolean(interviewEvent?.notes && interviewEvent.notes.includes("date") && interviewEvent.notes.includes("time"));
+  if (!interviewUnlocked) {
+    return (
+      <div className="page-wrapper">
+        <div className="max-w-xl rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+          Interview support unlocks after you add interview date/time and click <span className="font-semibold">I got an interview</span> in Application Hub.
+          <div className="mt-4">
+            <Link href={`/jobs/${id}/overview`} className="btn-ocean px-4 py-2 rounded-lg text-white">Back to Application Hub</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
 
   return (

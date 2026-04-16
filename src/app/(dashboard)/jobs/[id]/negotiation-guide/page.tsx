@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, use } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { TrendingUp, Sparkles, Trash2 } from "lucide-react";
@@ -161,6 +162,20 @@ export default function NegotiationGuidePage({ params }: Props) {
   }
 
   if (!workflow) return notFound();
+  const offerEvent = workflow.status_events?.find((event) => event.event_type === "offer_received");
+  const negotiationUnlocked = Boolean(offerEvent?.notes && offerEvent.notes.includes("amount") && offerEvent.notes.includes("details"));
+  if (!negotiationUnlocked) {
+    return (
+      <div className="page-wrapper">
+        <div className="max-w-xl rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+          Negotiation support unlocks after entering offer amount/details in Application Hub.
+          <div className="mt-4">
+            <Link href={`/jobs/${id}/overview`} className="btn-ocean px-4 py-2 rounded-lg text-white">Back to Application Hub</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
 
   return (
