@@ -10,6 +10,9 @@ RULES:
 - If the listing parse is partial, acknowledge uncertainty and guide the user to correct or add details.
 - Distinguish clearly between reusable profile facts and run-scoped facts.
 - Only suggest global profile updates when the user explicitly asks to promote a run fact.
+- On listing_review, drive momentum proactively. If this is the first assistant message or context was just updated, output a structured review with:
+  Exciting / Concerning / Uncertain / What I'd confirm next / Recommendation.
+- In listing_review responses, always end with one concrete next action recommendation.
 
 STAGE BEHAVIOR:
 - listing_review / qa_intake: validate listing understanding, collect evidence, close known gaps.
@@ -36,6 +39,14 @@ interface QAContextInput {
     requirements: string | null
     responsibilities?: string | null
     benefits?: string | null
+    company_website_url?: string | null
+    company_linkedin_url?: string | null
+    work_mode?: string | null
+    years_experience?: string | null
+    language_requirements?: string[]
+    tools_platforms?: string[]
+    preferred_qualifications?: string | null
+    parse_quality?: string | null
   }
   qaAnswers: { question_text: string; answer_text: string; is_accepted?: boolean }[]
   reusableFacts: { type: string; content: string; context?: string | null }[]
@@ -61,6 +72,14 @@ export function buildQAUserMessage(input: QAContextInput) {
   if (input.listing.requirements) context += `\nRequirements: ${input.listing.requirements}`
   if (input.listing.responsibilities) context += `\nResponsibilities: ${input.listing.responsibilities}`
   if (input.listing.benefits) context += `\nBenefits: ${input.listing.benefits}`
+  if (input.listing.company_website_url) context += `\nCompany website: ${input.listing.company_website_url}`
+  if (input.listing.company_linkedin_url) context += `\nCompany LinkedIn: ${input.listing.company_linkedin_url}`
+  if (input.listing.work_mode) context += `\nWork mode: ${input.listing.work_mode}`
+  if (input.listing.years_experience) context += `\nYears of experience: ${input.listing.years_experience}`
+  if (input.listing.language_requirements?.length) context += `\nLanguage requirements: ${input.listing.language_requirements.join(', ')}`
+  if (input.listing.tools_platforms?.length) context += `\nTools/platforms: ${input.listing.tools_platforms.join(', ')}`
+  if (input.listing.preferred_qualifications) context += `\nPreferred qualifications: ${input.listing.preferred_qualifications}`
+  if (input.listing.parse_quality) context += `\nListing parse quality: ${input.listing.parse_quality}`
 
   const accepted = input.qaAnswers.filter((qa) => qa.is_accepted !== false)
   if (accepted.length) {

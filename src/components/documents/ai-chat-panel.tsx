@@ -21,6 +21,7 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   const [loadingThread, setLoadingThread] = useState(true);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [stageKey, setStageKey] = useState<"stage1" | "stage2" | "support">("stage2");
+  const [seededProactiveReview, setSeededProactiveReview] = useState(false);
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
   const copyBySurface: Partial<Record<string, { subtitle: string; placeholder: string; empty: string }>> = {
     listing_review: {
@@ -101,6 +102,55 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
     loadThread();
     return () => { active = false; };
   }, [workflowId, surface]);
+
+  useEffect(() => {
+    const shouldSeed = surface === "listing_review" && !loadingThread && messages.length === 0 && !seededProactiveReview;
+    if (!shouldSeed) return;
+    setSeededProactiveReview(true);
+    setIsTyping(true);
+    fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workflow_id: workflowId, surface }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data?.message) return;
+        setMessages((prev) => [...prev, {
+          id: `msg-${Date.now()}-proactive`,
+          role: "assistant",
+          content: data.message,
+          timestamp: new Date().toISOString(),
+        }]);
+      })
+      .finally(() => setIsTyping(false));
+  }, [workflowId, surface, loadingThread, messages, seededProactiveReview]);
+
+  useEffect(() => {
+    if (surface !== "listing_review") return;
+    const handleListingSaved = () => {
+      if (isTyping) return;
+      setIsTyping(true);
+      fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workflow_id: workflowId, surface }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!data?.message) return;
+          setMessages((prev) => [...prev, {
+            id: `msg-${Date.now()}-refresh`,
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+          }]);
+        })
+        .finally(() => setIsTyping(false));
+    };
+    window.addEventListener("dreamjob:listing-saved", handleListingSaved);
+    return () => window.removeEventListener("dreamjob:listing-saved", handleListingSaved);
+  }, [workflowId, surface, isTyping]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isTyping) return;

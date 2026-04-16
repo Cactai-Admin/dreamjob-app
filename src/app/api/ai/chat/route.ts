@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
   const { data: workflow } = await supabaseAdmin
     .from('workflows')
-    .select('*, listing:job_listings(*), status_events(*)')
+    .select('*, listing:job_listings(*), company:companies(*), status_events(*)')
     .eq('id', workflow_id)
     .eq('account_id', accountId)
     .single()
@@ -260,6 +260,30 @@ export async function POST(request: NextRequest) {
           requirements: workflow.listing.requirements,
           responsibilities: workflow.listing.responsibilities,
           benefits: workflow.listing.benefits,
+          company_website_url: workflow.listing.company_website_url ?? workflow.company?.website_url ?? null,
+          company_linkedin_url: workflow.company?.linkedin_url ?? null,
+          work_mode:
+            typeof workflow.listing.parsed_data?.work_mode === 'string'
+              ? workflow.listing.parsed_data.work_mode
+              : null,
+          years_experience:
+            typeof workflow.listing.parsed_data?.years_experience === 'string'
+              ? workflow.listing.parsed_data.years_experience
+              : null,
+          language_requirements: Array.isArray(workflow.listing.parsed_data?.language_requirements)
+            ? workflow.listing.parsed_data.language_requirements.filter((value: unknown): value is string => typeof value === 'string')
+            : [],
+          tools_platforms: Array.isArray(workflow.listing.parsed_data?.tools_platforms)
+            ? workflow.listing.parsed_data.tools_platforms.filter((value: unknown): value is string => typeof value === 'string')
+            : [],
+          preferred_qualifications:
+            typeof workflow.listing.parsed_data?.preferred_qualifications === 'string'
+              ? workflow.listing.parsed_data.preferred_qualifications
+              : null,
+          parse_quality:
+            typeof workflow.listing.parsed_data?.parse_quality === 'string'
+              ? workflow.listing.parsed_data.parse_quality
+              : null,
         },
         qaAnswers: qaAnswers ?? [],
         reusableFacts: reusableFacts ?? [],

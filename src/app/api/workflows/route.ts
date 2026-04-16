@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
     benefits,
     company_website_url,
     company_linkedin_url,
+    parsed_data,
   } = body
 
   // Normalize requirements: accept string or array
@@ -86,6 +87,23 @@ export async function POST(request: NextRequest) {
     requirements = rawRequirements.filter(Boolean)
   } else if (typeof rawRequirements === 'string' && rawRequirements.trim()) {
     requirements = rawRequirements.split(/\n|;/).map((s: string) => s.trim()).filter(Boolean)
+  }
+
+  function normalizeCompanyKey(value: string | null | undefined): string {
+    return (value ?? '')
+      .toLowerCase()
+      .replace(/\b(inc|llc|ltd|corp|corporation|co|company)\b/g, '')
+      .replace(/[^a-z0-9]/g, '')
+      .trim()
+  }
+
+  function normalizeUrlHost(url: string | null | undefined): string | null {
+    if (!url) return null
+    try {
+      return new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+    } catch {
+      return null
+    }
   }
 
   // If no company website URL was parsed, try to discover it via AI
@@ -111,13 +129,26 @@ export async function POST(request: NextRequest) {
   // Create or find company
   let companyId: string | null = null
   if (company_name) {
-    const { data: existingCompany } = await supabaseAdmin
-      .from('companies')
-      .select('id')
-      .eq('name', company_name)
-      .single()
+    const normalizedCompanyName = normalizeCompanyKey(company_name)
+    const linkedinHost = normalizeUrlHost(company_linkedin_url)
+    const websiteHost = normalizeUrlHost(resolvedWebsiteUrl)
 
-    if (existingCompany) {
+    const { data: companies } = await supabaseAdmin
+      .from('companies')
+      .select('id, name, website_url, linkedin_url')
+      .limit(500)
+
+    const existingCompany = (companies ?? []).find((company) => {
+      const candidateName = normalizeCompanyKey(company.name)
+      const candidateWebsiteHost = normalizeUrlHost(company.website_url)
+      const candidateLinkedInHost = normalizeUrlHost(company.linkedin_url)
+      if (candidateName && normalizedCompanyName && candidateName === normalizedCompanyName) return true
+      if (websiteHost && candidateWebsiteHost && websiteHost === candidateWebsiteHost) return true
+      if (linkedinHost && candidateLinkedInHost && linkedinHost === candidateLinkedInHost) return true
+      return false
+    })
+
+    if (existingCompany?.id) {
       companyId = existingCompany.id
       // Update website/linkedin if we have new info
       if (resolvedWebsiteUrl || company_linkedin_url) {
@@ -158,6 +189,7 @@ export async function POST(request: NextRequest) {
       responsibilities: responsibilities || null,
       benefits: benefits || null,
       company_website_url: resolvedWebsiteUrl || null,
+      parsed_data: parsed_data && typeof parsed_data === 'object' ? parsed_data : null,
       created_by: accountId,
     })
     .select()

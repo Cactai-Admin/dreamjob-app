@@ -27,6 +27,10 @@ async function createWorkflowFromParsed(parsed: Record<string, unknown>, sourceU
       benefits: (parsed.benefits as string) ?? null,
       company_website_url: (parsed.company_website_url as string) ?? null,
       company_linkedin_url: (parsed.company_linkedin_url as string) ?? null,
+      parsed_data: (parsed.parsed_data as Record<string, unknown>) ?? {
+        parse_trace: (parsed.parse_trace as Record<string, unknown>) ?? null,
+        parse_quality: (parsed.parse_quality as string) ?? null,
+      },
     }),
   });
   const wf = await wfRes.json();
