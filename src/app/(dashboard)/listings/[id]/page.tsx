@@ -171,6 +171,7 @@ export default function ListingReviewPage({ params }: Props) {
     });
     setSaving(false);
     setDirty(false);
+    window.dispatchEvent(new CustomEvent("dreamjob:listing-saved"));
   }, [id, companyName, title, location, salary, empType, expLevel, description, reqs, additionalDetails, companyWebsite, linkedInUrl]);
 
   useEffect(() => {
