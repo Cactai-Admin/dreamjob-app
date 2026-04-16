@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
-import { deriveApplicationStatus, deriveDocumentStatus } from "@/lib/workflow-adapter";
+import { deriveDocumentStatus } from "@/lib/workflow-adapter";
 import type { Workflow } from "@/lib/types";
 
 const USER_MENU_ITEMS = [
@@ -97,7 +97,7 @@ export function TopNav() {
   // Doc page detection from pathname — used for both mobile and desktop nav hiding.
   // Derived from pathname (not controls) so it's accurate during page transitions
   // before the new page has called setDocControls.
-  const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|interview-guide|negotiation-guide)$/);
+  const mobileDocMatch = pathname.match(/^\/jobs\/([^/]+)\/(resume|cover-letter|overview|interview-guide|negotiation-guide)$/);
   const mobileWorkflowId = mobileDocMatch?.[1];
   const listingMatch = pathname.match(/^\/listings\/([^/]+)/);
   const workflowMatch = pathname.match(/^\/jobs\/([^/]+)/);
@@ -108,12 +108,10 @@ export function TopNav() {
   const coreDocsReady = resumeStatus !== "not_started" && coverLetterStatus !== "not_started";
   const milestones = milestoneWorkflowId ? [
     { href: `/listings/${milestoneWorkflowId}`, label: "Listing Review" },
+    { href: `/jobs/${milestoneWorkflowId}`, label: "Work History" },
     { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
     { href: `/jobs/${milestoneWorkflowId}/cover-letter`, label: "Cover Letter" },
-    ...(coreDocsReady ? [
-      { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview" },
-      { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation" },
-    ] : []),
+    { href: `/jobs/${milestoneWorkflowId}/overview`, label: "Overview" },
   ] : [];
   const milestoneActiveIndex = milestones.findIndex(({ href }) => pathname === href);
   useEffect(() => {
@@ -132,30 +130,29 @@ export function TopNav() {
     return () => { active = false; };
   }, [milestoneWorkflowId]);
 
-  const interviewStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "interview_guide");
-  const negotiationStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "negotiation_guide");
-  const appStatus = milestoneWorkflow
-    ? deriveApplicationStatus(milestoneWorkflow.state, milestoneWorkflow.status_events ?? [])
-    : "draft";
-  const appHasAdvanced = ["applied", "received", "interviewing", "offer", "negotiating", "hired", "declined", "ghosted", "rejected"].includes(appStatus);
   const fallbackFurthest = milestoneActiveIndex > -1
     ? milestoneActiveIndex
-    : pathname.startsWith(`/jobs/${milestoneWorkflowId}`)
-      ? 1
-      : 0;
+    : pathname.startsWith(`/jobs/${milestoneWorkflowId}/overview`)
+      ? 4
+      : pathname.startsWith(`/jobs/${milestoneWorkflowId}/cover-letter`)
+        ? 3
+        : pathname.startsWith(`/jobs/${milestoneWorkflowId}/resume`)
+          ? 2
+          : pathname.startsWith(`/jobs/${milestoneWorkflowId}`)
+            ? 1
+            : 0
+  const overviewReady = resumeStatus !== "not_started" && coverLetterStatus !== "not_started";
   const furthestReachedIndex = !milestoneWorkflow
     ? fallbackFurthest
     : milestoneWorkflow.state === "listing_review"
     ? 0
-    : negotiationStatus !== "not_started" || ["offer", "negotiating", "hired", "declined"].includes(appStatus)
+    : overviewReady
       ? 4
-      : interviewStatus !== "not_started" || appHasAdvanced
+      : coverLetterStatus !== "not_started"
         ? 3
-        : coverLetterStatus !== "not_started"
+        : resumeStatus !== "not_started"
           ? 2
           : 1;
-  const hasApplied = ["applied", "received", "interviewing", "offer", "negotiating", "hired", "declined", "ghosted", "rejected"].includes(appStatus);
-  const hasOfferContext = ["offer", "negotiating", "hired", "declined"].includes(appStatus);
 
   // Profile button — shared across desktop and mobile
   const renderProfileButton = (sizePx?: number) => (
@@ -235,11 +232,9 @@ export function TopNav() {
                 const active = pathname === href;
                 const completed = !active && idx <= furthestReachedIndex - 1;
                 const prerequisiteUnlocked = idx <= furthestReachedIndex + 1;
-                const stageUnlocked = idx === 3
-                  ? hasApplied || interviewStatus !== "not_started"
-                  : idx === 4
-                    ? hasOfferContext || negotiationStatus !== "not_started"
-                    : true;
+                const stageUnlocked = idx === 4
+                  ? coreDocsReady
+                  : true;
                 const available = !completed && !active && prerequisiteUnlocked && stageUnlocked;
                 const blocked = !active && !completed && !available;
                 const clickable = !blocked;

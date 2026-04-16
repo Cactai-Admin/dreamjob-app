@@ -225,15 +225,6 @@ export default function ListingReviewPage({ params }: Props) {
       body: JSON.stringify({ state: "draft", is_active: true }),
     });
 
-    // Kick off resume generation in the background — don't await
-    let provider: string | undefined;
-    try { const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}"); if (s.aiProvider) provider = s.aiProvider; } catch { /* ignore */ }
-    fetch("/api/ai/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workflow_id: id, output_type: "resume", provider }),
-    }); // intentionally fire-and-forget
-
     router.push(`/jobs/${id}`);
   };
 

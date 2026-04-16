@@ -1,340 +1,284 @@
 "use client";
 
-/* eslint-disable react-hooks/set-state-in-effect */
-
-import { use, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { notFound, useRouter } from "next/navigation";
-import { FileText, Mail, Sparkles, Loader2, CheckCircle2, Circle, ArrowRight } from "lucide-react";
+import { use, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
-import { MarkdownDoc } from "@/components/documents/markdown-doc";
-import type { DocumentSection, Output, Workflow } from "@/lib/types";
+import type { Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { parseRequirements } from "@/lib/listing-match";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
-type RunPhase =
-  | "listing_analysis_loading"
-  | "listing_analysis"
-  | "resume_loading"
-  | "resume_workspace"
-  | "optional_cover_letter_decision"
-  | "cover_letter_loading"
-  | "cover_letter_workspace"
-  | "application_overview";
-
-function parseSections(output?: Output): DocumentSection[] {
-  if (!output) return [];
-  try {
-    const parsed = JSON.parse(output.content);
-    if (Array.isArray(parsed)) return parsed as DocumentSection[];
-  } catch {
-    // fallthrough
-  }
-  return [{ id: "main", title: "Resume", content: output.content }];
+interface EmploymentRecord {
+  company?: string;
+  title?: string;
+  responsibilities?: string[];
+  achievements?: string[];
+  technologies?: string[];
+  tools?: string[];
 }
 
-function LoadingState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="h-full min-h-[420px] flex flex-col items-center justify-center text-center px-6">
-      <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center mb-4">
-        <Loader2 className="w-6 h-6 animate-spin" />
-      </div>
-      <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 text-sm text-slate-500 max-w-md">{detail}</p>
-    </div>
-  );
+type EvidenceMatch = {
+  item: string;
+  matchedProfileData: string[];
+  matchedWorkHistory: string[];
+  missing: boolean;
+};
+
+const PLACEHOLDER_GUIDANCE = [
+  "Achievement example with clear business impact",
+  "Tool or platform usage in a real project",
+  "Quota/performance evidence or KPI movement",
+  "Client/stakeholder scope and interaction level",
+  "Ownership or leadership signal",
+  "Measurable outcome (time, revenue, quality, risk)",
+  "Cross-functional collaboration detail",
+  "Domain/workflow exposure relevant to this role",
+];
+
+function parseResponsibilities(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/\n|•|\*/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }
 
-export default function RunWorkspacePage({ params }: Props) {
+function splitTerms(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9+#.]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length > 2);
+}
+
+function hasSharedSignal(item: string, candidate: string): boolean {
+  const itemTerms = splitTerms(item);
+  if (itemTerms.length === 0) return false;
+  const candidateLower = candidate.toLowerCase();
+  return itemTerms.some((term) => candidateLower.includes(term));
+}
+
+export default function WorkHistoryPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
-  const [phase, setPhase] = useState<RunPhase>("listing_analysis_loading");
   const [loading, setLoading] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
-  const [includeCoverLetter, setIncludeCoverLetter] = useState(true);
-  const [resumeSections, setResumeSections] = useState<DocumentSection[]>([]);
-  const [coverLetterContent, setCoverLetterContent] = useState("");
-  const [resumeDirty, setResumeDirty] = useState(false);
-  const [coverDirty, setCoverDirty] = useState(false);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [profileTerms, setProfileTerms] = useState<string[]>([]);
+  const [employment, setEmployment] = useState<EmploymentRecord[]>([]);
 
-  const loadWorkflow = async () => {
-    try {
-      const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
-      if (!wf?.id) {
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/workflows/${id}`).then((res) => res.json()),
+      fetch("/api/profile").then((res) => res.json()),
+      fetch("/api/profile/employment").then((res) => res.json()),
+    ])
+      .then(([wf, profile, employmentHistory]) => {
+        if (!wf?.id) {
+          setLoading(false);
+          return;
+        }
+
+        if (wf.state === "listing_review") {
+          router.replace(`/listings/${id}`);
+          return;
+        }
+
+        setWorkflow(wf as Workflow);
+
+        const terms = [
+          ...(Array.isArray(profile?.skills) ? profile.skills : []),
+          ...(Array.isArray(profile?.keywords) ? profile.keywords : []),
+          ...(Array.isArray(profile?.tools) ? profile.tools : []),
+          ...(Array.isArray(profile?.certifications) ? profile.certifications : []),
+          ...(Array.isArray(profile?.clearances) ? profile.clearances : []),
+        ].filter((term): term is string => typeof term === "string" && term.trim().length > 0);
+
+        setProfileTerms(terms);
+        setEmployment(Array.isArray(employmentHistory) ? employmentHistory : []);
         setLoading(false);
-        return;
-      }
-      if (wf.state === "listing_review") {
-        router.replace(`/listings/${id}`);
-        return;
-      }
-      setWorkflow(wf);
-      const resumeOut = wf.outputs?.find((o) => o.type === "resume" && o.is_current);
-      const coverOut = wf.outputs?.find((o) => o.type === "cover_letter" && o.is_current);
-      if (resumeOut) {
-        setResumeSections(parseSections(resumeOut));
-      }
-      if (coverOut) {
-        setCoverLetterContent(coverOut.content);
-      }
-      setLoading(false);
-      if (!resumeOut) {
-        setPhase("resume_loading");
-      } else if (!coverOut) {
-        setPhase("optional_cover_letter_decision");
-      } else {
-        setPhase("application_overview");
-      }
-    } catch {
-      setLoading(false);
-    }
-  };
+      })
+      .catch(() => setLoading(false));
+  }, [id, router]);
 
-  useEffect(() => {
-    void loadWorkflow();
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [id]);
+  const requirements = useMemo(
+    () => parseRequirements(workflow?.listing?.requirements),
+    [workflow?.listing?.requirements],
+  );
 
-  useEffect(() => {
-    if (phase !== "listing_analysis_loading") return;
-    const timer = setTimeout(() => setPhase("listing_analysis"), 1200);
-    return () => clearTimeout(timer);
-  }, [phase]);
+  const responsibilities = useMemo(
+    () => parseResponsibilities(workflow?.listing?.responsibilities),
+    [workflow?.listing?.responsibilities],
+  );
 
-  const ensureGeneration = async (outputType: "resume" | "cover_letter") => {
-    let provider: string | undefined;
-    try {
-      const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
-      if (s.aiProvider) provider = s.aiProvider;
-    } catch {
-      // ignore
-    }
-    await fetch("/api/ai/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workflow_id: id, output_type: outputType, provider }),
+  const employmentEvidence = useMemo(() => {
+    return employment.flatMap((record) => {
+      const buckets = [
+        ...(Array.isArray(record.responsibilities) ? record.responsibilities : []),
+        ...(Array.isArray(record.achievements) ? record.achievements : []),
+        ...(Array.isArray(record.technologies) ? record.technologies : []),
+        ...(Array.isArray(record.tools) ? record.tools : []),
+      ];
+      return buckets
+        .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        .map((entry) => `${record.title ?? "Role"} @ ${record.company ?? "Company"}: ${entry}`);
     });
-  };
+  }, [employment]);
 
-  useEffect(() => {
-    if (phase !== "resume_loading") return;
-    void ensureGeneration("resume");
-    pollingRef.current = setInterval(async () => {
-      const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
-      const resumeOut = wf.outputs?.find((o) => o.type === "resume" && o.is_current);
-      if (resumeOut) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        setResumeSections(parseSections(resumeOut));
-        setWorkflow(wf);
-        setPhase("resume_workspace");
-      }
-    }, 2500);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [phase, id]);
+  const evidenceMap = useMemo(() => {
+    const listingItems = [
+      ...requirements.map((item) => ({ source: "Requirement", item })),
+      ...responsibilities.map((item) => ({ source: "Responsibility", item })),
+    ];
 
-  useEffect(() => {
-    if (phase !== "cover_letter_loading") return;
-    void ensureGeneration("cover_letter");
-    pollingRef.current = setInterval(async () => {
-      const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
-      const coverOut = wf.outputs?.find((o) => o.type === "cover_letter" && o.is_current);
-      if (coverOut) {
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        setCoverLetterContent(coverOut.content);
-        setWorkflow(wf);
-        setPhase("cover_letter_workspace");
-      }
-    }, 2500);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, [phase, id]);
+    const mapped: Array<EvidenceMatch & { source: string }> = listingItems.map(({ source, item }) => {
+      const matchedProfileData = profileTerms.filter((term) => hasSharedSignal(item, term)).slice(0, 4);
+      const matchedWorkHistory = employmentEvidence.filter((entry) => hasSharedSignal(item, entry)).slice(0, 3);
 
-  const saveResume = async () => {
-    await fetch(`/api/workflows/${id}/outputs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "resume", content: JSON.stringify(resumeSections) }),
+      return {
+        source,
+        item,
+        matchedProfileData,
+        matchedWorkHistory,
+        missing: matchedProfileData.length === 0 && matchedWorkHistory.length === 0,
+      };
     });
-    setResumeDirty(false);
-    await loadWorkflow();
-  };
 
-  const saveCoverLetter = async () => {
-    await fetch(`/api/workflows/${id}/outputs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "cover_letter", content: coverLetterContent }),
-    });
-    setCoverDirty(false);
-    await loadWorkflow();
-  };
-
-  const resumeSaved = Boolean(workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
-  const coverSaved = Boolean(workflow?.outputs?.find((o) => o.type === "cover_letter" && o.is_current));
-  const supportUnlocked = resumeSaved && (!includeCoverLetter || coverSaved);
-
-  const sideContext = useMemo(() => {
-    const context = ["Listing", "Fit & Evidence", "Employment History Evidence"];
-    if (resumeSaved) context.push("Saved Resume");
-    if (coverSaved) context.push("Saved Cover Letter");
-    return context;
-  }, [resumeSaved, coverSaved]);
+    return mapped;
+  }, [requirements, responsibilities, profileTerms, employmentEvidence]);
 
   if (loading) {
-    return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    );
   }
 
-  if (!workflow) return notFound();
-
-  const surface =
-    phase === "application_overview"
-      ? "application_overview_support"
-      : phase === "cover_letter_workspace" || phase === "cover_letter_loading"
-        ? "cover_letter_workspace"
-        : phase === "listing_analysis" || phase === "listing_analysis_loading"
-          ? "listing_review"
-          : "resume_workspace";
+  if (!workflow) {
+    return <div className="page-wrapper text-sm text-slate-500">Run not found.</div>;
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden bg-slate-100">
-      <aside className="hidden lg:block w-[240px] border-r border-slate-200 bg-white p-4 overflow-y-auto">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Run context</p>
-        <div className="mt-3 space-y-2">
-          {sideContext.map((item) => (
-            <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{item}</div>
-          ))}
+      <aside className="hidden lg:block w-[280px] border-r border-slate-200 bg-white p-4 overflow-y-auto">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Listing reference</p>
+        <h2 className="mt-2 text-sm font-semibold text-slate-900">{workflow.listing?.title}</h2>
+        <p className="text-xs text-slate-500">{workflow.listing?.company_name}</p>
+
+        <div className="mt-4 space-y-4">
+          <section>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Parsed requirements</p>
+            <ul className="mt-2 space-y-2 text-xs text-slate-700">
+              {requirements.length === 0 ? (
+                <li className="text-slate-400">No requirements parsed yet.</li>
+              ) : (
+                requirements.map((requirement, index) => (
+                  <li key={`${requirement}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{requirement}</li>
+                ))
+              )}
+            </ul>
+          </section>
+
+          <section>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Parsed responsibilities</p>
+            <ul className="mt-2 space-y-2 text-xs text-slate-700">
+              {responsibilities.length === 0 ? (
+                <li className="text-slate-400">No responsibilities parsed yet.</li>
+              ) : (
+                responsibilities.map((responsibility, index) => (
+                  <li key={`${responsibility}-${index}`} className="rounded-md border border-slate-200 bg-slate-50 p-2">{responsibility}</li>
+                ))
+              )}
+            </ul>
+          </section>
         </div>
-        <p className="text-[11px] text-slate-500 mt-4">Reference only — active work stays in the center panel.</p>
+
+        <p className="text-[11px] text-slate-500 mt-4">Reference-only context. Editing happens in listing review and document steps.</p>
       </aside>
 
       <main className={cn("flex-1 overflow-y-auto p-4 sm:p-6", chatOpen && "hidden md:block")}>
-        {phase === "listing_analysis_loading" && <LoadingState title="Preparing listing analysis" detail="Keeping your Run workspace loaded while analysis context initializes." />}
+        <div className="max-w-4xl mx-auto space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <h1 className="text-xl font-bold text-slate-900">Work History Evidence Alignment</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Match listing requirements and responsibilities to stored profile and prior work evidence before generating resume and cover letter.
+            </p>
+          </div>
 
-        {phase === "listing_analysis" && (
-          <div className="max-w-3xl mx-auto space-y-4">
-            <h1 className="text-xl font-bold text-slate-900">Listing Analysis</h1>
-            <p className="text-sm text-slate-600">Role: {workflow.listing?.title} at {workflow.listing?.company_name}.</p>
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs uppercase tracking-wide font-semibold text-slate-500">Fit & Evidence summary</p>
-              <p className="text-sm text-slate-700 mt-2">Review listing requirements, validate critical evidence, then continue into resume generation without leaving this workspace.</p>
+          {evidenceMap.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+              No parsed requirements or responsibilities found yet. Update the listing review first, then return here.
             </div>
-            <button onClick={() => setPhase("resume_loading")} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2">
+          ) : (
+            <div className="space-y-3">
+              {evidenceMap.map((entry, idx) => (
+                <section key={`${entry.source}-${idx}`} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-full">{entry.source}</span>
+                    <p className="text-sm font-medium text-slate-900">{entry.item}</p>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Matched profile data</p>
+                      {entry.matchedProfileData.length === 0 ? (
+                        <p className="text-xs text-slate-400 mt-1">No direct profile term match yet.</p>
+                      ) : (
+                        <ul className="mt-1 space-y-1 text-xs text-slate-600">
+                          {entry.matchedProfileData.map((match) => (
+                            <li key={match} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{match}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Matched work-history evidence</p>
+                      {entry.matchedWorkHistory.length === 0 ? (
+                        <p className="text-xs text-slate-400 mt-1">No matching employment entry found yet.</p>
+                      ) : (
+                        <ul className="mt-1 space-y-1 text-xs text-slate-600">
+                          {entry.matchedWorkHistory.map((match) => (
+                            <li key={match} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{match}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  {entry.missing && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs font-semibold text-amber-800">Evidence recovery guidance</p>
+                      <ul className="mt-1 list-disc pl-4 space-y-1 text-xs text-amber-900">
+                        {PLACEHOLDER_GUIDANCE.map((tip) => (
+                          <li key={tip}>{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => router.push(`/jobs/${id}/resume`)}
+              className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2"
+            >
               Continue to Resume <ArrowRight className="w-4 h-4" />
             </button>
           </div>
-        )}
-
-        {phase === "resume_loading" && <LoadingState title="Building resume" detail="Generating a role-tailored resume draft in the center panel." />}
-
-        {phase === "resume_workspace" && (
-          <div className="max-w-3xl mx-auto space-y-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-xl font-bold text-slate-900">Resume Workspace</h1>
-              <button onClick={saveResume} disabled={!resumeDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">Save resume</button>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-              {resumeSections.map((section) => (
-                <div key={section.id}>
-                  <p className="text-xs font-semibold uppercase text-slate-500 mb-1">{section.title}</p>
-                  <textarea
-                    value={section.content}
-                    onChange={(e) => {
-                      setResumeSections((prev) => prev.map((s) => s.id === section.id ? { ...s, content: e.target.value } : s));
-                      setResumeDirty(true);
-                    }}
-                    className="w-full min-h-[120px] rounded-lg border border-slate-200 p-3 text-sm"
-                  />
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setPhase("optional_cover_letter_decision")} className="btn-ocean px-4 py-2 rounded-lg text-white">Continue</button>
-          </div>
-        )}
-
-        {phase === "optional_cover_letter_decision" && (
-          <div className="max-w-2xl mx-auto space-y-4">
-            <h1 className="text-xl font-bold text-slate-900">Cover Letter Decision</h1>
-            <p className="text-sm text-slate-600">Choose whether to generate a cover letter before moving to Application Overview.</p>
-            <div className="flex gap-3">
-              <button onClick={() => { setIncludeCoverLetter(true); setPhase("cover_letter_loading"); }} className="px-4 py-2 rounded-lg bg-slate-900 text-white">Generate cover letter</button>
-              <button onClick={() => { setIncludeCoverLetter(false); setPhase("application_overview"); }} className="px-4 py-2 rounded-lg border border-slate-200 bg-white">Skip for now</button>
-            </div>
-          </div>
-        )}
-
-        {phase === "cover_letter_loading" && <LoadingState title="Building cover letter" detail="Generating a tailored letter while keeping this Run active." />}
-
-        {phase === "cover_letter_workspace" && (
-          <div className="max-w-3xl mx-auto space-y-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-xl font-bold text-slate-900">Cover Letter Workspace</h1>
-              <button onClick={saveCoverLetter} disabled={!coverDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">Save cover letter</button>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-5">
-              <textarea
-                value={coverLetterContent}
-                onChange={(e) => { setCoverLetterContent(e.target.value); setCoverDirty(true); }}
-                className="w-full min-h-[360px] rounded-lg border border-slate-200 p-3 text-sm"
-              />
-            </div>
-            <button onClick={() => setPhase("application_overview")} className="btn-ocean px-4 py-2 rounded-lg text-white">Continue to overview</button>
-          </div>
-        )}
-
-        {phase === "application_overview" && (
-          <div className="max-w-4xl mx-auto space-y-5">
-            <h1 className="text-2xl font-bold text-slate-900">Application Overview</h1>
-            <p className="text-sm text-slate-600">Post-creation hub for this Run.</p>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <section className="rounded-xl border border-slate-200 bg-white p-4">
-                <h2 className="font-semibold text-slate-900">Submission Materials</h2>
-                <div className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-center justify-between"><span className="inline-flex items-center gap-2"><FileText className="w-4 h-4" />Resume</span>{resumeSaved ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-slate-300" />}</div>
-                  <div className="flex items-center justify-between"><span className="inline-flex items-center gap-2"><Mail className="w-4 h-4" />Cover Letter</span>{coverSaved ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Circle className="w-4 h-4 text-slate-300" />}</div>
-                </div>
-                <div className="mt-3 space-y-2">
-                  <Link href={`/jobs/${id}/export`} className={cn("inline-flex px-3 py-2 rounded-lg text-sm", resumeSaved ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 pointer-events-none")}>Export Resume</Link>
-                  <div>
-                    <button disabled={!coverSaved} className={cn("px-3 py-2 rounded-lg text-sm", coverSaved ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")}>Export Cover Letter</button>
-                  </div>
-                  <div>
-                    <button disabled={!(resumeSaved && coverSaved)} className={cn("px-3 py-2 rounded-lg text-sm", resumeSaved && coverSaved ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-400")}>Combined Export</button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="rounded-xl border border-slate-200 bg-white p-4">
-                <h2 className="font-semibold text-slate-900">Application Support</h2>
-                <p className="mt-1 text-xs text-slate-500">Support unlocks after required core materials are complete.</p>
-                <div className="mt-3 space-y-2">
-                  <Link href={`/jobs/${id}/interview-guide`} className={cn("block px-3 py-2 rounded-lg text-sm", supportUnlocked ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 pointer-events-none")}>Interview support</Link>
-                  <button disabled={!supportUnlocked} className={cn("w-full text-left px-3 py-2 rounded-lg text-sm", supportUnlocked ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")}>Follow-up support</button>
-                  <Link href={`/jobs/${id}/negotiation-guide`} className={cn("block px-3 py-2 rounded-lg text-sm", supportUnlocked ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400 pointer-events-none")}>Negotiation support</Link>
-                </div>
-              </section>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Saved preview</p>
-              <MarkdownDoc content={coverLetterContent || "No cover letter saved yet."} />
-            </div>
-          </div>
-        )}
+        </div>
       </main>
 
       <div className="hidden lg:flex lg:w-[360px] lg:min-w-0 lg:border-l lg:border-slate-200">
-        <AiChatPanel workflowId={id} surface={surface} className="flex-1 h-full" />
+        <AiChatPanel workflowId={id} surface="work_history" className="flex-1 h-full" />
       </div>
 
       <button
@@ -342,11 +286,11 @@ export default function RunWorkspacePage({ params }: Props) {
         className="md:hidden fixed z-30 btn-ocean w-10 h-10 rounded-full text-white shadow-lg flex items-center justify-center"
         style={{ top: "calc(var(--mobile-nav-height, 88px) + 6px)", right: "1rem" }}
       >
-        <Sparkles className="w-4 h-4" />
+        AI
       </button>
       {chatOpen && (
         <div className="md:hidden fixed inset-0 z-50">
-          <AiChatPanel workflowId={id} surface={surface} onClose={() => setChatOpen(false)} className="h-full" />
+          <AiChatPanel workflowId={id} surface="work_history" onClose={() => setChatOpen(false)} className="h-full" />
         </div>
       )}
     </div>

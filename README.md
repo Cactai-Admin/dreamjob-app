@@ -1,14 +1,14 @@
 # DreamJob
 
-AI-assisted job application platform for mid-career professionals. DreamJob now runs as a single persistent Run workspace per opportunity: Listing Review (2-column) transitions into a state-driven 3-column Run shell where the center phase changes while left reference context and right chat remain persistent.
+AI-assisted job application platform for mid-career professionals. DreamJob now runs a v2 sequence per opportunity: Listing Review (2-column) transitions into a three-column Work History evidence-alignment workspace, then Resume, Cover Letter, and finally Overview while preserving left reference context and right persistent chat.
 
 ## Features
 
 - **Listing intake** — Paste a job URL for AI-powered parsing, or enter details manually. AI auto-discovers company website and scrapes LinkedIn URL from the footer.
 - **Listing review** — Edit all parsed fields, view a live match score against your profile skills, find LinkedIn connections at the company.
 - **AI document generation** — Resume, cover letter, interview guide, and negotiation guide — each tailored to the specific listing.
-- **Persistent Run workspace** — After Listing Review, users stay in one 3-column shell (left reference context, center active state/artifact, right persistent chat).
-- **Center-state progression** — Listing analysis loading → listing analysis → resume loading/workspace → optional cover-letter decision/loading/workspace → Application Overview.
+- **Work History bridge step** — After Listing Review, users land in a 3-column Work History evidence-mapping workspace (left listing context, center mapping, right persistent chat).
+- **Core sequence** — Listing Review → Work History → Resume → Cover Letter → Overview.
 - **Trustworthy export gating** — Resume export requires saved resume, cover-letter export requires saved cover letter, combined export requires both saved.
 - **Application state persistence** — Documents auto-save every 2 seconds; approved status persists across sessions.
 - **LinkedIn integration** — Browser-based company research, connection discovery (1st/2nd/3rd degree), and LinkedIn URL scraping.
@@ -63,9 +63,10 @@ src/
 │       ├── jobs/             # Active applications
 │       │   ├── page.tsx      # Applications list
 │       │   └── [id]/         # Application detail + doc editors
-│       │       ├── page.tsx          # Persistent Run workspace + center-state controller
-│       │       ├── resume/           # Legacy compatibility redirect to Run workspace
-│       │       ├── cover-letter/     # Legacy compatibility redirect to Run workspace
+│       │       ├── page.tsx          # Work History evidence-alignment workspace
+│       │       ├── resume/           # Resume generation + editing workspace
+│       │       ├── cover-letter/     # Cover letter generation + editing workspace
+│       │       ├── overview/         # Concluding hub (submission + support spokes)
 │       │       ├── interview-guide/  # Interview guide editor
 │       │       ├── negotiation-guide/ # Negotiation guide editor
 │       │       └── export/           # Copy / download all docs
@@ -119,12 +120,12 @@ Analyze page
 Listings page
   → select listing → review match score, connections → Start Application
 
-Application detail (persistent Run workspace)
-  → center shows listing analysis states, then resume workspace
-  → optional cover letter decision keeps shell loaded
-  → center inline loading transitions occur between major phases
-  → left sidebar accumulates retained context only (Listing, Fit & Evidence, saved outputs)
-  → Application Overview becomes the post-creation hub
+Application detail (v2 workflow)
+  → Work History step maps listing requirements/responsibilities to stored profile + work history evidence
+  → placeholder guidance appears for missing evidence signals before document generation
+  → Resume workspace follows Work History
+  → Cover Letter workspace follows Resume (or user can skip)
+  → Overview becomes the post-creation hub
     - Submission Materials spoke (resume/cover/export readiness)
     - Application Support spoke (interview/follow-up/negotiation), gated until core materials complete
 ```
