@@ -4,7 +4,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, Plus, X } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView } from "@/components/workflow/reference-views";
@@ -29,30 +29,25 @@ type EvidenceMatch = {
   key: string;
   source: string;
   item: string;
-  matchedProfileData: string[];
-  matchedWorkHistory: string[];
-  customEvidence: string[];
-  note: string;
+  extractedEvidence: string;
+  customEvidence: string;
+  evidenceValue: string;
   missing: boolean;
 };
 
-const PLACEHOLDER_GUIDANCE = [
-  "Achievement example with clear business impact",
-  "Tool or platform usage in a real project",
-  "Quota/performance evidence or KPI movement",
-  "Client/stakeholder scope and interaction level",
-  "Ownership or leadership signal",
-  "Measurable outcome (time, revenue, quality, risk)",
-  "Cross-functional collaboration detail",
-  "Domain/workflow exposure relevant to this role",
-];
-
-function parseResponsibilities(raw: string | null | undefined): string[] {
+function parseStructuredItems(raw: unknown): string[] {
   if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0 && entry.length <= 220);
+  }
+  if (typeof raw !== "string") return [];
   return raw
-    .split(/\n|•|\*/)
+    .split(/\n|•|\*|;/)
     .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+    .filter((entry) => entry.length > 0 && entry.length <= 220);
 }
 
 function splitTerms(text: string): string[] {
@@ -70,6 +65,22 @@ function hasSharedSignal(item: string, candidate: string): boolean {
   return itemTerms.some((term) => candidateLower.includes(term));
 }
 
+function cleanEvidence(entry: string): string {
+  const trimmed = entry.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= 180) return trimmed;
+  return `${trimmed.slice(0, 177).trimEnd()}…`;
+}
+
+function deriveNiceToHaves(parsedData: unknown): string[] {
+  if (!parsedData || typeof parsedData !== "object") return [];
+  const parsed = parsedData as Record<string, unknown>;
+  const fromPreferred = parseStructuredItems(parsed.preferred_qualifications);
+  const fromNiceToHave = parseStructuredItems(parsed.nice_to_haves);
+  const fromNiceToHaves = parseStructuredItems(parsed.nice_to_have);
+  return [...new Set([...fromPreferred, ...fromNiceToHave, ...fromNiceToHaves])];
+}
+
 export default function WorkHistoryPage({ params }: Props) {
   const { id } = use(params);
   const router = useRouter();
@@ -80,8 +91,8 @@ export default function WorkHistoryPage({ params }: Props) {
   const [employment, setEmployment] = useState<EmploymentRecord[]>([]);
   const [alignmentSaving, setAlignmentSaving] = useState(false);
   const [alignmentSaved, setAlignmentSaved] = useState(false);
-  const [customEvidenceByItem, setCustomEvidenceByItem] = useState<Record<string, string[]>>({});
-  const [notesByItem, setNotesByItem] = useState<Record<string, string>>({});
+  const [customEvidenceByItem, setCustomEvidenceByItem] = useState<Record<string, string>>({});
+  const [editingEvidenceKey, setEditingEvidenceKey] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -122,9 +133,9 @@ export default function WorkHistoryPage({ params }: Props) {
     [workflow?.listing?.requirements],
   );
 
-  const responsibilities = useMemo(
-    () => parseResponsibilities(workflow?.listing?.responsibilities),
-    [workflow?.listing?.responsibilities],
+  const niceToHaves = useMemo(
+    () => deriveNiceToHaves(workflow?.listing?.parsed_data),
+    [workflow?.listing?.parsed_data],
   );
 
   const employmentEvidence = useMemo(() => {
@@ -144,46 +155,52 @@ export default function WorkHistoryPage({ params }: Props) {
   const evidenceMap = useMemo(() => {
     const listingItems = [
       ...requirements.map((item) => ({ source: "Requirement", item })),
-      ...responsibilities.map((item) => ({ source: "Responsibility", item })),
+      ...niceToHaves.map((item) => ({ source: "Nice to have", item })),
     ];
 
     const mapped: EvidenceMatch[] = listingItems.map(({ source, item }) => {
       const key = `${source}:${item}`;
       const matchedProfileData = profileTerms.filter((term) => hasSharedSignal(item, term)).slice(0, 4);
       const matchedWorkHistory = employmentEvidence.filter((entry) => hasSharedSignal(item, entry)).slice(0, 3);
-      const customEvidence = (customEvidenceByItem[key] ?? []).map((entry) => entry.trim()).filter(Boolean);
+      const customEvidence = (customEvidenceByItem[key] ?? "").trim();
+      const extractedEvidence = cleanEvidence(
+        matchedWorkHistory[0]
+          ?? matchedProfileData[0]
+          ?? ""
+      );
+      const evidenceValue = customEvidence || extractedEvidence;
 
       return {
         key,
         source,
         item,
-        matchedProfileData,
-        matchedWorkHistory,
+        extractedEvidence,
         customEvidence,
-        note: notesByItem[key] ?? "",
-        missing: matchedProfileData.length === 0 && matchedWorkHistory.length === 0 && customEvidence.length === 0,
+        evidenceValue,
+        missing: evidenceValue.length === 0,
       };
     });
 
     return mapped;
-  }, [requirements, responsibilities, profileTerms, employmentEvidence, customEvidenceByItem, notesByItem]);
+  }, [requirements, niceToHaves, profileTerms, employmentEvidence, customEvidenceByItem]);
 
   useEffect(() => {
     if (!workflow?.notes) return;
     try {
       const parsed = JSON.parse(workflow.notes) as {
-        evidence_alignment?: Array<{ key: string; customEvidence?: string[]; note?: string }>;
+        evidence_alignment?: Array<{ key: string; customEvidence?: string[] | string }>;
       };
       const alignment = parsed?.evidence_alignment ?? [];
       if (alignment.length === 0) return;
-      const evidenceDrafts: Record<string, string[]> = {};
-      const notesDrafts: Record<string, string> = {};
+      const evidenceDrafts: Record<string, string> = {};
       alignment.forEach((entry) => {
-        evidenceDrafts[entry.key] = Array.isArray(entry.customEvidence) ? entry.customEvidence : [];
-        notesDrafts[entry.key] = entry.note ?? "";
+        if (Array.isArray(entry.customEvidence)) {
+          evidenceDrafts[entry.key] = (entry.customEvidence[0] ?? "").trim();
+        } else {
+          evidenceDrafts[entry.key] = (entry.customEvidence ?? "").trim();
+        }
       });
       setCustomEvidenceByItem(evidenceDrafts);
-      setNotesByItem(notesDrafts);
     } catch {
       // legacy notes format
     }
@@ -197,10 +214,9 @@ export default function WorkHistoryPage({ params }: Props) {
       key: entry.key,
       source: entry.source,
       item: entry.item,
-      matchedProfileData: entry.matchedProfileData,
-      matchedWorkHistory: entry.matchedWorkHistory,
-      customEvidence: entry.customEvidence,
-      note: entry.note,
+      matchedProfileData: entry.extractedEvidence ? [entry.extractedEvidence] : [],
+      matchedWorkHistory: [],
+      customEvidence: entry.customEvidence ? [entry.customEvidence] : [],
       missing: entry.missing,
     }));
     const nextNotes = JSON.stringify({ evidence_alignment: evidenceAlignment });
@@ -256,13 +272,13 @@ export default function WorkHistoryPage({ params }: Props) {
           <div className="rounded-xl border border-slate-200 bg-white p-4">
             <h1 className="text-xl font-bold text-slate-900">Work History Evidence Alignment</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Match listing requirements and responsibilities to stored profile and prior work evidence before generating resume and cover letter.
+              Match listing requirements and nice-to-haves to concise evidence before generating resume and cover letter.
             </p>
           </div>
 
           {evidenceMap.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-              No parsed requirements or responsibilities found yet. Update the listing review first, then return here.
+              No parsed requirements or nice-to-haves found yet. Update the listing review first, then return here.
             </div>
           ) : (
             <div className="space-y-3">
@@ -273,105 +289,54 @@ export default function WorkHistoryPage({ params }: Props) {
                     <p className="text-sm font-medium text-slate-900">{entry.item}</p>
                   </div>
 
-                  <div className="grid md:grid-cols-2 gap-3">
+                  <div className="grid md:grid-cols-2 gap-3 items-start">
                     <div>
-                      <p className="text-xs font-semibold text-slate-700">Matched profile data</p>
-                      {entry.matchedProfileData.length === 0 ? (
-                        <p className="text-xs text-slate-400 mt-1">No direct profile term match yet.</p>
+                      <p className="text-xs font-semibold text-slate-700">Evidence</p>
+                      {!entry.missing ? (
+                        <p className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                          {entry.evidenceValue}
+                        </p>
                       ) : (
-                        <ul className="mt-1 space-y-1 text-xs text-slate-600">
-                          {entry.matchedProfileData.map((match) => (
-                            <li key={match} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{match}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">Matched work-history evidence</p>
-                      {entry.matchedWorkHistory.length === 0 && entry.customEvidence.length === 0 ? (
-                        <p className="text-xs text-slate-400 mt-1">No matching employment entry found yet.</p>
-                      ) : (
-                        <ul className="mt-1 space-y-1 text-xs text-slate-600">
-                          {entry.matchedWorkHistory.map((match) => (
-                            <li key={match} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">{match}</li>
-                          ))}
-                          {entry.customEvidence.map((match, customIdx) => (
-                            <li key={`${entry.key}-custom-${customIdx}`} className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-sky-900">{match}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    <p className="text-xs font-semibold text-slate-700">Refine evidence alignment</p>
-                    {(customEvidenceByItem[entry.key] ?? []).map((value, customIdx) => (
-                      <div key={`${entry.key}-edit-${customIdx}`} className="flex items-center gap-2">
-                        <input
-                          value={value}
-                          onChange={(event) => {
-                            const nextValue = event.target.value;
-                            setCustomEvidenceByItem((prev) => ({
-                              ...prev,
-                              [entry.key]: (prev[entry.key] ?? []).map((item, idx) => (idx === customIdx ? nextValue : item)),
-                            }));
-                            setAlignmentSaved(false);
-                          }}
-                          className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
-                          placeholder="Add concrete evidence for this requirement"
-                        />
                         <button
                           type="button"
-                          onClick={() => {
-                            setCustomEvidenceByItem((prev) => ({
-                              ...prev,
-                              [entry.key]: (prev[entry.key] ?? []).filter((_, idx) => idx !== customIdx),
-                            }));
+                          onClick={() => setEditingEvidenceKey(entry.key)}
+                          className="mt-1 rounded-md border border-dashed border-slate-300 bg-white px-2 py-1 text-left text-xs text-slate-500 hover:border-sky-300 hover:text-sky-700"
+                        >
+                          Click to add evidence for this item
+                        </button>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-700">Refine evidence</p>
+                      {editingEvidenceKey === entry.key ? (
+                        <input
+                          value={customEvidenceByItem[entry.key] ?? ""}
+                          onChange={(event) => {
+                            setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
                             setAlignmentSaved(false);
                           }}
-                          className="rounded border border-slate-200 bg-white p-1 text-slate-500"
-                          aria-label="Remove evidence entry"
+                          onBlur={() => setEditingEvidenceKey(null)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              setEditingEvidenceKey(null);
+                            }
+                          }}
+                          autoFocus
+                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
+                          placeholder="Add concise evidence for this listing item"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingEvidenceKey(entry.key)}
+                          className="mt-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700"
                         >
-                          <X className="w-3 h-3" />
+                          {entry.customEvidence ? "Edit entered evidence" : "Enter evidence inline"}
                         </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomEvidenceByItem((prev) => ({
-                          ...prev,
-                          [entry.key]: [...(prev[entry.key] ?? []), ""],
-                        }));
-                        setAlignmentSaved(false);
-                      }}
-                      className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Add evidence item
-                    </button>
-                    <textarea
-                      value={notesByItem[entry.key] ?? ""}
-                      onChange={(event) => {
-                        setNotesByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
-                        setAlignmentSaved(false);
-                      }}
-                      className="w-full min-h-[68px] rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
-                      placeholder="Add alignment note: how this evidence supports the listing item."
-                    />
-                  </div>
-
-                  {entry.missing && (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                      <p className="text-xs font-semibold text-amber-800">Evidence recovery guidance</p>
-                      <ul className="mt-1 list-disc pl-4 space-y-1 text-xs text-amber-900">
-                        {PLACEHOLDER_GUIDANCE.map((tip) => (
-                          <li key={tip}>{tip}</li>
-                        ))}
-                      </ul>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </section>
               ))}
             </div>

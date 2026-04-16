@@ -250,9 +250,7 @@ export function TopNav() {
                   ? "Current stage"
                   : completed
                     ? "Completed stage"
-                    : available
-                      ? "Available stage"
-                      : "Blocked stage";
+                    : "Upcoming stage";
                 return (
                   <button
                     key={href}
@@ -263,7 +261,7 @@ export function TopNav() {
                       "px-3 py-1.5 rounded-md text-xs font-medium transition-colors border",
                       active && "bg-sky-50 text-sky-800 border-sky-300 shadow-sm",
                       completed && "text-emerald-700 bg-emerald-50 border-emerald-300",
-                      available && "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100",
+                      available && "text-slate-500 bg-white border-slate-300 hover:bg-slate-50",
                       blocked && "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed"
                     )}
                   >
@@ -273,7 +271,7 @@ export function TopNav() {
                       ) : completed ? (
                         <CircleCheck className="w-3 h-3 text-emerald-600" />
                       ) : available ? (
-                        <Circle className="w-3 h-3 text-amber-500" />
+                        <Circle className="w-3 h-3 text-slate-400" />
                       ) : (
                         <Lock className="w-3 h-3 text-slate-400" />
                       )}
