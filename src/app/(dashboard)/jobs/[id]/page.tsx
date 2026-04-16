@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
-import { EvidenceAlignmentReferenceView, ListingReferenceView } from "@/components/workflow/reference-views";
+import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { parseRequirements } from "@/lib/listing-match";
@@ -25,12 +25,9 @@ interface EmploymentRecord {
   tools?: string[];
 }
 
-type EvidenceMatch = {
-  key: string;
-  source: string;
-  item: string;
+type EvidenceMatch = EvidenceReferenceItem & {
   extractedEvidence: string;
-  customEvidence: string;
+  customEvidenceText: string;
   evidenceValue: string;
   missing: boolean;
 };
@@ -162,20 +159,23 @@ export default function WorkHistoryPage({ params }: Props) {
       const key = `${source}:${item}`;
       const matchedProfileData = profileTerms.filter((term) => hasSharedSignal(item, term)).slice(0, 4);
       const matchedWorkHistory = employmentEvidence.filter((entry) => hasSharedSignal(item, entry)).slice(0, 3);
-      const customEvidence = (customEvidenceByItem[key] ?? "").trim();
+      const customEvidenceText = (customEvidenceByItem[key] ?? "").trim();
       const extractedEvidence = cleanEvidence(
         matchedWorkHistory[0]
           ?? matchedProfileData[0]
           ?? ""
       );
-      const evidenceValue = customEvidence || extractedEvidence;
+      const evidenceValue = customEvidenceText || extractedEvidence;
 
       return {
         key,
         source,
         item,
+        matchedProfileData,
+        matchedWorkHistory,
+        customEvidence: customEvidenceText ? [customEvidenceText] : [],
         extractedEvidence,
-        customEvidence,
+        customEvidenceText,
         evidenceValue,
         missing: evidenceValue.length === 0,
       };
@@ -214,9 +214,9 @@ export default function WorkHistoryPage({ params }: Props) {
       key: entry.key,
       source: entry.source,
       item: entry.item,
-      matchedProfileData: entry.extractedEvidence ? [entry.extractedEvidence] : [],
-      matchedWorkHistory: [],
-      customEvidence: entry.customEvidence ? [entry.customEvidence] : [],
+      matchedProfileData: entry.matchedProfileData,
+      matchedWorkHistory: entry.matchedWorkHistory,
+      customEvidence: entry.customEvidence ?? [],
       missing: entry.missing,
     }));
     const nextNotes = JSON.stringify({ evidence_alignment: evidenceAlignment });
@@ -332,7 +332,7 @@ export default function WorkHistoryPage({ params }: Props) {
                           onClick={() => setEditingEvidenceKey(entry.key)}
                           className="mt-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700"
                         >
-                          {entry.customEvidence ? "Edit entered evidence" : "Enter evidence inline"}
+                          {entry.customEvidenceText ? "Edit entered evidence" : "Enter evidence inline"}
                         </button>
                       )}
                     </div>
