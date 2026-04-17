@@ -9,6 +9,7 @@ import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
+import { getSaveButtonLabel } from "@/lib/workflow/completion";
 import { cn } from "@/lib/utils";
 import { normalizeCanonicalListing, type CanonicalEvidenceMapItem } from "@/lib/ai/context/canonical-listing";
 
@@ -68,7 +69,6 @@ export default function WorkHistoryPage({ params }: Props) {
   const [alignmentSaving, setAlignmentSaving] = useState(false);
   const [alignmentSaved, setAlignmentSaved] = useState(false);
   const [customEvidenceByItem, setCustomEvidenceByItem] = useState<Record<string, string>>({});
-  const [editingEvidenceKey, setEditingEvidenceKey] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -283,54 +283,24 @@ export default function WorkHistoryPage({ params }: Props) {
                     <p className="text-sm font-medium text-slate-900">{entry.item}</p>
                   </div>
 
-                  <div className="grid md:grid-cols-2 gap-3 items-start">
+                  <div>
                     <div>
                       <p className="text-xs font-semibold text-slate-700">Evidence</p>
-                      {!entry.missing ? (
-                        <p className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700">
-                          {entry.evidenceValue}
-                        </p>
-                      ) : (
-                        <input
-                          value={customEvidenceByItem[entry.key] ?? ""}
-                          onChange={(event) => {
-                            setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
-                            setAlignmentSaved(false);
-                          }}
-                          className="mt-1 w-full rounded-md border border-dashed border-slate-300 bg-white px-2 py-1 text-xs"
-                          placeholder={entry.placeholder}
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-700">Refine evidence</p>
-                      {editingEvidenceKey === entry.key ? (
-                        <input
-                          value={customEvidenceByItem[entry.key] ?? ""}
-                          onChange={(event) => {
-                            setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
-                            setAlignmentSaved(false);
-                          }}
-                          onBlur={() => setEditingEvidenceKey(null)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              setEditingEvidenceKey(null);
-                            }
-                          }}
-                          autoFocus
-                          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
-                          placeholder="Add concise evidence for this listing item"
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setEditingEvidenceKey(entry.key)}
-                          className="mt-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700"
-                        >
-                          {entry.customEvidenceText ? "Edit entered evidence" : "Enter evidence inline"}
-                        </button>
-                      )}
+                      <input
+                        value={customEvidenceByItem[entry.key] ?? entry.extractedEvidence}
+                        onChange={(event) => {
+                          setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
+                          setAlignmentSaved(false);
+                        }}
+                        className={cn(
+                          "mt-1 w-full rounded-md border bg-white px-2 py-1 text-xs",
+                          entry.missing ? "border-dashed border-slate-300" : "border-slate-300",
+                        )}
+                        placeholder={entry.placeholder}
+                      />
+                      {entry.extractedEvidence ? (
+                        <p className="mt-1 text-[11px] text-slate-500">Suggested from profile/listing: {entry.extractedEvidence}</p>
+                      ) : null}
                     </div>
                   </div>
                 </section>
@@ -344,7 +314,7 @@ export default function WorkHistoryPage({ params }: Props) {
               disabled={alignmentSaving}
               className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50"
             >
-              {alignmentSaving ? "Saving..." : alignmentSaved ? "Saved" : "Save alignment"}
+              {alignmentSaved ? "Saved" : `${getSaveButtonLabel(alignmentSaving ? "saving" : "idle")} alignment`}
             </button>
             <button
               onClick={continueToResume}

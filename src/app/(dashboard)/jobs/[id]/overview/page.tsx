@@ -6,30 +6,11 @@ import { CheckCircle2, Circle, FileText, Loader2, Mail, Sparkles } from "lucide-
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import type { Workflow } from "@/lib/types";
+import { getWorkflowSupportState } from "@/lib/workflow/state";
 import { cn } from "@/lib/utils";
 
 interface Props {
   params: Promise<{ id: string }>;
-}
-
-function readInterviewMeta(notes: string | null | undefined): { date?: string; time?: string } {
-  if (!notes) return {};
-  try {
-    const parsed = JSON.parse(notes) as { date?: string; time?: string };
-    return parsed ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function readOfferMeta(notes: string | null | undefined): { amount?: string; details?: string } {
-  if (!notes) return {};
-  try {
-    const parsed = JSON.parse(notes) as { amount?: string; details?: string };
-    return parsed ?? {};
-  } catch {
-    return {};
-  }
 }
 
 export default function ApplicationHubPage({ params }: Props) {
@@ -60,18 +41,14 @@ export default function ApplicationHubPage({ params }: Props) {
     return () => clearTimeout(timer);
   }, [loadWorkflow]);
 
-  const resumeSaved = Boolean(workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
-  const coverSaved = Boolean(workflow?.outputs?.find((o) => o.type === "cover_letter" && o.is_current));
-  const supportUnlocked = resumeSaved && coverSaved;
-
-  const interviewEvent = useMemo(() => (workflow?.status_events ?? []).find((event) => event.event_type === "interview_scheduled"), [workflow?.status_events]);
-  const offerEvent = useMemo(() => (workflow?.status_events ?? []).find((event) => event.event_type === "offer_received"), [workflow?.status_events]);
-
-  const interviewMeta = useMemo(() => readInterviewMeta(interviewEvent?.notes), [interviewEvent?.notes]);
-  const offerMeta = useMemo(() => readOfferMeta(offerEvent?.notes), [offerEvent?.notes]);
-
-  const interviewUnlocked = supportUnlocked && Boolean(interviewMeta.date && interviewMeta.time);
-  const negotiationUnlocked = supportUnlocked && Boolean(offerMeta.amount && offerMeta.details);
+  const {
+    resumeSaved,
+    coverSaved,
+    supportUnlocked,
+    interviewMeta,
+    interviewUnlocked,
+    negotiationUnlocked,
+  } = useMemo(() => getWorkflowSupportState(workflow), [workflow]);
 
   const activateInterview = async () => {
     if (!interviewDate || !interviewTime) {
@@ -168,7 +145,7 @@ export default function ApplicationHubPage({ params }: Props) {
 
       <main className={cn("flex-1 overflow-y-auto p-4 sm:p-6", chatOpen && "hidden md:block")}>
         <div className="max-w-4xl mx-auto space-y-5">
-          <h1 className="text-2xl font-bold text-slate-900">Application Hub</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Final Hub</h1>
           <p className="text-sm text-slate-600">Core packet is complete here, then support workflows continue the same run context.</p>
 
           {activationError ? <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{activationError}</p> : null}
