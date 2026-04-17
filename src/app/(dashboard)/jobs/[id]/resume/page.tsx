@@ -8,23 +8,13 @@ import { ArrowRight, Loader2, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
-import type { DocumentSection, Output, Workflow } from "@/lib/types";
+import type { Workflow } from "@/lib/types";
 import { getSaveButtonLabel } from "@/lib/workflow/completion";
+import { parseNativeDocument, serializeNativeDocument, type NativeDocument, type NativeDocumentSection } from "@/lib/documents/native-document";
 import { cn } from "@/lib/utils";
 
 interface Props {
   params: Promise<{ id: string }>;
-}
-
-function parseSections(output?: Output): DocumentSection[] {
-  if (!output) return [];
-  try {
-    const parsed = JSON.parse(output.content);
-    if (Array.isArray(parsed)) return parsed as DocumentSection[];
-  } catch {
-    // fallback
-  }
-  return [{ id: "main", title: "Resume", content: output.content }];
 }
 
 export default function ResumeWorkspacePage({ params }: Props) {
@@ -35,9 +25,10 @@ export default function ResumeWorkspacePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [resumeSections, setResumeSections] = useState<DocumentSection[]>([]);
+  const [resumeDoc, setResumeDoc] = useState<NativeDocument | null>(null);
   const [resumeDirty, setResumeDirty] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [googleSyncState, setGoogleSyncState] = useState<{ status: string; message: string; url?: string } | null>(null);
   const [confirmDeleteApplication, setConfirmDeleteApplication] = useState(false);
   const [confirmDeleteResume, setConfirmDeleteResume] = useState(false);
   const [deletingApplication, setDeletingApplication] = useState(false);
@@ -51,7 +42,12 @@ export default function ResumeWorkspacePage({ params }: Props) {
     }
     setWorkflow(wf);
     const resumeOut = wf.outputs?.find((o) => o.type === "resume" && o.is_current);
-    setResumeSections(parseSections(resumeOut));
+    setResumeDoc(parseNativeDocument("resume", resumeOut));
+    const syncDoc = (wf.autosave_data as { google_docs_sync?: { docs?: { resume?: { documentUrl?: string; syncState?: string; error?: string } } } } | null)
+      ?.google_docs_sync?.docs?.resume;
+    if (syncDoc) {
+      setGoogleSyncState({ status: syncDoc.syncState ?? "pending", message: syncDoc.error ?? "Google Docs linked.", url: syncDoc.documentUrl });
+    }
     setLoading(false);
     return wf;
   };
@@ -97,7 +93,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
       if (resumeOut) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         setWorkflow(wf);
-        setResumeSections(parseSections(resumeOut));
+        setResumeDoc(parseNativeDocument("resume", resumeOut));
         setGenerating(false);
       }
     }, 2500);
@@ -105,21 +101,28 @@ export default function ResumeWorkspacePage({ params }: Props) {
 
   const saveResume = async () => {
     setSaveState("saving");
-    await fetch(`/api/workflows/${id}/outputs`, {
+    const saveResult = await fetch(`/api/workflows/${id}/outputs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "resume", content: JSON.stringify(resumeSections) }),
-    });
+      body: JSON.stringify({ type: "resume", content: serializeNativeDocument(resumeDoc ?? parseNativeDocument("resume")) }),
+    }).then((r) => r.json()).catch(() => null);
+    if (saveResult?.google_sync) {
+      setGoogleSyncState({
+        status: saveResult.google_sync.status,
+        message: saveResult.google_sync.message,
+        url: saveResult.google_sync.documentUrl,
+      });
+    }
     setResumeDirty(false);
     setSaveState("saved");
     await loadWorkflow();
   };
 
   useEffect(() => {
-    if (!loading && !resumeSaved && resumeSections.length === 0) {
+    if (!loading && !resumeSaved && (resumeDoc?.sections.length ?? 0) === 0) {
       void ensureGeneration();
     }
-  }, [loading, resumeSaved, resumeSections.length]);
+  }, [loading, resumeSaved, resumeDoc?.sections.length]);
 
   const continueToCoverLetter = async () => {
     if (resumeDirty) {
@@ -137,7 +140,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
   const deleteResumeDraft = async () => {
     setDeletingResume(true);
     await fetch(`/api/workflows/${id}/outputs?type=resume`, { method: "DELETE" });
-    setResumeSections([]);
+    setResumeDoc(parseNativeDocument("resume"));
     setResumeDirty(false);
     setSaveState("idle");
     await loadWorkflow();
@@ -218,15 +221,28 @@ export default function ResumeWorkspacePage({ params }: Props) {
             </div>
           )}
 
-          {resumeSections.length > 0 && (
+          {googleSyncState && (
+            <div className={cn("rounded-lg border px-3 py-2 text-xs", googleSyncState.status === "synced" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : googleSyncState.status === "error" ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900")}>
+              <p>{googleSyncState.message}</p>
+              {googleSyncState.url && <a href={googleSyncState.url} target="_blank" rel="noreferrer" className="underline font-semibold">Open in Google Docs</a>}
+            </div>
+          )}
+
+          {(resumeDoc?.sections.length ?? 0) > 0 && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-              {resumeSections.map((section) => (
+              {resumeDoc?.sections.map((section: NativeDocumentSection) => (
                 <div key={section.id}>
                   <p className="text-xs font-semibold uppercase text-slate-500 mb-1">{section.title}</p>
                   <textarea
                     value={section.content}
                     onChange={(e) => {
-                      setResumeSections((prev) => prev.map((s) => s.id === section.id ? { ...s, content: e.target.value } : s));
+                      setResumeDoc((prev) => {
+                        const base = prev ?? parseNativeDocument("resume");
+                        return {
+                          ...base,
+                          sections: base.sections.map((s) => s.id === section.id ? { ...s, content: e.target.value } : s),
+                        };
+                      });
                       setResumeDirty(true);
                       setSaveState("idle");
                     }}
@@ -238,7 +254,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
           )}
 
           <div className="flex justify-end">
-            <button onClick={continueToCoverLetter} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={resumeSections.length === 0 || generating}>
+            <button onClick={continueToCoverLetter} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={(resumeDoc?.sections.length ?? 0) === 0 || generating}>
               Continue to Cover Letter <ArrowRight className="w-4 h-4" />
             </button>
           </div>

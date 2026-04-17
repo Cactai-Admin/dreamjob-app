@@ -10,6 +10,7 @@ import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, ResumeReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
 import { getSaveButtonLabel, isCoverLetterComplete } from "@/lib/workflow/completion";
+import { getPrimarySectionText, parseNativeDocument, serializeNativeDocument, setPrimarySectionText, type NativeDocument } from "@/lib/documents/native-document";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -24,7 +25,8 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [coverLetterContent, setCoverLetterContent] = useState("");
+  const [coverDoc, setCoverDoc] = useState<NativeDocument | null>(null);
+  const [googleSyncState, setGoogleSyncState] = useState<{ status: string; message: string; url?: string } | null>(null);
   const [coverDirty, setCoverDirty] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
   const [confirmDeleteApplication, setConfirmDeleteApplication] = useState(false);
@@ -40,7 +42,9 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
     }
     setWorkflow(wf);
     const coverOut = wf.outputs?.find((o) => o.type === "cover_letter" && o.is_current);
-    setCoverLetterContent(coverOut?.content ?? "");
+    setCoverDoc(parseNativeDocument("cover_letter", coverOut));
+    const syncDoc = (wf.autosave_data as { google_docs_sync?: { docs?: { cover_letter?: { documentUrl?: string; syncState?: string; error?: string } } } } | null)?.google_docs_sync?.docs?.cover_letter;
+    if (syncDoc) setGoogleSyncState({ status: syncDoc.syncState ?? "pending", message: syncDoc.error ?? "Google Docs linked.", url: syncDoc.documentUrl });
     setLoading(false);
     return wf;
   };
@@ -87,7 +91,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
       if (output) {
         if (pollingRef.current) clearInterval(pollingRef.current);
         setWorkflow(wf);
-        setCoverLetterContent(output.content);
+        setCoverDoc(parseNativeDocument("cover_letter", output));
         setGenerating(false);
       }
     }, 2500);
@@ -95,18 +99,22 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
 
   const saveCoverLetter = async () => {
     setSaveState("saving");
-    await fetch(`/api/workflows/${id}/outputs`, {
+    const saveResult = await fetch(`/api/workflows/${id}/outputs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "cover_letter", content: coverLetterContent }),
+      body: JSON.stringify({ type: "cover_letter", content: serializeNativeDocument(coverDoc ?? parseNativeDocument("cover_letter")) }),
     });
+    const payload = await saveResult.json().catch(() => null);
+    if (payload?.google_sync) {
+      setGoogleSyncState({ status: payload.google_sync.status, message: payload.google_sync.message, url: payload.google_sync.documentUrl });
+    }
     setCoverDirty(false);
     setSaveState("saved");
     await loadWorkflow();
   };
 
   const persistCoverLetter = () => {
-    const hasMeaningfulContent = coverLetterContent.trim().length > 0;
+    const hasMeaningfulContent = getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter")).trim().length > 0;
     const shouldPersist = isCoverLetterComplete({
       hasGeneratedContent: hasMeaningfulContent,
       hasManualSave: coverSaved,
@@ -119,19 +127,19 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
     void fetch(`/api/workflows/${id}/outputs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "cover_letter", content: coverLetterContent }),
+      body: JSON.stringify({ type: "cover_letter", content: serializeNativeDocument(coverDoc ?? parseNativeDocument("cover_letter")) }),
       keepalive: true,
     });
   };
 
   useEffect(() => {
-    if (!loading && !coverSaved && !coverLetterContent) {
+    if (!loading && !coverSaved && !getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter"))) {
       void ensureGeneration();
     }
-  }, [loading, coverSaved, coverLetterContent]);
+  }, [loading, coverDoc, coverSaved]);
 
   const continueToHub = async () => {
-    const hasMeaningfulContent = coverLetterContent.trim().length > 0;
+    const hasMeaningfulContent = getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter")).trim().length > 0;
     if (isCoverLetterComplete({
       hasGeneratedContent: hasMeaningfulContent,
       hasManualSave: coverSaved,
@@ -144,7 +152,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
   };
 
   const leaveToHub = async () => {
-    const hasMeaningfulContent = coverLetterContent.trim().length > 0;
+    const hasMeaningfulContent = getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter")).trim().length > 0;
     if (isCoverLetterComplete({
       hasGeneratedContent: hasMeaningfulContent,
       hasManualSave: coverSaved,
@@ -165,7 +173,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
   const deleteCoverLetterDraft = async () => {
     setDeletingCoverLetter(true);
     await fetch(`/api/workflows/${id}/outputs?type=cover_letter`, { method: "DELETE" });
-    setCoverLetterContent("");
+    setCoverDoc(parseNativeDocument("cover_letter"));
     setCoverDirty(false);
     setSaveState("idle");
     await loadWorkflow();
@@ -177,7 +185,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
     return () => {
       persistCoverLetter();
     };
-  }, [coverLetterContent, coverDirty, coverSaved]);
+  }, [coverDoc, coverDirty, coverSaved]);
 
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -257,12 +265,19 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
             </div>
           )}
 
-          {coverLetterContent && (
+          {googleSyncState && (
+            <div className={cn("rounded-lg border px-3 py-2 text-xs", googleSyncState.status === "synced" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : googleSyncState.status === "error" ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900")}>
+              <p>{googleSyncState.message}</p>
+              {googleSyncState.url && <a href={googleSyncState.url} target="_blank" rel="noreferrer" className="underline font-semibold">Open in Google Docs</a>}
+            </div>
+          )}
+
+          {getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter")) && (
             <div className="rounded-xl border border-slate-200 bg-white p-5">
               <textarea
-                value={coverLetterContent}
+                value={getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter"))}
                 onChange={(e) => {
-                  setCoverLetterContent(e.target.value);
+                  setCoverDoc((prev) => setPrimarySectionText(prev ?? parseNativeDocument("cover_letter"), e.target.value));
                   setCoverDirty(true);
                   setSaveState("idle");
                 }}
@@ -273,7 +288,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
 
           <div className="flex items-center justify-end gap-2">
             <button onClick={leaveToHub} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm">Skip for now</button>
-            <button onClick={continueToHub} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={!coverLetterContent || generating}>
+            <button onClick={continueToHub} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={!getPrimarySectionText(coverDoc ?? parseNativeDocument("cover_letter")) || generating}>
               Continue to Final Hub <ArrowRight className="w-4 h-4" />
             </button>
           </div>
