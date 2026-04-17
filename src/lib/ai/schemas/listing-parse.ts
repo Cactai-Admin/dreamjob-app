@@ -140,7 +140,9 @@ function asConfidence(value: unknown): ParseConfidence {
 
 function cleanListingLine(value: string): string {
   return value
-    .replace(/^[-*•\d.)\s]+/, '')
+    .replace(/^\s*[-*•]\s+/, '')
+    .replace(/^\s*\(?\d{1,3}[.)]\s+/, '')
+    .replace(/^\s*[a-zA-Z][.)]\s+/, '')
     .replace(/\s+/g, ' ')
     .trim()
 }

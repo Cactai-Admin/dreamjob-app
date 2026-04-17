@@ -167,15 +167,23 @@ function classifyPriority(text: string, kind: ParsedListingRequirement['kind']):
   return { priority: 'important', priority_weight: 0.7 }
 }
 
-function inferSuppression(text: string): { user_facing_relevance: ParsedListingRequirement['user_facing_relevance']; suppression_reason: string | null } {
+function inferSuppression(text: string): {
+  user_facing_relevance: ParsedListingRequirement['user_facing_relevance']
+  suppression_reason: string | null
+  force_user_suppression: boolean
+} {
   const normalized = text.toLowerCase()
-  if (/\b(english|english fluency|fluent in english)\b/.test(normalized)) {
-    return { user_facing_relevance: 'suppress', suppression_reason: 'already_evident_english_fluency' }
+  if (/\b(english|english fluency|fluent in english|cefr|ilr)\b/.test(normalized)) {
+    return {
+      user_facing_relevance: 'suppress',
+      suppression_reason: 'already_evident_english_fluency',
+      force_user_suppression: true,
+    }
   }
   if (/\b(team player|culture fit|fast-paced|strong communication skills|self-starter|positive attitude)\b/.test(normalized)) {
-    return { user_facing_relevance: 'suppress', suppression_reason: 'low_signal_generic_phrase' }
+    return { user_facing_relevance: 'suppress', suppression_reason: 'low_signal_generic_phrase', force_user_suppression: false }
   }
-  return { user_facing_relevance: 'show', suppression_reason: null }
+  return { user_facing_relevance: 'show', suppression_reason: null, force_user_suppression: false }
 }
 
 function inferEvidenceNeeded(text: string, requirementType: ParsedListingRequirement['requirement_type']): string | null {
@@ -205,11 +213,33 @@ function applyRequirementIntelligence(requirements: ParsedListingRequirement[]):
           ? requirement.priority_weight
           : priority.priority_weight,
       evidence_needed: requirement.evidence_needed ?? inferEvidenceNeeded(requirement.text, requirementType),
-      user_facing_relevance: requirement.user_facing_relevance ?? suppression.user_facing_relevance ?? defaultShowDecision,
-      suppression_reason: requirement.suppression_reason ?? suppression.suppression_reason,
+      user_facing_relevance:
+        suppression.force_user_suppression
+          ? suppression.user_facing_relevance
+          : requirement.user_facing_relevance ?? suppression.user_facing_relevance ?? defaultShowDecision,
+      suppression_reason:
+        suppression.force_user_suppression
+          ? suppression.suppression_reason
+          : requirement.suppression_reason ?? suppression.suppression_reason,
       numeric_signal: numericSignal,
     }
   })
+}
+
+const COMPENSATION_MONEY_PATTERN = /(?:\$|usd|cad|eur|gbp)\s?\d[\d,.]*(?:\s?[kKmM])?(?:\s*(?:-|to|–)\s*(?:\$|usd|cad|eur|gbp)?\s?\d[\d,.]*(?:\s?[kKmM])?)?/i
+const COMPENSATION_RATE_PATTERN = /\b(?:per\s*(?:year|annum|hour|hr)|hourly|annual(?:ly)?|salary|base pay|pay range|compensation|ote|on-target earnings)\b/i
+const COMPENSATION_CONTAMINATION_PATTERN = /\b(?:og:title|og:description|meta\s+name=|<meta|<title|<\/|<script|job description|about us|founded in|mission)\b/i
+
+function sanitizeCompensationText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized || normalized.length > 220) return null
+  if (COMPENSATION_CONTAMINATION_PATTERN.test(normalized)) return null
+  const hasMoney = COMPENSATION_MONEY_PATTERN.test(normalized)
+  const hasRateSignal = COMPENSATION_RATE_PATTERN.test(normalized)
+  if (!hasMoney && !hasRateSignal) return null
+  if (hasRateSignal && normalized.split(' ').length <= 3 && !hasMoney) return null
+  return normalized
 }
 
 function extractCompensationDetails(sourceText: string): {
@@ -224,8 +254,8 @@ function extractCompensationDetails(sourceText: string): {
   }
 } {
   const snippets = sourceText.match(/([^\n]{0,90}(?:salary|compensation|pay range|base pay|hourly|ote|on-target earnings|commission|bonus|equity|total compensation)[^\n]{0,160})/gi) ?? []
-  const normalizedSnippets = [...new Set(snippets.map((item) => item.replace(/\s+/g, ' ').trim()))].slice(0, 3)
-  const combined = normalizedSnippets.join(' | ').slice(0, 320) || null
+  const normalizedSnippets = [...new Set(snippets.map((item) => sanitizeCompensationText(item)).filter((item): item is string => Boolean(item)))].slice(0, 3)
+  const combined = sanitizeCompensationText(normalizedSnippets.join(' | ').slice(0, 320))
   const payType: 'annual' | 'hourly' | 'unknown' =
     /\b(hour|hourly|hr)\b/i.test(sourceText) ? 'hourly' : /\b(year|annual|annually|per year)\b/i.test(sourceText) ? 'annual' : 'unknown'
   const transparencyNote = /\b(pay transparency|salary may vary|depending on location|based on location|depending on experience)\b/i.test(sourceText)
@@ -333,7 +363,9 @@ function sanitizeLinkedInCompanyUrl(url: string): string {
 
 function trimLine(value: string): string {
   return value
-    .replace(/^[-*•\d.)\s]+/, '')
+    .replace(/^\s*[-*•]\s+/, '')
+    .replace(/^\s*\(?\d{1,3}[.)]\s+/, '')
+    .replace(/^\s*[a-zA-Z][.)]\s+/, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -630,7 +662,7 @@ export async function POST(request: NextRequest) {
       company_website_url: parsed.company_website_url,
       company_linkedin_url: parsed.company_linkedin_url,
       location: parsed.location,
-      compensation: parsed.salary_range ?? parsed.compensation,
+      compensation: sanitizeCompensationText(parsed.salary_range ?? parsed.compensation),
       employment_type: parsed.employment_type,
       experience_level: parsed.experience_level,
       work_mode: workMode,
@@ -647,7 +679,7 @@ export async function POST(request: NextRequest) {
     const enrichedRequirements = applyRequirementIntelligence(normalizedPassOne.requirements)
     const enrichedPassOne = normalizeParsedListing({
       ...normalizedPassOne,
-      compensation: normalizedPassOne.compensation ?? compensationHeuristic.compensation,
+      compensation: sanitizeCompensationText(normalizedPassOne.compensation) ?? compensationHeuristic.compensation,
       requirements: enrichedRequirements,
     })
 
