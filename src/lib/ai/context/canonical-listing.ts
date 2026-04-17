@@ -4,6 +4,13 @@ export type ListingConfidence = 'high' | 'medium' | 'low'
 export interface CanonicalRequirement {
   id: string
   text: string
+  requirement_type: 'experience' | 'qualification' | 'responsibility' | 'seniority' | 'domain' | 'tool' | 'leadership' | 'culture' | 'language' | 'other'
+  priority: 'essential' | 'important' | 'secondary' | 'suppressible'
+  priority_weight: number
+  evidence_needed: string | null
+  user_facing_relevance: 'show' | 'suppress'
+  suppression_reason: string | null
+  numeric_signal: string | null
   confidence: ListingConfidence
   source: 'llm' | 'heuristic' | 'user' | 'imported'
 }
@@ -52,6 +59,13 @@ function normalizeRequirementList(value: unknown, fallbackPrefix: string): Canon
         return {
           id: `${fallbackPrefix}_${index + 1}`,
           text: item.trim(),
+          requirement_type: 'other',
+          priority: 'important',
+          priority_weight: 0.7,
+          evidence_needed: null,
+          user_facing_relevance: 'show',
+          suppression_reason: null,
+          numeric_signal: null,
           confidence: 'medium' as const,
           source: 'llm' as const,
         }
@@ -65,6 +79,36 @@ function normalizeRequirementList(value: unknown, fallbackPrefix: string): Canon
       return {
         id: typeof record.id === 'string' && record.id.trim() ? record.id : `${fallbackPrefix}_${index + 1}`,
         text,
+        requirement_type:
+          record.requirement_type === 'experience'
+          || record.requirement_type === 'qualification'
+          || record.requirement_type === 'responsibility'
+          || record.requirement_type === 'seniority'
+          || record.requirement_type === 'domain'
+          || record.requirement_type === 'tool'
+          || record.requirement_type === 'leadership'
+          || record.requirement_type === 'culture'
+          || record.requirement_type === 'language'
+            ? record.requirement_type
+            : 'other',
+        priority:
+          record.priority === 'essential'
+          || record.priority === 'important'
+          || record.priority === 'secondary'
+          || record.priority === 'suppressible'
+            ? record.priority
+            : 'important',
+        priority_weight:
+          typeof record.priority_weight === 'number'
+          && Number.isFinite(record.priority_weight)
+          && record.priority_weight >= 0
+          && record.priority_weight <= 1
+            ? record.priority_weight
+            : 0.7,
+        evidence_needed: asString(record.evidence_needed),
+        user_facing_relevance: record.user_facing_relevance === 'suppress' ? 'suppress' : 'show',
+        suppression_reason: asString(record.suppression_reason),
+        numeric_signal: asString(record.numeric_signal),
         confidence: asConfidence(record.confidence),
         source:
           record.source === 'heuristic'
@@ -115,6 +159,13 @@ function splitPlainRequirements(requirements: string[]): {
     target.push({
       id: `req_${index + 1}`,
       text: trimmed,
+      requirement_type: 'other',
+      priority: /\b(required|must|minimum)\b/i.test(trimmed) ? 'essential' : 'important',
+      priority_weight: /\b(required|must|minimum)\b/i.test(trimmed) ? 0.95 : 0.7,
+      evidence_needed: null,
+      user_facing_relevance: 'show',
+      suppression_reason: null,
+      numeric_signal: null,
       confidence: 'medium',
       source: 'imported',
     })
@@ -145,6 +196,13 @@ export function normalizeCanonicalListing(listing: unknown): CanonicalListingCon
   const responsibilitiesFromListing = parseRequirements(listingRecord.responsibilities ?? null).map((text, index) => ({
     id: `resp_${index + 1}`,
     text,
+    requirement_type: 'responsibility' as const,
+    priority: 'important' as const,
+    priority_weight: 0.7,
+    evidence_needed: 'Examples showing delivery ownership and measurable outcomes',
+    user_facing_relevance: 'show' as const,
+    suppression_reason: null,
+    numeric_signal: null,
     confidence: 'medium' as const,
     source: 'imported' as const,
   }))

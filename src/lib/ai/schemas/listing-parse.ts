@@ -1,11 +1,20 @@
 import { z } from 'zod'
 
 export type ParseConfidence = 'high' | 'medium' | 'low'
+export type RequirementPriority = 'essential' | 'important' | 'secondary' | 'suppressible'
+export type RequirementSurfaceDecision = 'show' | 'suppress'
 
 export interface ParsedListingRequirement {
   id: string
   text: string
   kind: 'requirement' | 'nice_to_have'
+  requirement_type: 'experience' | 'qualification' | 'responsibility' | 'seniority' | 'domain' | 'tool' | 'leadership' | 'culture' | 'language' | 'other'
+  priority: RequirementPriority
+  priority_weight: number
+  evidence_needed: string | null
+  user_facing_relevance: RequirementSurfaceDecision
+  suppression_reason: string | null
+  numeric_signal: string | null
   confidence: ParseConfidence
   source: 'llm' | 'heuristic' | 'user'
 }
@@ -64,11 +73,20 @@ export interface ParsedListingEvidenceMapItem {
 }
 
 const parseConfidenceSchema = z.enum(['high', 'medium', 'low'])
+const requirementPrioritySchema = z.enum(['essential', 'important', 'secondary', 'suppressible'])
+const requirementSurfaceDecisionSchema = z.enum(['show', 'suppress'])
 
 const parsedRequirementSchema = z.object({
   id: z.string().trim().optional(),
   text: z.string().trim().min(1),
   kind: z.enum(['requirement', 'nice_to_have']).default('requirement'),
+  requirement_type: z.enum(['experience', 'qualification', 'responsibility', 'seniority', 'domain', 'tool', 'leadership', 'culture', 'language', 'other']).default('other'),
+  priority: requirementPrioritySchema.default('important'),
+  priority_weight: z.number().min(0).max(1).default(0.7),
+  evidence_needed: z.string().trim().min(1).nullable().optional(),
+  user_facing_relevance: requirementSurfaceDecisionSchema.default('show'),
+  suppression_reason: z.string().trim().min(1).nullable().optional(),
+  numeric_signal: z.string().trim().min(1).nullable().optional(),
   confidence: parseConfidenceSchema.default('medium'),
   source: z.enum(['llm', 'heuristic', 'user']).default('llm'),
 })
@@ -150,6 +168,13 @@ function normalizeLegacyRequirementList(value: unknown): ParsedListingRequiremen
         id: `req_${index + 1}`,
         text,
         kind: /\b(preferred|nice to have|bonus|plus)\b/i.test(text) ? 'nice_to_have' as const : 'requirement' as const,
+        requirement_type: 'other' as const,
+        priority: 'important' as const,
+        priority_weight: 0.7,
+        evidence_needed: null,
+        user_facing_relevance: 'show' as const,
+        suppression_reason: null,
+        numeric_signal: null,
         confidence: 'medium' as const,
         source: 'llm' as const,
       }))
@@ -160,6 +185,13 @@ function normalizeLegacyRequirementList(value: unknown): ParsedListingRequiremen
       id: `req_${index + 1}`,
       text,
       kind: /\b(preferred|nice to have|bonus|plus)\b/i.test(text) ? 'nice_to_have' as const : 'requirement' as const,
+      requirement_type: 'other',
+      priority: 'important',
+      priority_weight: 0.7,
+      evidence_needed: null,
+      user_facing_relevance: 'show',
+      suppression_reason: null,
+      numeric_signal: null,
       confidence: 'medium',
       source: 'llm',
     }))
@@ -231,13 +263,50 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
   const parsedRequirementsFromRecord = asArray<Record<string, unknown>>(record.requirements)
   const requirements: ParsedListingRequirement[] = (
     parsedRequirementsFromRecord.length > 0
-      ? parsedRequirementsFromRecord.map((item, index) => ({
-        id: typeof item.id === 'string' ? item.id : `req_${index + 1}`,
-        text: cleanListingLine(asString(item.text) ?? ''),
-        kind: item.kind === 'nice_to_have' ? 'nice_to_have' as const : 'requirement' as const,
-        confidence: asConfidence(item.confidence),
-        source: item.source === 'heuristic' ? 'heuristic' as const : item.source === 'user' ? 'user' as const : 'llm' as const,
-      }))
+      ? parsedRequirementsFromRecord.map((item, index) => {
+        const requirementType: ParsedListingRequirement['requirement_type'] =
+          item.requirement_type === 'experience'
+          || item.requirement_type === 'qualification'
+          || item.requirement_type === 'responsibility'
+          || item.requirement_type === 'seniority'
+          || item.requirement_type === 'domain'
+          || item.requirement_type === 'tool'
+          || item.requirement_type === 'leadership'
+          || item.requirement_type === 'culture'
+          || item.requirement_type === 'language'
+            ? item.requirement_type
+            : 'other'
+        const priority: ParsedListingRequirement['priority'] =
+          item.priority === 'essential'
+          || item.priority === 'important'
+          || item.priority === 'secondary'
+          || item.priority === 'suppressible'
+            ? item.priority
+            : 'important'
+        const userFacingRelevance: ParsedListingRequirement['user_facing_relevance'] =
+          item.user_facing_relevance === 'suppress' ? 'suppress' : 'show'
+
+        return {
+          id: typeof item.id === 'string' ? item.id : `req_${index + 1}`,
+          text: cleanListingLine(asString(item.text) ?? ''),
+          kind: item.kind === 'nice_to_have' ? 'nice_to_have' as const : 'requirement' as const,
+          requirement_type: requirementType,
+          priority,
+          priority_weight:
+            typeof item.priority_weight === 'number'
+            && Number.isFinite(item.priority_weight)
+            && item.priority_weight >= 0
+            && item.priority_weight <= 1
+              ? item.priority_weight
+              : 0.7,
+          evidence_needed: asString(item.evidence_needed),
+          user_facing_relevance: userFacingRelevance,
+          suppression_reason: asString(item.suppression_reason),
+          numeric_signal: asString(item.numeric_signal),
+          confidence: asConfidence(item.confidence),
+          source: item.source === 'heuristic' ? 'heuristic' as const : item.source === 'user' ? 'user' as const : 'llm' as const,
+        }
+      })
       : normalizeLegacyRequirementList(record.requirements)
   ).filter((item) => item.text)
 

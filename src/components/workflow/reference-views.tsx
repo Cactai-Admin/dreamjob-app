@@ -25,9 +25,11 @@ export function ListingReferenceView({ workflow }: { workflow: Workflow | null }
   const listing = workflow?.listing;
   const canonical = normalizeCanonicalListing(listing);
   const requirements = [
-    ...canonical.exact_requirements.map((item) => item.text),
-    ...canonical.nice_to_haves.map((item) => item.text),
+    ...canonical.exact_requirements,
+    ...canonical.nice_to_haves,
   ];
+  const visibleRequirements = requirements.filter((item) => item.user_facing_relevance !== "suppress");
+  const suppressedRequirements = requirements.filter((item) => item.user_facing_relevance === "suppress");
   const responsibilities = parseResponsibilities(listing?.responsibilities);
 
   return (
@@ -51,13 +53,26 @@ export function ListingReferenceView({ workflow }: { workflow: Workflow | null }
 
       <div className="rounded-md border border-slate-200 bg-white p-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Requirements</p>
-        {requirements.length === 0 ? (
+        {visibleRequirements.length === 0 ? (
           <p className="text-slate-400">No requirements parsed yet.</p>
         ) : (
           <ul className="space-y-1">
-            {requirements.map((item, idx) => <li key={`${item}-${idx}`}>• {item}</li>)}
+            {visibleRequirements.map((item, idx) => (
+              <li key={`${item.text}-${idx}`} className="space-y-0.5">
+                <p>• {item.text}</p>
+                <p className="text-[10px] text-slate-500 ml-3">
+                  {item.priority} · {item.requirement_type}
+                  {item.numeric_signal ? ` · ${item.numeric_signal}` : ""}
+                </p>
+              </li>
+            ))}
           </ul>
         )}
+        {suppressedRequirements.length > 0 ? (
+          <p className="mt-2 text-[10px] text-slate-400">
+            {suppressedRequirements.length} low-signal or already-evident requirement{suppressedRequirements.length > 1 ? "s" : ""} hidden from user-facing actions.
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-md border border-slate-200 bg-white p-2">
