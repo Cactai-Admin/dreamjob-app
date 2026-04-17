@@ -252,6 +252,8 @@ export interface Workflow {
   state: string;
   is_active: boolean;
   notes?: string | null;
+  autosave_data?: Record<string, unknown> | null;
+  last_autosave_at?: string | null;
   created_at: string;
   updated_at: string;
   listing: JobListing;

@@ -74,6 +74,7 @@ function LoginForm() {
         provider: 'google',
         options: {
           redirectTo: callbackUrl,
+          scopes: 'openid email profile https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file',
         },
       })
 

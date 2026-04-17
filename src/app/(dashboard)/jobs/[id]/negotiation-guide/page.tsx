@@ -11,6 +11,7 @@ import { ContextPhasePanel } from "@/components/workflow/context-phase-panel";
 import { STATUS_OPTIONS } from "@/components/documents/doc-subheader";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { cn } from "@/lib/utils";
+import { getPrimarySectionText, parseNativeDocument, serializeNativeDocument, setPrimarySectionText, type NativeDocument } from "@/lib/documents/native-document";
 import type { Workflow, Output } from "@/lib/types";
 import { deriveApplicationStatus } from "@/lib/workflow-adapter";
 
@@ -23,7 +24,8 @@ export default function NegotiationGuidePage({ params }: Props) {
   const router = useRouter();
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [output, setOutput] = useState<Output | undefined>(undefined);
-  const [content, setContent] = useState("");
+  const [docState, setDocState] = useState<NativeDocument>(parseNativeDocument("negotiation_guide"));
+  const [googleSyncState, setGoogleSyncState] = useState<{ status: string; message: string; url?: string } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -40,12 +42,15 @@ export default function NegotiationGuidePage({ params }: Props) {
   const { setDocControls, clearDocControls } = useDocControls();
 
   const saveContent = useCallback(async (text: string) => {
+    const payloadDoc = setPrimarySectionText(parseNativeDocument("negotiation_guide"), text);
     const res = await fetch(`/api/workflows/${id}/outputs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "negotiation_guide", content: text }),
+      body: JSON.stringify({ type: "negotiation_guide", content: serializeNativeDocument(payloadDoc) }),
     });
-    if (res.ok) { const out = await res.json(); setOutput(out); }
+    if (res.ok) { const out = await res.json(); setOutput(out);
+      if (out?.google_sync) setGoogleSyncState({ status: out.google_sync.status, message: out.google_sync.message, url: out.google_sync.documentUrl });
+    }
     setIsDirty(false);
   }, [id]);
 
@@ -62,10 +67,15 @@ export default function NegotiationGuidePage({ params }: Props) {
       }
       setWorkflow(wf);
       setAppStatus(deriveApplicationStatus(wf.state, wf.status_events));
+      const syncDoc = (wf.autosave_data as { google_docs_sync?: { docs?: { negotiation_guide?: { documentUrl?: string; syncState?: string; error?: string } } } } | null)
+        ?.google_docs_sync?.docs?.negotiation_guide;
+      if (syncDoc) {
+        setGoogleSyncState({ status: syncDoc.syncState ?? "pending", message: syncDoc.error ?? "Google Docs linked.", url: syncDoc.documentUrl });
+      }
       const out = wf.outputs?.find(o => o.type === "negotiation_guide" && o.is_current);
       if (out) {
         setOutput(out);
-        setContent(out.content);
+        setDocState(parseNativeDocument("negotiation_guide", out));
         setGenerating(false);
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       } else if (!generating) {
@@ -101,21 +111,22 @@ export default function NegotiationGuidePage({ params }: Props) {
 
   useEffect(() => {
     if (initialContent.current) { initialContent.current = false; return; }
+    const content = getPrimarySectionText(docState);
     if (generating || !content || !isDirty) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => saveContent(content), 2000);
-  }, [content, generating, isDirty, saveContent]);
+  }, [docState, generating, isDirty, saveContent]);
 
   const handleSave = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    await saveContent(content);
-  }, [content, saveContent]);
+    await saveContent(getPrimarySectionText(docState));
+  }, [docState, saveContent]);
 
   const handleBlur = useCallback(async () => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    await saveContent(content);
+    await saveContent(getPrimarySectionText(docState));
     setEditing(false);
-  }, [content, saveContent]);
+  }, [docState, saveContent]);
 
   const handleStatusChange = useCallback(async (val: string) => {
     if (val === "draft") {
@@ -142,7 +153,7 @@ export default function NegotiationGuidePage({ params }: Props) {
     setDeletingGuide(true);
     await fetch(`/api/workflows/${id}/outputs?type=negotiation_guide`, { method: "DELETE" });
     setOutput(undefined);
-    setContent("");
+    setDocState(parseNativeDocument("negotiation_guide"));
     setIsDirty(false);
     setConfirmDeleteGuide(false);
     setDeletingGuide(false);
@@ -254,21 +265,27 @@ export default function NegotiationGuidePage({ params }: Props) {
                     <h1 className="text-xl font-bold text-slate-900">Negotiation Guide</h1>
                     <p className="text-slate-500 text-sm mt-1">{workflow.listing?.title} · {workflow.listing?.company_name}</p>
                   </div>
+                  {googleSyncState && (
+                    <div className={cn("mb-3 rounded-lg border px-3 py-2 text-xs", googleSyncState.status === "synced" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : googleSyncState.status === "error" ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900")}>
+                      <p>{googleSyncState.message}</p>
+                      {googleSyncState.url && <a href={googleSyncState.url} target="_blank" rel="noreferrer" className="underline font-semibold">Open in Google Docs</a>}
+                    </div>
+                  )}
                   {editing ? (
                     <textarea
                       ref={textareaRef}
-                      value={content}
+                      value={getPrimarySectionText(docState)}
                       onChange={(e) => {
-                        setContent(e.target.value);
+                        setDocState((prev) => setPrimarySectionText(prev, e.target.value));
                         setIsDirty(true);
                       }}
                       onBlur={handleBlur}
                       className="w-full text-slate-800 text-sm leading-loose bg-sky-50/40 border border-sky-200 outline-none resize-none rounded-lg p-2 transition-colors"
-                      rows={Math.max(20, content.split("\n").length + 2)}
+                      rows={Math.max(20, getPrimarySectionText(docState).split("\n").length + 2)}
                     />
                   ) : (
                     <div className="cursor-text rounded-md border border-dashed border-slate-200/80 px-2 py-2 -mx-2 hover:border-sky-300 hover:bg-sky-50/50 transition-colors" onClick={() => setEditing(true)} title="Click to edit">
-                      <MarkdownDoc content={content} />
+                      <MarkdownDoc content={getPrimarySectionText(docState)} />
                     </div>
                   )}
                 </div>
@@ -281,12 +298,12 @@ export default function NegotiationGuidePage({ params }: Props) {
                   items={[
                     { label: "Role", value: workflow.listing?.title ?? "Untitled role" },
                     { label: "Company", value: workflow.listing?.company_name ?? "Unknown" },
-                    { label: "Word count", value: `${content.split(/\s+/).filter(Boolean).length}` },
+                    { label: "Word count", value: `${getPrimarySectionText(docState).split(/\s+/).filter(Boolean).length}` },
                     { label: "Edit state", value: editing ? "Editing now" : "Click guide to edit" },
                   ]}
                 />
               </div>
-              <div className="text-right mt-2 text-xs text-slate-400">{content.split(/\s+/).filter(Boolean).length} words</div>
+              <div className="text-right mt-2 text-xs text-slate-400">{getPrimarySectionText(docState).split(/\s+/).filter(Boolean).length} words</div>
             </div>
           )}
         </div>

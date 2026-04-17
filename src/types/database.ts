@@ -430,6 +430,8 @@ export interface UserPreferences {
   layout_preference: string
   home_section_order: string[]
   sidebar_collapsed: boolean
+  google_drive_root_folder_id: string | null
+  google_drive_root_folder_url: string | null
   created_at: string
   updated_at: string
 }

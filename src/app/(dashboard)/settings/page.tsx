@@ -64,6 +64,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [profileIcon, setProfileIcon] = useState<string | null>(null);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [googleRootInput, setGoogleRootInput] = useState("");
+  const [googleRootSaved, setGoogleRootSaved] = useState<string | null>(null);
+  const [googleConnected, setGoogleConnected] = useState(false);
 
   // Load on mount
   useEffect(() => {
@@ -79,6 +82,12 @@ export default function SettingsPage() {
     }).catch(() => {});
     fetch("/api/settings/providers").then(r => r.json()).then(d => { if (!d.error) setProviders(d); }).catch(() => {});
     fetch("/api/linkedin/session").then(r => r.json()).then(d => { if (!d.error) setLinkedIn(d); }).catch(() => {});
+    fetch("/api/settings/google-drive").then(r => r.json()).then((d) => {
+      if (!d.error) {
+        setGoogleRootInput(d.rootFolderUrl ?? d.rootFolderId ?? "");
+        setGoogleConnected(Boolean(d.hasGoogleToken));
+      }
+    }).catch(() => {});
 
     const stored = loadSettings();
     if (stored.theme) setTheme(stored.theme);
@@ -98,6 +107,16 @@ export default function SettingsPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ profile_icon: profileIcon ?? null }),
+    }).catch(() => {});
+    await fetch("/api/settings/google-drive", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rootFolder: googleRootInput }),
+    }).then(r => r.json()).then((d) => {
+      if (!d.error) {
+        setGoogleRootSaved(d.rootFolderUrl ?? d.rootFolderId ?? null);
+        setGoogleConnected(Boolean(d.hasGoogleToken));
+      }
     }).catch(() => {});
     // Also write remaining settings to localStorage
     saveSettings({ theme, aiProvider, notifications, privacy, privacyScreenTimeout, privacyScreenEnabled, profileIcon });
@@ -321,6 +340,39 @@ export default function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="card-base p-5 mb-5">
+        <h2 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-sky-500" />
+          Google Docs + Drive
+        </h2>
+        <div className="space-y-3">
+          <div className={cn(
+            "text-xs rounded-lg px-3 py-2 border",
+            googleConnected ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-900",
+          )}>
+            {googleConnected
+              ? "Google token is available for Docs/Drive sync."
+              : "Google token unavailable for Docs/Drive sync. Sign out and re-auth with Google if sync stays unavailable."}
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700">Drive root folder</label>
+            <p className="text-xs text-slate-500 mt-0.5">Set once, then DreamJob will reuse it and auto-create per-listing subfolders.</p>
+            <input
+              type="text"
+              value={googleRootInput}
+              onChange={(e) => setGoogleRootInput(e.target.value)}
+              placeholder="Paste Drive folder URL or folder ID"
+              className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+            {googleRootSaved && (
+              <p className="text-xs text-slate-500 mt-1">
+                Saved root: <a href={googleRootSaved} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline">{googleRootSaved}</a>
+              </p>
+            )}
+          </div>
         </div>
       </section>
 
