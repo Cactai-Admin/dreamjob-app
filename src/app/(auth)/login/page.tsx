@@ -4,55 +4,10 @@ import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Zap, AlertCircle, ArrowRight, Loader2, ChevronLeft } from 'lucide-react'
 import { LoginBg } from '@/components/auth/login-bg'
+import { buildOAuthRedirectUrl } from '@/lib/auth/oauth'
 import { createClient } from '@/lib/supabase/client'
 
 type LoginMode = 'google' | 'internal'
-
-function ensureTrailingSlash(url: string) {
-  return url.endsWith('/') ? url : `${url}/`
-}
-
-function normalizeHostedUrl(url: string) {
-  const withProtocol = url.startsWith('http://') || url.startsWith('https://')
-    ? url
-    : `https://${url}`
-
-  return ensureTrailingSlash(withProtocol)
-}
-
-function getGoogleOAuthBaseUrl() {
-  const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV
-  const previewUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-
-  if (vercelEnv === 'preview' && previewUrl) {
-    return normalizeHostedUrl(previewUrl)
-  }
-
-  if (vercelEnv === 'production' && siteUrl) {
-    return normalizeHostedUrl(siteUrl)
-  }
-
-  if (typeof window !== 'undefined') {
-    const isLocalHost =
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1'
-
-    if (isLocalHost) {
-      return ensureTrailingSlash(window.location.origin)
-    }
-  }
-
-  if (siteUrl) {
-    return normalizeHostedUrl(siteUrl)
-  }
-
-  if (previewUrl) {
-    return normalizeHostedUrl(previewUrl)
-  }
-
-  return 'http://localhost:3000/'
-}
 
 function LoginForm() {
   const router = useRouter()
@@ -113,13 +68,12 @@ function LoginForm() {
 
     try {
       const supabase = createClient()
-      const callbackUrl = new URL('auth/callback', getGoogleOAuthBaseUrl())
-      callbackUrl.searchParams.set('next', redirectTo)
+      const callbackUrl = buildOAuthRedirectUrl('/auth/callback', { next: redirectTo })
 
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: callbackUrl.toString(),
+          redirectTo: callbackUrl,
         },
       })
 
