@@ -9,6 +9,7 @@ import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { DocumentSection, Output, Workflow } from "@/lib/types";
+import { getSaveButtonLabel } from "@/lib/workflow/completion";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -150,7 +151,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-slate-900">Resume Workspace</h1>
-            <button onClick={saveResume} disabled={generating || saveState === "saving" || !resumeDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">{saveState === "saving" ? "Saving..." : saveState === "saved" && !resumeDirty ? "Saved" : "Save"}</button>
+            <button onClick={saveResume} disabled={generating || saveState === "saving" || !resumeDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">{saveState === "saved" && !resumeDirty ? "Saved" : getSaveButtonLabel(saveState)}</button>
           </div>
           <p className="text-sm text-slate-600 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2">
             This draft inherits listing priorities plus your Work History evidence alignment from the previous milestone.

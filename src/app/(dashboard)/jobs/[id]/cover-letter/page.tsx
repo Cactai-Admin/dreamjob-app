@@ -9,6 +9,7 @@ import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, ResumeReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
+import { getSaveButtonLabel, isCoverLetterComplete } from "@/lib/workflow/completion";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -100,6 +101,25 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
     await loadWorkflow();
   };
 
+  const persistCoverLetter = () => {
+    const hasMeaningfulContent = coverLetterContent.trim().length > 0;
+    const shouldPersist = isCoverLetterComplete({
+      hasGeneratedContent: hasMeaningfulContent,
+      hasManualSave: coverSaved,
+      hasAutosave: false,
+      isNavigatingAway: true,
+    }) && (coverDirty || !coverSaved);
+
+    if (!shouldPersist) return;
+
+    void fetch(`/api/workflows/${id}/outputs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "cover_letter", content: coverLetterContent }),
+      keepalive: true,
+    });
+  };
+
   useEffect(() => {
     if (!loading && !coverSaved && !coverLetterContent) {
       void ensureGeneration();
@@ -108,7 +128,12 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
 
   const continueToHub = async () => {
     const hasMeaningfulContent = coverLetterContent.trim().length > 0;
-    if (hasMeaningfulContent && (coverDirty || !coverSaved)) {
+    if (isCoverLetterComplete({
+      hasGeneratedContent: hasMeaningfulContent,
+      hasManualSave: coverSaved,
+      hasAutosave: false,
+      isNavigatingAway: true,
+    }) && (coverDirty || !coverSaved)) {
       await saveCoverLetter();
     }
     router.push(`/jobs/${id}/overview`);
@@ -116,11 +141,22 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
 
   const leaveToHub = async () => {
     const hasMeaningfulContent = coverLetterContent.trim().length > 0;
-    if (hasMeaningfulContent && (coverDirty || !coverSaved)) {
+    if (isCoverLetterComplete({
+      hasGeneratedContent: hasMeaningfulContent,
+      hasManualSave: coverSaved,
+      hasAutosave: false,
+      isNavigatingAway: true,
+    }) && (coverDirty || !coverSaved)) {
       await saveCoverLetter();
     }
     router.push(`/jobs/${id}/overview`);
   };
+
+  useEffect(() => {
+    return () => {
+      persistCoverLetter();
+    };
+  }, [coverLetterContent, coverDirty, coverSaved]);
 
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -154,7 +190,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-slate-900">Cover Letter Workspace</h1>
-            <button onClick={saveCoverLetter} disabled={generating || saveState === "saving" || !coverDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">{saveState === "saving" ? "Saving..." : saveState === "saved" && !coverDirty ? "Saved" : "Save"}</button>
+            <button onClick={saveCoverLetter} disabled={generating || saveState === "saving" || !coverDirty} className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50">{saveState === "saved" && !coverDirty ? "Saved" : getSaveButtonLabel(saveState)}</button>
           </div>
           <p className="text-sm text-slate-600 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2">
             This cover letter is built from listing priorities, Work History alignment, and your resume draft emphasis.
@@ -184,7 +220,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
           <div className="flex items-center justify-end gap-2">
             <button onClick={leaveToHub} className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm">Skip for now</button>
             <button onClick={continueToHub} className="btn-ocean px-4 py-2 rounded-lg text-white inline-flex items-center gap-2" disabled={!coverLetterContent || generating}>
-              Continue to Application Hub <ArrowRight className="w-4 h-4" />
+              Continue to Final Hub <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>

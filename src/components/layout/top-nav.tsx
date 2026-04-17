@@ -26,6 +26,7 @@ import { usePrivacyScreen } from "@/components/privacy-screen/privacy-screen";
 import { useDocControls } from "@/components/layout/doc-controls-slot";
 import { ProfileIcon, ICON_MAP } from "@/lib/profile-icons";
 import { deriveDocumentStatus } from "@/lib/workflow-adapter";
+import { getWorkflowSupportState } from "@/lib/workflow/state";
 import type { Workflow } from "@/lib/types";
 
 const USER_MENU_ITEMS = [
@@ -106,19 +107,19 @@ export function TopNav() {
   const showSupportNav = Boolean(milestoneWorkflowId) && inSupportWorkflow;
   const resumeStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "resume");
   const coverLetterStatus = deriveDocumentStatus(milestoneWorkflow?.outputs, "cover_letter");
-  const coreDocsReady = resumeStatus !== "not_started" && coverLetterStatus !== "not_started";
+  const {
+    supportUnlocked,
+    interviewUnlocked,
+    negotiationUnlocked,
+  } = getWorkflowSupportState(milestoneWorkflow);
   const milestones = milestoneWorkflowId ? [
     { href: `/jobs/${milestoneWorkflowId}`, label: "Work History" },
     { href: `/jobs/${milestoneWorkflowId}/resume`, label: "Resume" },
     { href: `/jobs/${milestoneWorkflowId}/cover-letter`, label: "Cover Letter" },
-    { href: `/jobs/${milestoneWorkflowId}/overview`, label: "Application Hub" },
+    { href: `/jobs/${milestoneWorkflowId}/overview`, label: "Final Hub" },
   ] : [];
-  const interviewEvent = milestoneWorkflow?.status_events?.find((event) => event.event_type === "interview_scheduled");
-  const offerEvent = milestoneWorkflow?.status_events?.find((event) => event.event_type === "offer_received");
-  const interviewUnlocked = coreDocsReady && Boolean(interviewEvent?.notes && interviewEvent.notes.includes("date") && interviewEvent.notes.includes("time"));
-  const negotiationUnlocked = coreDocsReady && Boolean(offerEvent?.notes && offerEvent.notes.includes("amount") && offerEvent.notes.includes("details"));
   const supportSteps = milestoneWorkflowId ? [
-    { href: `/jobs/${milestoneWorkflowId}/follow-up`, label: "Follow Up", unlocked: coreDocsReady },
+    { href: `/jobs/${milestoneWorkflowId}/follow-up`, label: "Follow Up", unlocked: supportUnlocked },
     { href: `/jobs/${milestoneWorkflowId}/interview-guide`, label: "Interview", unlocked: interviewUnlocked },
     { href: `/jobs/${milestoneWorkflowId}/negotiation-guide`, label: "Negotiation", unlocked: negotiationUnlocked },
   ] : [];
@@ -154,7 +155,7 @@ export function TopNav() {
     ? fallbackFurthest
     : milestoneWorkflow.state === "listing_review"
     ? 0
-    : coreDocsReady
+    : supportUnlocked
       ? 3
       : coverLetterStatus !== "not_started"
         ? 2
@@ -241,7 +242,7 @@ export function TopNav() {
                 const completed = !active && idx <= furthestReachedIndex - 1;
                 const prerequisiteUnlocked = idx <= furthestReachedIndex + 1;
                 const stageUnlocked = idx === 3
-                  ? coreDocsReady
+                  ? supportUnlocked
                   : true;
                 const available = !completed && !active && prerequisiteUnlocked && stageUnlocked;
                 const blocked = !active && !completed && !available;
@@ -295,12 +296,12 @@ export function TopNav() {
                     className={cn(
                       "px-3 py-1.5 rounded-md text-xs font-medium transition-colors border",
                       active && "bg-sky-50 text-sky-800 border-sky-300 shadow-sm",
-                      !active && unlocked && "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100",
+                      !active && unlocked && "text-slate-700 bg-white border-slate-300 hover:bg-slate-50",
                       !active && !unlocked && "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed"
                     )}
                   >
                     <span className="inline-flex items-center gap-1.5">
-                      {active ? <Circle className="w-3 h-3 fill-sky-500 text-sky-500" /> : unlocked ? <Circle className="w-3 h-3 text-amber-500" /> : <Lock className="w-3 h-3 text-slate-400" />}
+                      {active ? <Circle className="w-3 h-3 fill-sky-500 text-sky-500" /> : unlocked ? <Circle className="w-3 h-3 text-slate-400" /> : <Lock className="w-3 h-3 text-slate-400" />}
                       {label}
                     </span>
                   </button>
