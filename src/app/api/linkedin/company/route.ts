@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { gatherCompanyData, isSessionActive } from '@/lib/linkedin/browser'
+import { gatherCompanyData, isSessionActive, getLinkedInRuntimeCapability } from '@/lib/linkedin/browser'
 import { getAdminClient } from '@/lib/supabase/admin'
 
 const supabaseAdmin = getAdminClient()
@@ -61,7 +61,18 @@ export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // isSessionActive checks both in-memory and saved cookies
+  const capability = getLinkedInRuntimeCapability()
+  if (!capability.canLaunchInteractiveSession) {
+    return NextResponse.json(
+      {
+        error: capability.reason ?? 'LinkedIn connection discovery is unavailable in this runtime.',
+        runtime: capability,
+      },
+      { status: 503 }
+    )
+  }
+
+  // LinkedIn browser auth is currently in-memory for local runtime sessions.
   if (!isSessionActive(accountId)) {
     return NextResponse.json(
       { error: 'LinkedIn session not active. Connect LinkedIn in Settings first.' },

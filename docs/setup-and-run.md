@@ -98,6 +98,7 @@ To enable Google sign-in for external users, configure Google OAuth. See [google
 ### LinkedIn Integration
 
 To enable company research and connection discovery via browser automation, set up Playwright. See [linkedin-integration.md](linkedin-integration.md).
+This flow is currently local-runtime only; hosted/serverless environments surface a staged "unavailable" state.
 
 ### Stripe
 

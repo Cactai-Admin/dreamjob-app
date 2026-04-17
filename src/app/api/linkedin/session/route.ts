@@ -5,9 +5,9 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import {
   launchLinkedInBrowser,
   verifyLinkedInSession,
-  closeLinkedInBrowser,
   revokeLinkedInSession,
   isSessionActive,
+  getLinkedInRuntimeCapability,
 } from '@/lib/linkedin/browser'
 
 const supabaseAdmin = getAdminClient()
@@ -31,6 +31,7 @@ export async function GET() {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const capability = getLinkedInRuntimeCapability()
   const active = isSessionActive(accountId)
 
   const { data: session } = await supabaseAdmin
@@ -39,7 +40,12 @@ export async function GET() {
     .eq('account_id', accountId)
     .single()
 
-  return NextResponse.json({ isAuthenticated: active, session })
+  return NextResponse.json({
+    isAuthenticated: capability.canLaunchInteractiveSession ? active : false,
+    session,
+    runtime: capability,
+    persistedAuth: Boolean(session?.is_authenticated),
+  })
 }
 
 // POST — Launch browser or verify session
@@ -48,8 +54,16 @@ export async function POST(request: NextRequest) {
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { action } = await request.json()
+  const capability = getLinkedInRuntimeCapability()
 
   if (action === 'launch') {
+    if (!capability.canLaunchInteractiveSession) {
+      return NextResponse.json(
+        { success: false, message: capability.reason ?? 'LinkedIn launch is unavailable in this runtime.', runtime: capability },
+        { status: 503 }
+      )
+    }
+
     const result = await launchLinkedInBrowser(accountId)
 
     if (result.success) {
@@ -62,6 +76,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === 'verify') {
+    if (!capability.canLaunchInteractiveSession) {
+      return NextResponse.json(
+        { verified: false, reason: capability.reason ?? 'LinkedIn verification is unavailable in this runtime.', runtime: capability },
+        { status: 503 }
+      )
+    }
+
     const result = await verifyLinkedInSession(accountId)
 
     if (result.verified) {

@@ -9,6 +9,68 @@
 // ─── Environment guard ────────────────────────────────────────────────────────
 
 const IS_SERVERLESS = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+
+export type LinkedInCapabilityMode = 'local-browser' | 'hosted-unsupported'
+export type LinkedInCheckStatus = 'pass' | 'fail'
+
+export interface LinkedInReadinessCheck {
+  key: string
+  label: string
+  status: LinkedInCheckStatus
+  detail: string
+}
+
+export interface LinkedInRuntimeCapability {
+  mode: LinkedInCapabilityMode
+  canLaunchInteractiveSession: boolean
+  reason?: string
+  checks: LinkedInReadinessCheck[]
+}
+
+export function getLinkedInRuntimeCapability(): LinkedInRuntimeCapability {
+  const checks: LinkedInReadinessCheck[] = [
+    {
+      key: 'runtime',
+      label: 'Node.js runtime supports long-lived browser process',
+      status: IS_SERVERLESS ? 'fail' : 'pass',
+      detail: IS_SERVERLESS
+        ? 'Current runtime is serverless/ephemeral; LinkedIn browser sessions cannot persist.'
+        : 'Server runtime can hold a local Playwright browser session in memory.',
+    },
+    {
+      key: 'display',
+      label: 'Interactive browser window available for manual sign-in',
+      status: IS_SERVERLESS ? 'fail' : 'pass',
+      detail: IS_SERVERLESS
+        ? 'No visible interactive browser window is available in hosted/serverless runtime.'
+        : 'Interactive browser window is available locally.',
+    },
+    {
+      key: 'playwright',
+      label: 'Playwright package expected in runtime',
+      status: process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD ? 'fail' : 'pass',
+      detail: process.env.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        ? 'PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD is set; Chromium binary may be unavailable.'
+        : 'Playwright package can be loaded when runtime supports it.',
+    },
+  ]
+
+  if (IS_SERVERLESS || IS_PRODUCTION) {
+    return {
+      mode: 'hosted-unsupported',
+      canLaunchInteractiveSession: false,
+      reason: 'LinkedIn authenticated browser sessions currently require running DreamJob locally.',
+      checks,
+    }
+  }
+
+  return {
+    mode: 'local-browser',
+    canLaunchInteractiveSession: true,
+    checks,
+  }
+}
 
 function notAvailable(reason = 'LinkedIn browser automation is not available in this environment.') {
   return { success: false, message: reason }
@@ -41,7 +103,7 @@ export interface CompanyLinkedInData {
 const authenticatedAccounts = new Set<string>()
 
 export function isSessionActive(accountId: string): boolean {
-  if (IS_SERVERLESS) return false
+  if (!getLinkedInRuntimeCapability().canLaunchInteractiveSession) return false
   return authenticatedAccounts.has(accountId)
 }
 
@@ -50,7 +112,10 @@ export function isSessionActive(accountId: string): boolean {
 export async function launchLinkedInBrowser(
   accountId: string
 ): Promise<{ success: boolean; message: string }> {
-  if (IS_SERVERLESS) return notAvailable('LinkedIn browser launch requires a local environment. Run the app locally to use this feature.')
+  const capability = getLinkedInRuntimeCapability()
+  if (!capability.canLaunchInteractiveSession) {
+    return notAvailable(capability.reason ?? 'LinkedIn browser launch requires a local environment. Run the app locally to use this feature.')
+  }
 
   try {
     const { chromium } = await import('playwright')
@@ -105,7 +170,9 @@ export async function verifyLinkedInSession(accountId: string): Promise<{
   verified: boolean
   reason?: string
 }> {
-  if (IS_SERVERLESS) return { verified: false, reason: 'Not available in serverless environment.' }
+  if (!getLinkedInRuntimeCapability().canLaunchInteractiveSession) {
+    return { verified: false, reason: 'LinkedIn session verification is only available in local runtime.' }
+  }
 
   const session = localSessions.get(accountId)
   if (!session) return { verified: false, reason: 'No active browser session.' }
@@ -129,10 +196,12 @@ export async function verifyLinkedInSession(accountId: string): Promise<{
 
 export async function gatherCompanyData(
   accountId: string,
-  companyLinkedInUrl: string,
+  _companyLinkedInUrl: string,
   _companyName?: string
 ): Promise<{ data: CompanyLinkedInData | null; error?: string }> {
-  if (IS_SERVERLESS) return { data: null, error: 'LinkedIn scraping is not available in this environment.' }
+  if (!getLinkedInRuntimeCapability().canLaunchInteractiveSession) {
+    return { data: null, error: 'LinkedIn scraping is not available in this runtime. Run DreamJob locally for LinkedIn connection discovery.' }
+  }
   if (!authenticatedAccounts.has(accountId)) return { data: null, error: 'No LinkedIn session. Connect LinkedIn in Settings.' }
 
   return { data: null, error: 'Use the local dev environment for LinkedIn data gathering.' }

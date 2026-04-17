@@ -21,6 +21,11 @@ interface Props {
 }
 
 type ProfileCategory = "skills" | "keywords" | "tools" | "certifications" | "clearances";
+type LinkedInRuntime = {
+  mode: "local-browser" | "hosted-unsupported";
+  canLaunchInteractiveSession: boolean;
+  reason?: string;
+};
 
 export default function ListingReviewPage({ params }: Props) {
   const { id } = use(params);
@@ -62,6 +67,7 @@ export default function ListingReviewPage({ params }: Props) {
 
   // LinkedIn
   const [linkedInActive, setLinkedInActive] = useState(false);
+  const [linkedInRuntime, setLinkedInRuntime] = useState<LinkedInRuntime | null>(null);
   const [linkedInUrl, setLinkedInUrl] = useState("");
   const [fetchingConns, setFetchingConns] = useState(false);
   type ConnPerson = { name: string; profileUrl: string };
@@ -108,7 +114,10 @@ export default function ListingReviewPage({ params }: Props) {
       if (Array.isArray(emp)) {
         setTech(emp.flatMap((e: { technologies?: string[] }) => Array.isArray(e.technologies) ? e.technologies : []));
       }
-      if (li && !li.error) setLinkedInActive(li.isAuthenticated);
+      if (li && !li.error) {
+        setLinkedInActive(li.isAuthenticated);
+        setLinkedInRuntime(li.runtime ?? null);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [id]);
@@ -576,7 +585,13 @@ export default function ListingReviewPage({ params }: Props) {
               </li>
               <li className="flex items-start gap-2">
                 <ChevronRight className="w-3.5 h-3.5 mt-0.5 text-slate-400" />
-                <span>{linkedInUrl.trim() ? "Company LinkedIn URL is available for connection checks." : "Add a company LinkedIn URL if networking context matters for this role."}</span>
+                <span>
+                  {linkedInUrl.trim()
+                    ? (linkedInRuntime?.canLaunchInteractiveSession === false
+                      ? "Company LinkedIn URL is present, but hosted runtime cannot run LinkedIn connection checks."
+                      : "Company LinkedIn URL is available for connection checks.")
+                    : "Add a company LinkedIn URL if networking context matters for this role."}
+                </span>
               </li>
             </ul>
           </div>
@@ -587,7 +602,17 @@ export default function ListingReviewPage({ params }: Props) {
               <Users className="w-4 h-4 text-sky-500" />
               Connections at {companyName || "Company"}
             </h2>
-            {!linkedInActive ? (
+            {linkedInRuntime?.canLaunchInteractiveSession === false ? (
+              <div className="space-y-2">
+                <p className="text-sm text-slate-500">LinkedIn connection discovery is currently local-only.</p>
+                <p className="text-xs text-slate-400">
+                  {linkedInRuntime.reason ?? "This hosted runtime cannot launch the authenticated LinkedIn browser session."}
+                </p>
+                <Link href="/settings" className="flex items-center gap-1.5 text-sky-600 text-sm font-medium hover:underline">
+                  <Link2 className="w-3.5 h-3.5" />View LinkedIn runtime status
+                </Link>
+              </div>
+            ) : !linkedInActive ? (
               <div className="space-y-2">
                 <p className="text-sm text-slate-500">Connect LinkedIn to see who you know here.</p>
                 <Link href="/settings" className="flex items-center gap-1.5 text-sky-600 text-sm font-medium hover:underline">
