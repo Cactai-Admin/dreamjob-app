@@ -36,6 +36,16 @@ export interface CanonicalListingContract {
   work_mode: string | null
   level_seniority: string | null
   compensation: string | null
+  compensation_details?: {
+    pay_type: 'annual' | 'hourly' | 'unknown'
+    has_bonus: boolean
+    has_equity: boolean
+    has_variable_pay: boolean
+    transparency_note: string | null
+    location_qualifier: string | null
+    ote: string | null
+    exact_range_text: string | null
+  }
   confidence: {
     parse_quality: 'complete' | 'partial'
     uncertainty_notes: string[]
@@ -217,6 +227,11 @@ export function normalizeCanonicalListing(listing: unknown): CanonicalListingCon
     ? ((((parsedCanonical.confidence as Record<string, unknown>).parse_quality) === 'complete') ? 'complete' : 'partial')
     : (parsedData.parse_quality === 'complete' ? 'complete' : 'partial')
   const evidenceMap = normalizeEvidenceMapList(parsedCanonical?.evidence_map)
+  const compensationDetailsRaw = (parsedCanonical?.compensation_details && typeof parsedCanonical.compensation_details === 'object')
+    ? parsedCanonical.compensation_details as Record<string, unknown>
+    : (parsedData.compensation_details && typeof parsedData.compensation_details === 'object')
+      ? parsedData.compensation_details as Record<string, unknown>
+      : null
 
   return {
     title: asString(parsedCanonical?.title) ?? asString(listingRecord.title) ?? null,
@@ -229,6 +244,18 @@ export function normalizeCanonicalListing(listing: unknown): CanonicalListingCon
     work_mode: asString(parsedCanonical?.work_mode) ?? asString(parsedData.work_mode) ?? null,
     level_seniority: asString(parsedCanonical?.level_seniority) ?? asString(listingRecord.experience_level) ?? null,
     compensation: asString(parsedCanonical?.compensation) ?? asString(listingRecord.salary_range) ?? null,
+    compensation_details: compensationDetailsRaw
+      ? {
+        pay_type: compensationDetailsRaw.pay_type === 'annual' ? 'annual' : compensationDetailsRaw.pay_type === 'hourly' ? 'hourly' : 'unknown',
+        has_bonus: Boolean(compensationDetailsRaw.has_bonus),
+        has_equity: Boolean(compensationDetailsRaw.has_equity),
+        has_variable_pay: Boolean(compensationDetailsRaw.has_variable_pay),
+        transparency_note: asString(compensationDetailsRaw.transparency_note),
+        location_qualifier: asString(compensationDetailsRaw.location_qualifier),
+        ote: asString(compensationDetailsRaw.ote),
+        exact_range_text: asString(compensationDetailsRaw.exact_range_text),
+      }
+      : undefined,
     confidence: {
       parse_quality: parseQuality,
       uncertainty_notes: uncertaintyNotes,
