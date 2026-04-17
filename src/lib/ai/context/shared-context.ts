@@ -12,6 +12,7 @@ export interface SharedAIContextInput {
   artifact_state: Record<string, unknown>[]
   status_events: Record<string, unknown>[]
   conflicts: FactConflict[]
+  listing_confidence?: Record<string, unknown>
 }
 
 export interface SharedAIContextBundle {
@@ -32,6 +33,7 @@ export function buildSharedAIContextBundle(input: SharedAIContextInput): SharedA
     artifact_state: input.artifact_state,
     status_events: input.status_events,
     conflict_warnings: conflictWarnings,
+    listing_confidence: input.listing_confidence ?? null,
   }
 
   const contextText = [
@@ -41,4 +43,3 @@ export function buildSharedAIContextBundle(input: SharedAIContextInput): SharedA
 
   return { contextText, contextObject }
 }
-

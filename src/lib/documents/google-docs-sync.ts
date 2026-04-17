@@ -16,6 +16,8 @@ export type GoogleSyncSnapshot = {
   listingFolderId?: string
   listingFolderUrl?: string
   timezone?: string
+  retryCount?: number
+  lastAttemptAt?: string
   docs?: Partial<Record<ArtifactType, GoogleDocRecord>>
 }
 
@@ -183,15 +185,22 @@ export async function syncDocumentToGoogleDocs(params: {
   document: NativeDocument
 }) {
   const timezone = inferTimezoneFromLocation(params.profileLocation)
+  const nowIso = new Date().toISOString()
+  const retryCount = (params.existingSync?.retryCount ?? 0) + 1
 
   if (!params.accessToken) {
     return {
       result: {
         status: 'pending',
-        message: 'Google account is connected without a Drive/Docs token. Re-authenticate to enable sync.',
+        message: 'Google token missing or expired. Reconnect Google sign-in in Settings, then save again to sync.',
         timezone,
       } satisfies SyncResult,
-      snapshot: params.existingSync ?? { timezone },
+      snapshot: {
+        ...(params.existingSync ?? {}),
+        timezone,
+        retryCount,
+        lastAttemptAt: nowIso,
+      },
     }
   }
 
@@ -202,7 +211,12 @@ export async function syncDocumentToGoogleDocs(params: {
         message: 'Choose a Google Drive root folder in Settings to enable Google Docs sync.',
         timezone,
       } satisfies SyncResult,
-      snapshot: params.existingSync ?? { timezone },
+      snapshot: {
+        ...(params.existingSync ?? {}),
+        timezone,
+        retryCount,
+        lastAttemptAt: nowIso,
+      },
     }
   }
 
@@ -230,6 +244,8 @@ export async function syncDocumentToGoogleDocs(params: {
     const syncedAt = new Date().toISOString()
     const nextSnapshot: GoogleSyncSnapshot = {
       timezone,
+      retryCount: 0,
+      lastAttemptAt: nowIso,
       listingFolderId: folder.id,
       listingFolderUrl: folder.url,
       docs: {
@@ -261,6 +277,8 @@ export async function syncDocumentToGoogleDocs(params: {
     const nextSnapshot: GoogleSyncSnapshot = {
       ...(existing ?? {}),
       timezone,
+      retryCount,
+      lastAttemptAt: nowIso,
       docs: {
         ...(existing.docs ?? {}),
         [params.artifactType]: {

@@ -10,7 +10,7 @@ import {
   NEGOTIATION_GUIDE_SYSTEM_PROMPT,
 } from '@/lib/ai/prompts/resume-generation'
 import { buildGenerationContextBundle } from '@/lib/ai/workflow-context'
-import { resolveProviderPin, withProviderPinMetadata } from '@/lib/ai/provider-pinning'
+import { resolveProviderPin } from '@/lib/ai/provider-pinning'
 
 const supabaseAdmin = getAdminClient()
 
@@ -62,8 +62,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
   }
 
+  const { data: userPreferences } = await supabaseAdmin
+    .from('user_preferences')
+    .select('preferred_ai_provider, preferred_ai_model')
+    .eq('account_id', accountId)
+    .single()
+
   const providerPin = resolveProviderPin(
     workflow,
+    userPreferences ?? null,
     providerName,
     initialProvider.name as ProviderName,
     requestedModel
@@ -87,11 +94,6 @@ export async function POST(request: NextRequest) {
   if (existing) {
     return NextResponse.json(existing)
   }
-
-  await supabaseAdmin
-    .from('workflows')
-    .update({ autosave_data: withProviderPinMetadata(workflow.autosave_data, providerPin) })
-    .eq('id', workflow_id)
 
   const [{ data: profile }, { data: employment }, { data: qaAnswers }, { data: profileMemory }] = await Promise.all([
     supabaseAdmin.from('profiles').select('*').eq('account_id', accountId).single(),

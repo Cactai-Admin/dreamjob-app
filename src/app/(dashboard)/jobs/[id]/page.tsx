@@ -67,7 +67,7 @@ export default function WorkHistoryPage({ params }: Props) {
   const [profileTerms, setProfileTerms] = useState<string[]>([]);
   const [employment, setEmployment] = useState<EmploymentRecord[]>([]);
   const [alignmentSaving, setAlignmentSaving] = useState(false);
-  const [alignmentSaved, setAlignmentSaved] = useState(false);
+  const [savedEvidenceByItem, setSavedEvidenceByItem] = useState<Record<string, string>>({});
   const [customEvidenceByItem, setCustomEvidenceByItem] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -193,15 +193,25 @@ export default function WorkHistoryPage({ params }: Props) {
         }
       });
       setCustomEvidenceByItem(evidenceDrafts);
+      setSavedEvidenceByItem(evidenceDrafts);
     } catch {
       // legacy notes format
     }
   }, [workflow?.notes]);
 
+  const hasUnsavedChanges = useMemo(() => {
+    const keys = new Set([...Object.keys(customEvidenceByItem), ...Object.keys(savedEvidenceByItem)]);
+    for (const key of keys) {
+      const localValue = (customEvidenceByItem[key] ?? "").trim();
+      const savedValue = (savedEvidenceByItem[key] ?? "").trim();
+      if (localValue !== savedValue) return true;
+    }
+    return false;
+  }, [customEvidenceByItem, savedEvidenceByItem]);
+
   const saveAlignment = async () => {
     if (!workflow) return;
     setAlignmentSaving(true);
-    setAlignmentSaved(false);
     const evidenceAlignment = evidenceMap.map((entry) => ({
       key: entry.key,
       requirement_id: entry.requirementId,
@@ -219,9 +229,11 @@ export default function WorkHistoryPage({ params }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notes: nextNotes }),
     }).then((res) => res.json());
-    if (wf?.id) setWorkflow(wf as Workflow);
+    if (wf?.id) {
+      setWorkflow(wf as Workflow);
+      setSavedEvidenceByItem({ ...customEvidenceByItem });
+    }
     setAlignmentSaving(false);
-    setAlignmentSaved(true);
   };
 
   const continueToResume = async () => {
@@ -287,10 +299,9 @@ export default function WorkHistoryPage({ params }: Props) {
                     <div>
                       <p className="text-xs font-semibold text-slate-700">Evidence</p>
                       <input
-                        value={customEvidenceByItem[entry.key] ?? entry.extractedEvidence}
+                        value={customEvidenceByItem[entry.key] ?? ""}
                         onChange={(event) => {
                           setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
-                          setAlignmentSaved(false);
                         }}
                         className={cn(
                           "mt-1 w-full rounded-md border bg-white px-2 py-1 text-xs",
@@ -299,7 +310,18 @@ export default function WorkHistoryPage({ params }: Props) {
                         placeholder={entry.placeholder}
                       />
                       {entry.extractedEvidence ? (
-                        <p className="mt-1 text-[11px] text-slate-500">Suggested from profile/listing: {entry.extractedEvidence}</p>
+                        <div className="mt-1 flex items-start justify-between gap-2">
+                          <p className="text-[11px] text-slate-500">Suggested from profile/listing: {entry.extractedEvidence}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: entry.extractedEvidence }));
+                            }}
+                            className="text-[11px] font-medium text-sky-700 hover:underline"
+                          >
+                            Use suggestion
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -311,10 +333,12 @@ export default function WorkHistoryPage({ params }: Props) {
           <div className="flex items-center justify-between">
             <button
               onClick={saveAlignment}
-              disabled={alignmentSaving}
+              disabled={alignmentSaving || !hasUnsavedChanges}
               className="px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white disabled:opacity-50"
             >
-              {alignmentSaved ? "Saved" : `${getSaveButtonLabel(alignmentSaving ? "saving" : "idle")} alignment`}
+              {hasUnsavedChanges
+                ? `${getSaveButtonLabel(alignmentSaving ? "saving" : "idle")} alignment`
+                : "Saved"}
             </button>
             <button
               onClick={continueToResume}

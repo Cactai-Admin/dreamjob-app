@@ -33,7 +33,6 @@ const USER_MENU_ITEMS = [
   { href: "/profile",  label: "Profile",  icon: User },
   { href: "/career-advancement", label: "Career Advancement", icon: Zap },
   { href: "/documents", label: "Documents", icon: Save },
-  { href: "/archive",  label: "Archive",  icon: Save },
   { href: "/trash",    label: "Trash",    icon: Trash2 },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/admin",    label: "Admin",    icon: Shield },

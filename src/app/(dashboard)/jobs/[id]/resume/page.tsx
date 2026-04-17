@@ -10,7 +10,7 @@ import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
 import { getSaveButtonLabel } from "@/lib/workflow/completion";
-import { parseNativeDocument, serializeNativeDocument, type NativeDocument, type NativeDocumentSection } from "@/lib/documents/native-document";
+import { parseNativeDocument, serializeNativeDocument, toPlainText, type NativeDocument, type NativeDocumentSection } from "@/lib/documents/native-document";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -24,6 +24,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [resumeDoc, setResumeDoc] = useState<NativeDocument | null>(null);
   const [resumeDirty, setResumeDirty] = useState(false);
@@ -73,6 +74,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
   const ensureGeneration = async () => {
     if (generating) return;
     setGenerating(true);
+    setGenerationError(null);
     let provider: string | undefined;
     try {
       const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
@@ -81,13 +83,22 @@ export default function ResumeWorkspacePage({ params }: Props) {
       // ignore
     }
 
-    await fetch("/api/ai/generate", {
+    const generateResponse = await fetch("/api/ai/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workflow_id: id, output_type: "resume", provider }),
     });
+    if (!generateResponse.ok) {
+      const payload = await generateResponse.json().catch(() => null);
+      setGenerationError(payload?.error ?? "Unable to generate resume right now.");
+      setGenerating(false);
+      return;
+    }
 
+    let attempts = 0;
+    const maxAttempts = 24;
     pollingRef.current = setInterval(async () => {
+      attempts += 1;
       const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
       const resumeOut = wf.outputs?.find((o) => o.type === "resume" && o.is_current);
       if (resumeOut) {
@@ -95,6 +106,12 @@ export default function ResumeWorkspacePage({ params }: Props) {
         setWorkflow(wf);
         setResumeDoc(parseNativeDocument("resume", resumeOut));
         setGenerating(false);
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        setGenerating(false);
+        setGenerationError("Resume generation timed out. Please try generating again.");
       }
     }, 2500);
   };
@@ -115,14 +132,32 @@ export default function ResumeWorkspacePage({ params }: Props) {
     }
     setResumeDirty(false);
     setSaveState("saved");
+    await fetch(`/api/workflows/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        autosave_data: {
+          ...(workflow?.autosave_data && typeof workflow.autosave_data === "object" ? workflow.autosave_data : {}),
+          completion: {
+            ...((workflow?.autosave_data as { completion?: Record<string, unknown> } | null)?.completion ?? {}),
+            resume_completed_at: new Date().toISOString(),
+          },
+        },
+      }),
+    }).catch(() => null);
     await loadWorkflow();
   };
 
+  const hasMeaningfulResumeContent = useMemo(
+    () => Boolean(resumeDoc && toPlainText(resumeDoc).trim().length > 0),
+    [resumeDoc]
+  );
+
   useEffect(() => {
-    if (!loading && !resumeSaved && (resumeDoc?.sections.length ?? 0) === 0) {
+    if (!loading && !resumeSaved && !hasMeaningfulResumeContent) {
       void ensureGeneration();
     }
-  }, [loading, resumeSaved, resumeDoc?.sections.length]);
+  }, [loading, resumeSaved, hasMeaningfulResumeContent]);
 
   const continueToCoverLetter = async () => {
     if (resumeDirty) {
@@ -215,11 +250,17 @@ export default function ResumeWorkspacePage({ params }: Props) {
           </div>
 
           {generating && (
-            <div className="rounded-xl border border-slate-200 bg-white p-6 text-center">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-              <p className="text-sm text-slate-600 mt-2">Generating resume…</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-10 text-center">
+              <div className="mx-auto h-12 w-12 rounded-full border-2 border-slate-300 border-t-slate-900 animate-spin" />
+              <p className="text-sm font-medium text-slate-700 mt-4">Generating resume draft…</p>
+              <p className="text-xs text-slate-500 mt-1">We are building your first resume draft from listing + evidence alignment.</p>
             </div>
           )}
+          {generationError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+              {generationError}
+            </div>
+          ) : null}
 
           {googleSyncState && (
             <div className={cn("rounded-lg border px-3 py-2 text-xs", googleSyncState.status === "synced" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : googleSyncState.status === "error" ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900")}>
@@ -228,7 +269,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
             </div>
           )}
 
-          {(resumeDoc?.sections.length ?? 0) > 0 && (
+          {hasMeaningfulResumeContent && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
               {resumeDoc?.sections.map((section: NativeDocumentSection) => (
                 <div key={section.id}>

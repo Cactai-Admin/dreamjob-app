@@ -51,6 +51,8 @@ export async function GET(request: NextRequest) {
     } else {
       query = query.eq('state', stateFilter)
     }
+  } else {
+    query = query.neq('state', 'archived')
   }
 
   const { data, error } = await query
