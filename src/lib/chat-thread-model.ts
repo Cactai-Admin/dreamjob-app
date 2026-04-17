@@ -76,5 +76,14 @@ export function toThreadTurn(message: ChatMessage): ChatThreadTurn {
     content: message.content,
     createdAt: message.timestamp,
     suggestions: message.suggestions,
+    actions: message.actions?.map((action, index) => ({
+      id: action.id || `action-${message.id}-${index}`,
+      kind: 'action_card',
+      label: action.label,
+      payload: { type: action.type, value: action.value },
+    })),
+    metadata: message.warnings?.length
+      ? { warnings: message.warnings.map((warning) => warning.message) }
+      : undefined,
   }
 }

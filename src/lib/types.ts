@@ -149,12 +149,27 @@ export interface CoverLetterDocument {
 
 // ── Chat ──────────────────────────────────────────────────
 
+export interface ChatMessageAction {
+  id: string;
+  type: string;
+  label: string;
+  value?: string;
+}
+
+export interface ChatMessageWarning {
+  code?: string;
+  message: string;
+  severity?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
   suggestions?: string[];
+  actions?: ChatMessageAction[];
+  warnings?: ChatMessageWarning[];
 }
 
 // ── Admin ─────────────────────────────────────────────────

@@ -507,6 +507,39 @@ export async function GET(request: NextRequest) {
         ? ((((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).suggestions) as unknown[])
           .filter((value): value is string => typeof value === 'string')
         : [],
+      actions: Array.isArray((msg.metadata as Record<string, unknown> | null)?.structured_output
+        && typeof (msg.metadata as Record<string, unknown>).structured_output === 'object'
+        ? ((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).actions
+        : null)
+        ? ((((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).actions) as unknown[])
+          .filter((value): value is { type: string; label: string; value?: string } => {
+            if (!value || typeof value !== 'object') return false
+            const action = value as Record<string, unknown>
+            return typeof action.type === 'string' && typeof action.label === 'string'
+          })
+          .map((action, index) => ({
+            id: `${msg.id}-action-${index}`,
+            type: action.type,
+            label: action.label,
+            value: action.value,
+          }))
+        : [],
+      warnings: Array.isArray((msg.metadata as Record<string, unknown> | null)?.structured_output
+        && typeof (msg.metadata as Record<string, unknown>).structured_output === 'object'
+        ? ((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).warnings
+        : null)
+        ? ((((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).warnings) as unknown[])
+          .filter((value): value is { code?: string; message: string; severity?: string } => {
+            if (!value || typeof value !== 'object') return false
+            const warning = value as Record<string, unknown>
+            return typeof warning.message === 'string'
+          })
+          .map((warning) => ({
+            code: warning.code,
+            message: warning.message,
+            severity: warning.severity,
+          }))
+        : [],
     })) ?? [],
   })
 }
