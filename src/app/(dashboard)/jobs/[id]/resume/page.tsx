@@ -10,7 +10,7 @@ import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
 import { getSaveButtonLabel } from "@/lib/workflow/completion";
-import { parseNativeDocument, serializeNativeDocument, toPlainText, type NativeDocument, type NativeDocumentSection } from "@/lib/documents/native-document";
+import { getPrimarySectionText, parseNativeDocument, serializeNativeDocument, type NativeDocument, type NativeDocumentSection } from "@/lib/documents/native-document";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -149,7 +149,7 @@ export default function ResumeWorkspacePage({ params }: Props) {
   };
 
   const hasMeaningfulResumeContent = useMemo(
-    () => Boolean(resumeDoc && toPlainText(resumeDoc).trim().length > 0),
+    () => Boolean(resumeDoc && getPrimarySectionText(resumeDoc).trim().length > 0),
     [resumeDoc]
   );
 

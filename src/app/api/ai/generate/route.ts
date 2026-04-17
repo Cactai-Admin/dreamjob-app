@@ -14,6 +14,19 @@ import { resolveProviderPin } from '@/lib/ai/provider-pinning'
 
 const supabaseAdmin = getAdminClient()
 
+function readEvidenceAlignment(notes: unknown): Record<string, unknown>[] {
+  if (typeof notes !== 'string' || !notes.trim()) return []
+  try {
+    const parsed = JSON.parse(notes) as { evidence_alignment?: unknown }
+    if (!Array.isArray(parsed?.evidence_alignment)) return []
+    return parsed.evidence_alignment.filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object'
+    )
+  } catch {
+    return []
+  }
+}
+
 async function getAccountId() {
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -138,6 +151,7 @@ export async function POST(request: NextRequest) {
     employment: employment ?? [],
     qaAnswers: qaAnswers ?? [],
     profileMemory: profileMemory ?? [],
+    evidenceAlignment: readEvidenceAlignment(workflow.notes),
   })
 
   if (

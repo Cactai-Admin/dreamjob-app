@@ -47,6 +47,11 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
       placeholder: "Ask for resume bullet, summary, or section edits…",
       empty: "Use chat to co-edit resume content directly in this workspace.",
     },
+    work_history: {
+      subtitle: "Work history assistant",
+      placeholder: "Ask for evidence mapping and requirement alignment help…",
+      empty: "Use chat to validate and strengthen requirement-to-evidence alignment before resume generation.",
+    },
     cover_letter_workspace: {
       subtitle: "Cover letter assistant",
       placeholder: "Ask for cover-letter tone, structure, and rewrite edits…",
@@ -151,7 +156,8 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   }, [workflowId, surface]);
 
   useEffect(() => {
-    const shouldSeed = surface === "listing_review" && !loadingThread && messages.length === 0 && !seededProactiveReview;
+    const proactiveSurfaces = new Set(["listing_review", "work_history", "resume_workspace"]);
+    const shouldSeed = proactiveSurfaces.has(surface) && !loadingThread && messages.length === 0 && !seededProactiveReview;
     if (!shouldSeed) return;
     setSeededProactiveReview(true);
     setIsTyping(true);

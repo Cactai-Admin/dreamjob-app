@@ -16,6 +16,19 @@ import { resolveProviderPin } from '@/lib/ai/provider-pinning'
 
 const supabaseAdmin = getAdminClient()
 
+function readEvidenceAlignment(notes: unknown): Record<string, unknown>[] {
+  if (typeof notes !== 'string' || !notes.trim()) return []
+  try {
+    const parsed = JSON.parse(notes) as { evidence_alignment?: unknown }
+    if (!Array.isArray(parsed?.evidence_alignment)) return []
+    return parsed.evidence_alignment.filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object'
+    )
+  } catch {
+    return []
+  }
+}
+
 const STRUCTURED_OUTPUT_INSTRUCTIONS = `Return strict JSON with keys: message, suggestions, actions, warnings, facts_to_confirm, completion_signal.
 - message is required and must be a non-empty string.
 - suggestions is optional array of short user-ready prompts.
@@ -230,7 +243,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const [{ data: qaAnswers }, { data: reusableFacts }, { data: profile }, { data: employment }, { data: evidence }] = await Promise.all([
+  const [{ data: qaAnswers }, { data: reusableFacts }, { data: profile }, { data: employment }] = await Promise.all([
     supabaseAdmin
       .from('qa_answers')
       .select('question_text, answer_text, is_accepted')
@@ -253,13 +266,8 @@ export async function POST(request: NextRequest) {
       .from('employment_history')
       .select('*')
       .eq('account_id', accountId),
-    supabaseAdmin
-      .from('profile_evidence')
-      .select('id, evidence_type, title, details, trust_level, created_at')
-      .eq('account_id', accountId)
-      .order('created_at', { ascending: false })
-      .limit(20),
   ])
+  const evidenceAlignment = readEvidenceAlignment(workflow.notes)
 
   const eventTypes = (workflow.status_events ?? []).map((event: StatusEvent) => event.event_type)
   const inApplicationSupport =
@@ -320,7 +328,7 @@ export async function POST(request: NextRequest) {
     employment_work_history: (employment ?? []) as Record<string, unknown>[],
     accepted_run_facts: runFacts,
     reusable_profile_memory: reusableMemoryFacts,
-    evidence_alignment: (evidence ?? []) as Record<string, unknown>[],
+    evidence_alignment: evidenceAlignment,
     artifact_state: ((workflow.outputs ?? []) as Record<string, unknown>[]).map((output) => ({
       type: output.type,
       status: output.state,

@@ -65,6 +65,7 @@ export interface GenerationContextInput {
   employment: EmploymentContext[]
   qaAnswers: QAAnswerContext[]
   profileMemory: ProfileMemoryContext[]
+  evidenceAlignment?: Record<string, unknown>[]
 }
 
 export interface GenerationContextBundle {
@@ -185,7 +186,7 @@ export function buildGenerationContextBundle(input: GenerationContextInput): Gen
     employment_work_history: input.employment as unknown as Record<string, unknown>[],
     accepted_run_facts: acceptedRunFacts,
     reusable_profile_memory: reusableFacts,
-    evidence_alignment: [],
+    evidence_alignment: input.evidenceAlignment ?? [],
     artifact_state: [],
     status_events: (input.workflow.status_events ?? []) as unknown as Record<string, unknown>[],
     conflicts,
