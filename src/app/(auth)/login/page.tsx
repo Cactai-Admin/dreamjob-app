@@ -26,7 +26,7 @@ function LoginForm() {
     if (!inboundError) return ''
 
     if (inboundError === 'oauth_account_not_allowed') {
-      return 'Google sign-in is not enabled for this account. Use Internal Use Only login.'
+      return 'It looks like this Google account is not currently associated with a DreamJob account. Please sign up to create a DreamJob account using your Google account.'
     }
 
     return inboundError
@@ -96,8 +96,8 @@ function LoginForm() {
 
       <div className="login-card">
         <div className="login-card-header">
-          <h1 className="login-title">Begin Your Pursuit</h1>
-          <p className="login-subtitle">Find Your Dream Job</p>
+          <h1 className="login-title">Find Your Dream Job</h1>
+          <p className="login-subtitle">Your Pursuit Begins Now</p>
         </div>
 
         {mode === 'google' ? (
@@ -122,7 +122,7 @@ function LoginForm() {
             </button>
 
             <p className="login-help-text">
-              New to DreamJob? Use Google to create your account and sign in.
+              New to DreamJob? Use Google to sign in today.
             </p>
 
             <button
@@ -134,7 +134,7 @@ function LoginForm() {
               className="login-link"
               disabled={oauthLoading}
             >
-              Internal Use Only
+              Internal Use
             </button>
           </div>
         ) : (
@@ -222,7 +222,7 @@ function LoginForm() {
       </div>
 
       <p className="login-footer">
-        AI-assisted Job Application Materials · DreamJob
+        AI-assisted Career Advancement · DreamJob
       </p>
     </>
   )
