@@ -43,6 +43,19 @@ const JOB_BOARD_DOMAINS = [
   'ashbyhq.com', 'wellfound.com', 'ziprecruiter.com', 'monster.com', 'careerbuilder.com',
 ]
 const OUT_OF_DOMAIN_HOST_SIGNALS = ['porn', 'sex', 'xxx', 'xvideos', 'xhamster', 'onlyfans', 'redtube', 'youporn']
+const DREAMJOB_INTERNAL_HOST_SIGNALS = ['dreamjob', 'localhost', '127.0.0.1', '0.0.0.0']
+const DREAMJOB_WORKFLOW_PATH_SIGNALS = [
+  /^\/(?:app\/)?dashboard(?:\/|$)/i,
+  /^\/(?:app\/)?workflows?(?:\/|$)/i,
+  /^\/(?:app\/)?jobs\/new(?:\/|$)/i,
+  /^\/(?:app\/)?jobs\/[^/]+\/(?:review|analysis|start|apply)(?:\/|$)/i,
+  /^\/(?:app\/)?(?:resume|cover-letter|interview|negotiation)(?:\/|$)/i,
+]
+const JOB_LISTING_QUERY_KEYS = ['gh_jid', 'gh_src', 'job', 'jobid', 'job_id', 'jobreq', 'requisition', 'opening', 'position']
+const CLEARLY_NON_HIRING_PATH_SIGNALS = [
+  /^\/(?:about|about-us|blog|docs|documentation|privacy|terms|help|support|news|press|contact|pricing|features|product|products)(?:\/|$)/i,
+  /^\/(?:legal|cookie|cookies|sitemap|status)(?:\/|$)/i,
+]
 
 type IntakeClassification = 'job_listing' | 'dreamjob_action' | 'ambiguous' | 'out_of_domain'
 
@@ -65,9 +78,19 @@ function classifyIntakeInput(rawInput: string): {
   const host = parsedUrl.hostname.replace(/^www\./, '').toLowerCase()
   const path = parsedUrl.pathname.toLowerCase()
   const full = `${host}${path}`
+  const query = parsedUrl.search.toLowerCase()
+  const hash = parsedUrl.hash.toLowerCase()
   const isLikelyJobBoard = JOB_BOARD_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))
   const hasJobPathSignal = /(\/jobs?\/|\/job\/|\/career|\/careers|\/openings|\/positions|\/vacanc)/i.test(path)
   const hasOutOfDomainSignal = OUT_OF_DOMAIN_HOST_SIGNALS.some((signal) => full.includes(signal))
+  const hasListingQuerySignal = JOB_LISTING_QUERY_KEYS.some((key) => parsedUrl.searchParams.has(key))
+  const isClearlyDreamJobInternalHost = DREAMJOB_INTERNAL_HOST_SIGNALS.some((signal) => host.includes(signal))
+  const hasDreamJobWorkflowPathSignal = DREAMJOB_WORKFLOW_PATH_SIGNALS.some((pattern) => pattern.test(path))
+  const hasDreamJobBrandSignal = /\bdreamjob\b/i.test(`${host}${path}${query}${hash}`)
+  const hasWorkflowIntentSignal = /(workflow|qa_intake|resume|cover-letter|interview|negotiation|start-application|listing-review)/i.test(
+    `${path}${query}${hash}`
+  )
+  const hasClearlyNonHiringPathSignal = CLEARLY_NON_HIRING_PATH_SIGNALS.some((pattern) => pattern.test(path))
 
   if (hasOutOfDomainSignal) {
     return {
@@ -77,24 +100,25 @@ function classifyIntakeInput(rawInput: string): {
     }
   }
 
-  if (/(dreamjob|localhost|127\.0\.0\.1)/i.test(host) || path.includes('/jobs/')) {
+  if (isClearlyDreamJobInternalHost || (hasDreamJobBrandSignal && (hasDreamJobWorkflowPathSignal || hasWorkflowIntentSignal))) {
     return {
       intake_classification: 'dreamjob_action',
-      reason: 'looks_like_internal_or_workflow_link',
+      reason: isClearlyDreamJobInternalHost ? 'internal_dreamjob_host' : 'dreamjob_branded_workflow_url',
     }
   }
 
-  if (isLikelyJobBoard || hasJobPathSignal) {
+  if (isLikelyJobBoard || hasJobPathSignal || hasListingQuerySignal) {
     return {
       intake_classification: 'job_listing',
-      reason: isLikelyJobBoard ? 'known_job_board_domain' : 'job_path_signal',
+      reason: isLikelyJobBoard ? 'known_job_board_domain' : hasJobPathSignal ? 'job_path_signal' : 'job_listing_query_signal',
     }
   }
 
-  if (/(about|blog|docs|privacy|terms|help|support|news)/i.test(path)) {
+  if (hasClearlyNonHiringPathSignal) {
     return {
-      intake_classification: 'ambiguous',
-      reason: 'non_listing_page_path',
+      intake_classification: 'out_of_domain',
+      reason: 'clearly_non_hiring_page_path',
+      cheeky_message: 'That URL doesn’t look like a hiring listing. Paste the actual job post and I’ll break it down.',
     }
   }
 
