@@ -122,7 +122,7 @@ function LoginForm() {
             </button>
 
             <p className="login-help-text">
-              New to DreamJob? Use Google to sign in today.
+              New to DreamJob? Sign up today.
             </p>
 
             <button
