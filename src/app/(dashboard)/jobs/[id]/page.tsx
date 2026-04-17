@@ -67,6 +67,7 @@ export default function WorkHistoryPage({ params }: Props) {
   const [profileTerms, setProfileTerms] = useState<string[]>([]);
   const [employment, setEmployment] = useState<EmploymentRecord[]>([]);
   const [alignmentSaving, setAlignmentSaving] = useState(false);
+  const [alignmentSaveError, setAlignmentSaveError] = useState<string | null>(null);
   const [savedEvidenceByItem, setSavedEvidenceByItem] = useState<Record<string, string>>({});
   const [customEvidenceByItem, setCustomEvidenceByItem] = useState<Record<string, string>>({});
 
@@ -209,9 +210,10 @@ export default function WorkHistoryPage({ params }: Props) {
     return false;
   }, [customEvidenceByItem, savedEvidenceByItem]);
 
-  const saveAlignment = async () => {
-    if (!workflow) return;
+  const saveAlignment = async (): Promise<boolean> => {
+    if (!workflow) return false;
     setAlignmentSaving(true);
+    setAlignmentSaveError(null);
     const evidenceAlignment = evidenceMap.map((entry) => ({
       key: entry.key,
       requirement_id: entry.requirementId,
@@ -220,24 +222,36 @@ export default function WorkHistoryPage({ params }: Props) {
       item: entry.item,
       matchedProfileData: entry.matchedProfileData,
       matchedWorkHistory: entry.matchedWorkHistory,
-      customEvidence: entry.customEvidence ?? [],
+      customEvidence: entry.customEvidenceText ? [entry.customEvidenceText] : [],
+      extractedEvidence: entry.extractedEvidence,
       missing: entry.missing,
     }));
     const nextNotes = JSON.stringify({ evidence_alignment: evidenceAlignment });
-    const wf = await fetch(`/api/workflows/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: nextNotes }),
-    }).then((res) => res.json());
-    if (wf?.id) {
+    try {
+      const response = await fetch(`/api/workflows/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: nextNotes }),
+      });
+      const wf = await response.json().catch(() => null);
+      if (!response.ok || !wf?.id) {
+        setAlignmentSaveError((wf as { error?: string } | null)?.error ?? "Unable to save alignment right now.");
+        return false;
+      }
       setWorkflow(wf as Workflow);
       setSavedEvidenceByItem({ ...customEvidenceByItem });
+      return true;
+    } catch {
+      setAlignmentSaveError("Unable to save alignment right now.");
+      return false;
+    } finally {
+      setAlignmentSaving(false);
     }
-    setAlignmentSaving(false);
   };
 
   const continueToResume = async () => {
-    await saveAlignment();
+    const saved = await saveAlignment();
+    if (!saved) return;
     router.push(`/jobs/${id}/resume`);
   };
 
@@ -348,6 +362,11 @@ export default function WorkHistoryPage({ params }: Props) {
               Continue to Resume <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+          {alignmentSaveError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+              {alignmentSaveError}
+            </div>
+          ) : null}
         </div>
       </main>
 
