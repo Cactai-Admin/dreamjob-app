@@ -39,6 +39,7 @@ Rules:
 - "kind=requirement" only for explicit must-have criteria.
 - "kind=nice_to_have" only for preferred/bonus/nice-to-have criteria.
 - Preserve numeric fidelity exactly: years, quotas, percentages, compensation, team sizes, travel, geo qualifiers.
+- Do not drop leading numeric thresholds in requirement text (e.g. keep "7+ years", never "+ years").
 - Prioritize requirements for downstream targeting:
   - essential: hard filters
   - important: strong differentiators
@@ -46,6 +47,7 @@ Rules:
   - suppressible: low-signal or redundant to surface
 - Suppress user-facing noise when strongly implied by context (example: basic English fluency in standard English-language roles).
 - Compensation extraction should capture obvious base/OTE/hourly/bonus/equity/location qualifiers in salary_range when present.
+- Never output HTML/meta fragments (such as og:title/og:description/company about text) in salary_range. Use null when compensation is unclear.
 - If uncertain, include a short note in uncertainties.`
 
 export const LISTING_EVIDENCE_MAP_SYSTEM = `You are DreamJob's listing evidence mapper.
