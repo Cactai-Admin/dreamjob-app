@@ -24,6 +24,7 @@ Pass 1 (Normalization): return canonical listing fields and requirement intellig
       "user_facing_relevance": "show" | "suppress",
       "suppression_reason": "already evident/low-signal/redundant/noise" or null,
       "numeric_signal": "numeric threshold exactly as written when present" or null,
+      "downstream_use": ["resume", "cover_letter", "interview", "negotiation"] subset by relevance,
       "confidence": "high" | "medium" | "low",
       "source": "llm"
     }
@@ -31,6 +32,30 @@ Pass 1 (Normalization): return canonical listing fields and requirement intellig
   "responsibilities": [
     { "id": "resp_1", "text": "exact listing responsibility text", "confidence": "high" | "medium" | "low" }
   ],
+  "job_context": {
+    "industry": "SaaS|Fintech|Healthcare|..." or null,
+    "offering_type": "software product|services|marketplace|..." or null,
+    "offering_detail": "CRM|payments infrastructure|..." or null,
+    "department": "Sales|Engineering|Operations|..." or null,
+    "team": "Enterprise Sales|RevOps|..." or null,
+    "title_role": "exact title interpretation" or null,
+    "job_family": "sales|engineering|operations|..." or null,
+    "buyer_or_user_context": "B2B enterprise buyers|SMB owners|..." or null,
+    "operating_motion": "sales-led|product-led|..." or null,
+    "context_confidence": "high" | "medium" | "low"
+  },
+  "content_buckets": {
+    "role_summary": ["..."],
+    "responsibilities": ["..."],
+    "exact_requirements": ["..."],
+    "nice_to_haves": ["..."],
+    "compensation": ["..."],
+    "location_work_mode": ["..."],
+    "benefits": ["..."],
+    "company_context": ["..."],
+    "values_culture": ["..."],
+    "hiring_logistics": ["..."]
+  },
   "benefits": "..." or null,
   "company_website_url": "..." or null,
   "company_linkedin_url": "..." or null,
@@ -38,6 +63,7 @@ Pass 1 (Normalization): return canonical listing fields and requirement intellig
 }
 
 Rules:
+- Use a 3-stage logic: identify job context hierarchy, bucket listing content, then evaluate requirements with context-aware priority.
 - Requirement items must be concise line items, not paragraph dumps.
 - "kind=requirement" only for explicit must-have criteria.
 - "kind=nice_to_have" only for preferred/bonus/nice-to-have criteria.
@@ -51,6 +77,7 @@ Rules:
 - Suppress user-facing noise when strongly implied by context (example: basic English fluency in standard English-language roles).
 - Compensation extraction should capture obvious base/OTE/hourly/bonus/equity/location qualifiers in salary_range when present.
 - Treat OTE / on-target earnings as first-class compensation signal and preserve exact OTE text.
+- Context-aware requirement prioritization: sales should strongly weight quota/ACV/OTE signals; engineering should down-weight those unless clearly relevant.
 - Never output HTML/meta fragments (such as og:title/og:description/company about text) in salary_range. Use null when compensation is unclear.
 - If uncertain, include a short note in uncertainties.`
 

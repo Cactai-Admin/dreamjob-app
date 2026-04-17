@@ -8,6 +8,8 @@ import {
   parsedListingSchema,
   toCanonicalListingFromParse,
   type ParsedListingEvidenceMapItem,
+  type ParsedListingJobContext,
+  type ParsedListingOpportunityReview,
   type ParsedListingRequirement,
 } from '@/lib/ai/schemas/listing-parse'
 
@@ -147,11 +149,94 @@ function inferRequirementType(text: string): ParsedListingRequirement['requireme
   return 'other'
 }
 
-function classifyPriority(text: string, kind: ParsedListingRequirement['kind']): {
+function inferJobContextHierarchy(sourceText: string, title: string | null): ParsedListingJobContext {
+  const normalized = `${title ?? ''}\n${sourceText}`.toLowerCase()
+  const industry = /\b(fintech|payments|banking)\b/.test(normalized)
+    ? 'Fintech'
+    : /\b(healthcare|clinical|patient|hipaa)\b/.test(normalized)
+      ? 'Healthcare'
+      : /\b(e-?commerce|marketplace|retail)\b/.test(normalized)
+        ? 'E-commerce'
+        : /\b(edtech|education|student)\b/.test(normalized)
+          ? 'Education'
+          : /\b(govtech|public sector|federal|state government)\b/.test(normalized)
+            ? 'GovTech'
+            : /\b(manufacturing|factory|supply chain)\b/.test(normalized)
+              ? 'Manufacturing'
+              : /\b(saas|software|platform|cloud)\b/.test(normalized)
+                ? 'SaaS'
+                : null
+  const department = /\b(account executive|sales|quota|pipeline)\b/.test(normalized)
+    ? 'Sales'
+    : /\b(revenue operations|revops)\b/.test(normalized)
+      ? 'RevOps'
+      : /\b(marketing|demand gen|lifecycle)\b/.test(normalized)
+        ? 'Marketing'
+        : /\b(engineer|developer|software|platform)\b/.test(normalized)
+          ? 'Engineering'
+          : /\b(customer success|account manager)\b/.test(normalized)
+            ? 'Customer Success'
+            : /\b(finance|accounting|fp&a)\b/.test(normalized)
+              ? 'Finance'
+              : /\b(hr|talent|recruit)\b/.test(normalized)
+                ? 'HR'
+                : /\b(it|help desk|systems administrator)\b/.test(normalized)
+                  ? 'IT'
+                  : /\b(operations|ops)\b/.test(normalized)
+                    ? 'Operations'
+                    : null
+  const team = /\b(smb)\b/.test(normalized)
+    ? 'SMB Sales'
+    : /\b(mid[- ]market)\b/.test(normalized)
+      ? 'Mid-Market Sales'
+      : /\b(enterprise)\b/.test(normalized)
+        ? 'Enterprise Sales'
+        : /\b(revenue operations|revops)\b/.test(normalized)
+          ? 'Revenue Operations'
+          : /\b(platform engineering)\b/.test(normalized)
+            ? 'Platform Engineering'
+            : /\b(security)\b/.test(normalized)
+              ? 'Security Engineering'
+              : null
+  const offeringType = /\b(marketplace)\b/.test(normalized)
+    ? 'marketplace'
+    : /\b(services|consulting|implementation)\b/.test(normalized)
+      ? 'services'
+      : /\b(hardware|device)\b/.test(normalized)
+        ? 'hardware product'
+        : /\b(subscription|media)\b/.test(normalized)
+          ? 'subscription/media'
+          : /\b(platform|software|saas|cloud)\b/.test(normalized)
+            ? 'software product'
+            : null
+  const jobFamily = department?.toLowerCase().replace(/\s+/g, '_') ?? 'other'
+  return {
+    industry,
+    offering_type: offeringType,
+    offering_detail: /\b(cybersecurity|crm|payments|analytics|community)\b/i.exec(sourceText)?.[0] ?? null,
+    department,
+    team,
+    title_role: title ?? null,
+    job_family: jobFamily,
+    buyer_or_user_context: /\b(b2b|b2c|enterprise|smb|mid-market)\b/i.exec(sourceText)?.[0] ?? null,
+    operating_motion: /\b(sales-led|product-led|plg|enterprise motion|field sales)\b/i.exec(sourceText)?.[0] ?? null,
+    context_confidence: industry || department ? 'medium' : 'low',
+  }
+}
+
+function classifyPriority(text: string, kind: ParsedListingRequirement['kind'], jobContext?: ParsedListingJobContext): {
   priority: ParsedListingRequirement['priority']
   priority_weight: number
 } {
   const normalized = text.toLowerCase()
+  const isSalesContext = jobContext?.department === 'Sales' || jobContext?.job_family === 'sales'
+  const isEngineeringContext = jobContext?.department === 'Engineering'
+  if (isSalesContext && /\b(quota|acv|arr|pipeline|close|forecast|commission|ote)\b/.test(normalized)) {
+    return { priority: 'essential', priority_weight: 0.97 }
+  }
+  if (isEngineeringContext && /\b(quota|acv|pipeline|commission)\b/.test(normalized)) {
+    return { priority: 'suppressible', priority_weight: 0.18 }
+  }
   if (/\b(must|required|minimum|non-negotiable)\b/.test(normalized) || /\b\d+\+?\s*(years?|yrs?)\b/.test(normalized)) {
     return { priority: 'essential', priority_weight: 0.95 }
   }
@@ -167,7 +252,7 @@ function classifyPriority(text: string, kind: ParsedListingRequirement['kind']):
   return { priority: 'important', priority_weight: 0.7 }
 }
 
-function inferSuppression(text: string, sourceContext: { englishAppContext: boolean }): {
+function inferSuppression(text: string, sourceContext: { englishAppContext: boolean; jobContext?: ParsedListingJobContext }): {
   user_facing_relevance: ParsedListingRequirement['user_facing_relevance']
   suppression_reason: string | null
   force_user_suppression: boolean
@@ -175,7 +260,7 @@ function inferSuppression(text: string, sourceContext: { englishAppContext: bool
   const normalized = text.toLowerCase()
   const isEnglishFluencySignal = /\b(english|english fluency|fluent in english|english proficiency|proficiency in english|written english|spoken english|strong english communication|cefr|ilr)\b/.test(normalized)
   const isBilingualRequirement = /\b(bilingual|multilingual|spanish|french|german|mandarin|cantonese|japanese|korean|portuguese|arabic|hindi)\b/.test(normalized)
-  if (isEnglishFluencySignal && !isBilingualRequirement && sourceContext.englishAppContext) {
+  if (isEnglishFluencySignal && !isBilingualRequirement && sourceContext.englishAppContext && sourceContext.jobContext?.department !== 'Support') {
     return {
       user_facing_relevance: 'suppress',
       suppression_reason: 'already_evident_english_fluency',
@@ -188,7 +273,10 @@ function inferSuppression(text: string, sourceContext: { englishAppContext: bool
   return { user_facing_relevance: 'show', suppression_reason: null, force_user_suppression: false }
 }
 
-function inferEvidenceNeeded(text: string, requirementType: ParsedListingRequirement['requirement_type']): string | null {
+function inferEvidenceNeeded(text: string, requirementType: ParsedListingRequirement['requirement_type'], jobContext?: ParsedListingJobContext): string | null {
+  if (jobContext?.department === 'Sales' && /\b(quota|acv|pipeline|close|revenue|attainment)\b/i.test(text)) {
+    return 'Quota attainment, ACV mix, win rates, and revenue outcomes with scope context'
+  }
   if (requirementType === 'experience') return 'Quantified outcomes from prior roles with matching scope'
   if (requirementType === 'tool') return 'Specific tool/platform usage in shipped work'
   if (requirementType === 'leadership') return 'Examples of team leadership, cross-functional delivery, and measurable impact'
@@ -200,14 +288,22 @@ function inferEvidenceNeeded(text: string, requirementType: ParsedListingRequire
 
 function applyRequirementIntelligence(
   requirements: ParsedListingRequirement[],
-  sourceContext: { englishAppContext: boolean }
+  sourceContext: { englishAppContext: boolean; jobContext?: ParsedListingJobContext }
 ): ParsedListingRequirement[] {
   return requirements.map((requirement) => {
     const requirementType = requirement.requirement_type ?? inferRequirementType(requirement.text)
-    const priority = classifyPriority(requirement.text, requirement.kind)
+    const priority = classifyPriority(requirement.text, requirement.kind, sourceContext.jobContext)
     const suppression = inferSuppression(requirement.text, sourceContext)
     const numericSignal = requirement.numeric_signal ?? detectNumericSignal(requirement.text)
     const defaultShowDecision = priority.priority === 'suppressible' ? 'suppress' : 'show'
+    const downstreamUse: ParsedListingRequirement['downstream_use'] =
+      priority.priority === 'essential'
+        ? ['resume', 'cover_letter', 'interview']
+        : requirementType === 'experience' || requirementType === 'leadership'
+          ? ['resume', 'interview']
+          : requirementType === 'culture'
+            ? ['cover_letter', 'interview']
+            : ['resume', 'cover_letter']
 
     return {
       ...requirement,
@@ -217,7 +313,7 @@ function applyRequirementIntelligence(
         typeof requirement.priority_weight === 'number' && Number.isFinite(requirement.priority_weight)
           ? requirement.priority_weight
           : priority.priority_weight,
-      evidence_needed: requirement.evidence_needed ?? inferEvidenceNeeded(requirement.text, requirementType),
+      evidence_needed: requirement.evidence_needed ?? inferEvidenceNeeded(requirement.text, requirementType, sourceContext.jobContext),
       user_facing_relevance:
         suppression.force_user_suppression
           ? suppression.user_facing_relevance
@@ -227,6 +323,7 @@ function applyRequirementIntelligence(
           ? suppression.suppression_reason
           : requirement.suppression_reason ?? suppression.suppression_reason,
       numeric_signal: numericSignal,
+      downstream_use: requirement.downstream_use?.length ? requirement.downstream_use : downstreamUse,
     }
   })
 }
@@ -458,6 +555,80 @@ function buildDeterministicEvidenceMap(
       confidence: evidence ? 'medium' : requirement.confidence,
     }
   })
+}
+
+function buildContentBuckets(params: {
+  summary: string | null
+  requirements: ParsedListingRequirement[]
+  responsibilities: Array<{ text: string }>
+  compensation: string | null
+  location: string | null
+  workMode: string | null
+  signalText: string
+}): {
+  role_summary: string[]
+  responsibilities: string[]
+  exact_requirements: string[]
+  nice_to_haves: string[]
+  compensation: string[]
+  location_work_mode: string[]
+  benefits: string[]
+  company_context: string[]
+  values_culture: string[]
+  hiring_logistics: string[]
+} {
+  const allLines = splitLines(params.signalText)
+  return {
+    role_summary: params.summary ? splitLines(params.summary).slice(0, 4) : [],
+    responsibilities: params.responsibilities.map((item) => item.text).slice(0, 12),
+    exact_requirements: params.requirements.filter((item) => item.kind === 'requirement').map((item) => item.text).slice(0, 16),
+    nice_to_haves: params.requirements.filter((item) => item.kind === 'nice_to_have').map((item) => item.text).slice(0, 12),
+    compensation: [params.compensation, ...allLines.filter((line) => /\b(salary|compensation|ote|commission|bonus|equity)\b/i.test(line))]
+      .filter((line): line is string => Boolean(line))
+      .slice(0, 4),
+    location_work_mode: [params.location, params.workMode, ...allLines.filter((line) => /\b(remote|hybrid|onsite|location)\b/i.test(line))]
+      .filter((line): line is string => Boolean(line))
+      .slice(0, 5),
+    benefits: allLines.filter((line) => /\b(benefits|health|dental|vision|401k|pto|parental leave)\b/i.test(line)).slice(0, 8),
+    company_context: allLines.filter((line) => /\b(about us|mission|company|founded|customers|platform)\b/i.test(line)).slice(0, 8),
+    values_culture: allLines.filter((line) => /\b(values|culture|inclusive|collaborative|ownership|fast-paced)\b/i.test(line)).slice(0, 6),
+    hiring_logistics: allLines.filter((line) => /\b(interview|process|timeline|authorization|visa|background check)\b/i.test(line)).slice(0, 6),
+  }
+}
+
+function buildOpportunityReview(params: {
+  requirements: ParsedListingRequirement[]
+  compensation: string | null
+  compensationDetails: { ote: string | null; exact_range_text: string | null } | undefined
+  jobContext: ParsedListingJobContext
+}): ParsedListingOpportunityReview {
+  const ranked = [...params.requirements].sort((a, b) => b.priority_weight - a.priority_weight).slice(0, 8)
+  const visible = ranked.filter((item) => item.user_facing_relevance !== 'suppress')
+  const suppressed = params.requirements.filter((item) => item.user_facing_relevance === 'suppress')
+  const compensationSummary = params.compensationDetails?.ote ?? params.compensationDetails?.exact_range_text ?? params.compensation ?? null
+  const strategicLens = [params.jobContext.department, params.jobContext.team, params.jobContext.offering_detail ?? params.jobContext.offering_type]
+    .filter(Boolean)
+    .join(' · ')
+  return {
+    compensation_summary: compensationSummary,
+    top_requirements_ranked: ranked.map((item) => ({
+      requirement_id: item.id,
+      requirement_text: item.text,
+      priority_weight: item.priority_weight,
+    })),
+    top_resume_proof_needed: visible.map((item) => item.evidence_needed ?? item.text).slice(0, 5),
+    top_cover_letter_angles: visible.map((item) => `Tie direct impact to: ${item.text}`).slice(0, 4),
+    top_risks_or_gaps: visible.filter((item) => item.priority === 'essential').map((item) => `Essential gap risk if unsupported: ${item.text}`).slice(0, 4),
+    suppressed_requirements: suppressed.map((item) => ({
+      requirement_id: item.id,
+      requirement_text: item.text,
+      suppression_reason: item.suppression_reason,
+    })),
+    who_this_role_is_really_for: strategicLens || params.jobContext.title_role,
+    what_matters_most: visible.map((item) => item.text).slice(0, 4),
+    recommended_resume_emphasis: visible.map((item) => item.evidence_needed ?? item.text).slice(0, 5),
+    recommended_cover_letter_emphasis: visible.map((item) => `Address ${item.requirement_type} signal with proof.`).slice(0, 4),
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -731,7 +902,17 @@ export async function POST(request: NextRequest) {
     })
 
     const compensationHeuristic = extractCompensationDetails(signalText)
-    const enrichedRequirements = applyRequirementIntelligence(normalizedPassOne.requirements, { englishAppContext: true })
+    const jobContext = inferJobContextHierarchy(signalText, normalizedPassOne.title)
+    const enrichedRequirements = applyRequirementIntelligence(normalizedPassOne.requirements, { englishAppContext: true, jobContext })
+    const contentBuckets = buildContentBuckets({
+      summary: normalizedPassOne.summary,
+      requirements: enrichedRequirements,
+      responsibilities: normalizedPassOne.responsibilities,
+      compensation: normalizedPassOne.compensation,
+      location: normalizedPassOne.location,
+      workMode,
+      signalText,
+    })
     const enrichedPassOne = normalizeParsedListing({
       ...normalizedPassOne,
       compensation:
@@ -744,6 +925,14 @@ export async function POST(request: NextRequest) {
         exact_range_text: sanitizeCompensationText(deterministicCompensation.exact_range_text) ?? compensationHeuristic.details.exact_range_text,
       },
       requirements: enrichedRequirements,
+      job_context: jobContext,
+      content_buckets: contentBuckets,
+    })
+    const opportunityReview = buildOpportunityReview({
+      requirements: enrichedPassOne.requirements,
+      compensation: enrichedPassOne.compensation,
+      compensationDetails: enrichedPassOne.compensation_details,
+      jobContext,
     })
 
     const parsedRequirementsCount = enrichedPassOne.requirements.length
@@ -811,6 +1000,9 @@ export async function POST(request: NextRequest) {
       parse_quality: parseQuality,
       evidence_map: evidenceMap,
       compensation_details: enrichedPassOne.compensation_details,
+      job_context: jobContext,
+      content_buckets: contentBuckets,
+      opportunity_review: opportunityReview,
     })
 
     parsed.requirements = normalizedParse.requirements.map((item) => item.text)
@@ -826,6 +1018,9 @@ export async function POST(request: NextRequest) {
       tools_platforms: toolsPlatforms,
       language_requirements: languageRequirements,
       canonical_listing: toCanonicalListingFromParse(normalizedParse),
+      job_context: normalizedParse.job_context,
+      content_buckets: normalizedParse.content_buckets,
+      opportunity_review: normalizedParse.opportunity_review,
       parse_trace: {
         entrypoint: 'home_url_submission',
         pipeline: 'fetch_html_then_llm_with_heuristic_fallbacks',
