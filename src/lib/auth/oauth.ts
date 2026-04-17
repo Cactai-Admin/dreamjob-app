@@ -2,8 +2,8 @@ type RedirectParams = Record<string, string | undefined>
 
 function getBaseUrl() {
   let baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_VERCEL_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.VERCEL_URL ||
     'http://localhost:3000'
 
