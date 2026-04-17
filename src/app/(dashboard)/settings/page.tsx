@@ -14,6 +14,12 @@ import { ICON_CATEGORIES, ICON_MAP } from "@/lib/profile-icons";
 
 type Theme = "light" | "dark" | "system";
 type ProviderName = "openai" | "anthropic";
+type LinkedInRuntime = {
+  mode: "local-browser" | "hosted-unsupported";
+  canLaunchInteractiveSession: boolean;
+  reason?: string;
+  checks: { key: string; label: string; status: "pass" | "fail"; detail: string }[];
+};
 
 const PROVIDER_INFO: Record<ProviderName, { name: string; model: string; description: string }> = {
   openai: {
@@ -42,7 +48,12 @@ function saveSettings(patch: Record<string, unknown>) {
 export default function SettingsPage() {
   const [profile, setProfile] = useState<{ first_name?: string; last_name?: string; email?: string; avatar_url?: string }>({});
   const [providers, setProviders] = useState<{ anthropic: boolean; openai: boolean; default: string } | null>(null);
-  const [linkedIn, setLinkedIn] = useState<{ isAuthenticated: boolean; session?: { last_verified_at?: string } } | null>(null);
+  const [linkedIn, setLinkedIn] = useState<{
+    isAuthenticated: boolean;
+    persistedAuth?: boolean;
+    runtime?: LinkedInRuntime;
+    session?: { last_verified_at?: string; is_authenticated?: boolean };
+  } | null>(null);
   const [linkedInLoading, setLinkedInLoading] = useState(false);
   const [linkedInStep, setLinkedInStep] = useState<"idle" | "launching" | "verifying">("idle");
   const [linkedInError, setLinkedInError] = useState<string | null>(null);
@@ -469,6 +480,34 @@ export default function SettingsPage() {
 
         {linkedIn === null ? (
           <div className="text-slate-400 text-sm">Checking status…</div>
+        ) : linkedIn.runtime && !linkedIn.runtime.canLaunchInteractiveSession ? (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-700 font-medium">Hosted LinkedIn session is not available</p>
+                <p className="text-xs text-amber-700/90 mt-1">
+                  {linkedIn.runtime.reason ?? "This runtime cannot launch a manual LinkedIn browser session."}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3 bg-white">
+              <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Readiness checks</p>
+              <ul className="space-y-1.5">
+                {linkedIn.runtime.checks.map((check) => (
+                  <li key={check.key} className="text-xs text-slate-600 flex items-start gap-2">
+                    <span className={cn("mt-0.5 inline-block w-2 h-2 rounded-full", check.status === "pass" ? "bg-emerald-500" : "bg-amber-500")} />
+                    <span>
+                      <span className="font-medium">{check.label}:</span> {check.detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs text-slate-500">
+              To use LinkedIn connection discovery today, run the app locally and connect LinkedIn from this page.
+            </p>
+          </div>
         ) : linkedIn.isAuthenticated ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">

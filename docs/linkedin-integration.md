@@ -25,6 +25,8 @@ Playwright needs to be installed with browser binaries:
 npx playwright install chromium
 ```
 
+LinkedIn authenticated-session automation is currently **local-runtime only**. Hosted/serverless deployments cannot launch the interactive browser sign-in flow.
+
 ## Usage
 
 ### Starting a LinkedIn Session
@@ -74,6 +76,12 @@ This gathers:
 GET /api/linkedin/session
 ```
 
+Response includes runtime capability and readiness checks:
+
+- `runtime.canLaunchInteractiveSession` — whether LinkedIn session launch/verify is supported in this runtime
+- `runtime.mode` — `local-browser` or `hosted-unsupported`
+- `runtime.checks[]` — explicit pass/fail checks describing why hosted runtime is blocked
+
 ### Closing the Session
 
 ```
@@ -96,6 +104,7 @@ Sessions are stored in a module-level `Map<string, BrowserSession>` keyed by acc
 
 - **Manual sign-in required**: Each session requires the user to manually sign in to LinkedIn
 - **Session persistence**: Sessions don't persist across server restarts
+- **Hosted limitation**: Vercel/serverless/production hosted runtimes are intentionally staged as unavailable for LinkedIn authenticated browser sessions
 - **Page structure changes**: If LinkedIn changes their HTML structure, selectors may need updating
 - **Rate limiting**: LinkedIn may rate-limit or block automated browsing
 - **Desktop only for launch**: The initial browser window must be visible for sign-in (not headless)
