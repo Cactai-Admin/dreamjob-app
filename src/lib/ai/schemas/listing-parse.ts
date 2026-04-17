@@ -32,6 +32,23 @@ export interface ParsedListingResult {
   parse_trace?: Record<string, unknown>
 }
 
+export interface CanonicalListingFromParse {
+  title: string | null
+  company_name: string | null
+  location: string | null
+  exact_requirements: ParsedListingRequirement[]
+  nice_to_haves: ParsedListingRequirement[]
+  responsibilities: ParsedListingResponsibilities[]
+  summary: string | null
+  work_mode: string | null
+  level_seniority: string | null
+  compensation: string | null
+  confidence: {
+    parse_quality: 'complete' | 'partial'
+    uncertainty_notes: string[]
+  }
+}
+
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -40,21 +57,25 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : []
 }
 
+function asConfidence(value: unknown): ParseConfidence {
+  return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium'
+}
+
 export function normalizeParsedListing(input: unknown): ParsedListingResult {
   const record = (input && typeof input === 'object') ? input as Record<string, unknown> : {}
 
-  const requirements = asArray<Record<string, unknown>>(record.requirements).map((item, index) => ({
+  const requirements: ParsedListingRequirement[] = asArray<Record<string, unknown>>(record.requirements).map((item, index) => ({
     id: typeof item.id === 'string' ? item.id : `req_${index + 1}`,
     text: asString(item.text) ?? '',
-    kind: item.kind === 'nice_to_have' ? 'nice_to_have' : 'requirement',
-    confidence: item.confidence === 'high' || item.confidence === 'medium' || item.confidence === 'low' ? item.confidence : 'medium',
-    source: item.source === 'heuristic' ? 'heuristic' : item.source === 'user' ? 'user' : 'llm',
+    kind: item.kind === 'nice_to_have' ? 'nice_to_have' as const : 'requirement' as const,
+    confidence: asConfidence(item.confidence),
+    source: item.source === 'heuristic' ? 'heuristic' as const : item.source === 'user' ? 'user' as const : 'llm' as const,
   })).filter((item) => item.text)
 
-  const responsibilities = asArray<Record<string, unknown>>(record.responsibilities).map((item, index) => ({
+  const responsibilities: ParsedListingResponsibilities[] = asArray<Record<string, unknown>>(record.responsibilities).map((item, index) => ({
     id: typeof item.id === 'string' ? item.id : `resp_${index + 1}`,
     text: asString(item.text) ?? '',
-    confidence: item.confidence === 'high' || item.confidence === 'medium' || item.confidence === 'low' ? item.confidence : 'medium',
+    confidence: asConfidence(item.confidence),
   })).filter((item) => item.text)
 
   return {
@@ -73,6 +94,25 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
     uncertainties: asArray<string>(record.uncertainties).filter(Boolean),
     parse_quality: record.parse_quality === 'complete' ? 'complete' : 'partial',
     parse_trace: typeof record.parse_trace === 'object' ? record.parse_trace as Record<string, unknown> : undefined,
+  }
+}
+
+export function toCanonicalListingFromParse(parsed: ParsedListingResult): CanonicalListingFromParse {
+  return {
+    title: parsed.title,
+    company_name: parsed.company_name,
+    location: parsed.location,
+    exact_requirements: parsed.requirements.filter((item) => item.kind === 'requirement'),
+    nice_to_haves: parsed.requirements.filter((item) => item.kind === 'nice_to_have'),
+    responsibilities: parsed.responsibilities,
+    summary: parsed.summary,
+    work_mode: parsed.work_mode,
+    level_seniority: parsed.experience_level,
+    compensation: parsed.compensation,
+    confidence: {
+      parse_quality: parsed.parse_quality,
+      uncertainty_notes: parsed.uncertainties,
+    },
   }
 }
 

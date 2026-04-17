@@ -2,28 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
-import { QA_SYSTEM_PROMPT, buildQAUserMessage } from '@/lib/ai/prompts/qa-guidance'
+import { buildQAUserMessage } from '@/lib/ai/prompts/qa-guidance'
+import { getSurfaceSystemPrompt } from '@/lib/ai/prompts/surface-orchestration'
 import { getAdminClient } from '@/lib/supabase/admin'
 import type { StatusEvent } from '@/types/database'
 import { computeRequirementMatch, parseRequirements } from '@/lib/listing-match'
+import { normalizeCanonicalListing } from '@/lib/ai/context/canonical-listing'
+import { buildReusableFacts, buildRunFacts, detectFactConflicts } from '@/lib/ai/context/facts'
+import { buildSharedAIContextBundle } from '@/lib/ai/context/shared-context'
+import { coerceStructuredChatOutput, isValidStructuredChatOutput } from '@/lib/ai/schemas/chat-output'
+import type { StructuredChatOutput } from '@/lib/ai/schemas/chat-output'
+import { resolveProviderPin, withProviderPinMetadata } from '@/lib/ai/provider-pinning'
 
 const supabaseAdmin = getAdminClient()
-const APPLICATION_SUPPORT_SYSTEM_PROMPT = `You are DreamJob's post-submission application support assistant.
 
-The user has already sent or marked an application as applied.
-
-Focus your guidance on:
-- practical follow-up timing and cadence
-- concise follow-up message structure
-- outreach/networking suggestions
-- visibility-improvement actions
-- status-tracking checklists and reminders
-
-Rules:
-- Keep responses practical, specific, and short (3-6 bullets or under 120 words when possible).
-- Do not restart pre-apply intake questions unless the user explicitly asks.
-- If the user mentions interview or offer progression, pivot to that stage while preserving application support continuity.
-- If key details are missing, ask one focused follow-up question.`
+const STRUCTURED_OUTPUT_INSTRUCTIONS = `Return strict JSON with keys: message, suggestions, actions, warnings, facts_to_confirm, completion_signal.
+- message is required and must be a non-empty string.
+- suggestions is optional array of short user-ready prompts.
+- actions is optional array of objects with type + label (+ optional value).
+- warnings is optional array of objects { code, message, severity }.
+- facts_to_confirm is optional array of potential conflicts/gaps.
+- completion_signal is optional string; use \"QA_COMPLETE\" only when the user can safely proceed.`
 
 async function getAccountId() {
   const cookieStore = await cookies()
@@ -56,6 +55,11 @@ async function captureRunFact(input: {
     'follow_up_support',
     'interview_guide',
     'negotiation_guide',
+    'work_history',
+    'final_hub',
+    'follow_up',
+    'interview',
+    'negotiation',
   ])
 
   if (!surfacesForRunFacts.has(input.surface)) return
@@ -87,23 +91,65 @@ async function captureRunFact(input: {
     })
 }
 
+async function generateStructuredResponseWithRetry(input: {
+  provider: ReturnType<typeof getProvider>
+  aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[]
+}): Promise<{ structured: StructuredChatOutput; raw: string; attempts: number }> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const response = await input.provider.generate({
+      messages: input.aiMessages,
+      maxTokens: 500,
+      temperature: 0.5,
+    })
+
+    const jsonMatch = response.match(/\{[\s\S]*\}/)
+    const candidate = jsonMatch ? jsonMatch[0] : response
+    try {
+      const parsed = JSON.parse(candidate)
+      const structured = coerceStructuredChatOutput(parsed)
+      if (isValidStructuredChatOutput(structured)) {
+        return { structured, raw: response, attempts: attempt }
+      }
+    } catch {
+      // handled by retry branch
+    }
+
+    if (attempt === 1) {
+      input.aiMessages.push({
+        role: 'user',
+        content: 'Your previous answer was invalid. Return valid JSON only using the required keys.',
+      })
+    }
+  }
+
+  return {
+    structured: {
+      message: 'I could not produce a fully structured response this turn. Please retry your question.',
+      warnings: [{ code: 'structured_output_invalid', message: 'Model output failed schema validation', severity: 'warning' }],
+    },
+    raw: '',
+    attempts: 2,
+  }
+}
+
 export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { workflow_id, message, surface = 'qa', provider: providerName } = await request.json() as {
+  const { workflow_id, message, surface = 'qa', provider: providerName, model: requestedModel } = await request.json() as {
     workflow_id: string
     message?: string
     surface?: string
     provider?: ProviderName
+    model?: string
   }
 
   if (!workflow_id) {
     return NextResponse.json({ error: 'workflow_id is required' }, { status: 400 })
   }
 
-  const provider = getProvider(providerName)
-  if (!provider.isConfigured()) {
+  const preliminaryProvider = getProvider(providerName)
+  if (!preliminaryProvider.isConfigured()) {
     return NextResponse.json(
       { error: 'No AI provider configured. See docs/ai-providers-setup.md' },
       { status: 503 }
@@ -112,7 +158,7 @@ export async function POST(request: NextRequest) {
 
   const { data: workflow } = await supabaseAdmin
     .from('workflows')
-    .select('*, listing:job_listings(*), company:companies(*), status_events(*)')
+    .select('*, listing:job_listings(*), company:companies(*), status_events(*), outputs(*)')
     .eq('id', workflow_id)
     .eq('account_id', accountId)
     .single()
@@ -120,6 +166,14 @@ export async function POST(request: NextRequest) {
   if (!workflow) {
     return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
   }
+
+  const providerPin = resolveProviderPin(workflow, providerName, preliminaryProvider.name as ProviderName, requestedModel)
+  const provider = getProvider(providerPin.provider)
+
+  await supabaseAdmin
+    .from('workflows')
+    .update({ autosave_data: withProviderPinMetadata(workflow.autosave_data, providerPin) })
+    .eq('id', workflow_id)
 
   let { data: thread } = await supabaseAdmin
     .from('chat_threads')
@@ -152,7 +206,7 @@ export async function POST(request: NextRequest) {
       thread_id: thread.id,
       role: 'user',
       content: message,
-      metadata: { surface },
+      metadata: { surface, provider_pin: providerPin },
     })
 
     await captureRunFact({
@@ -164,7 +218,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const [{ data: qaAnswers }, { data: reusableFacts }, { data: profile }, { data: employment }] = await Promise.all([
+  const [{ data: qaAnswers }, { data: reusableFacts }, { data: profile }, { data: employment }, { data: evidence }] = await Promise.all([
     supabaseAdmin
       .from('qa_answers')
       .select('question_text, answer_text, is_accepted')
@@ -185,8 +239,14 @@ export async function POST(request: NextRequest) {
       .single(),
     supabaseAdmin
       .from('employment_history')
-      .select('technologies')
+      .select('*')
       .eq('account_id', accountId),
+    supabaseAdmin
+      .from('profile_evidence')
+      .select('id, evidence_type, title, details, trust_level, created_at')
+      .eq('account_id', accountId)
+      .order('created_at', { ascending: false })
+      .limit(20),
   ])
 
   const eventTypes = (workflow.status_events ?? []).map((event: StatusEvent) => event.event_type)
@@ -195,15 +255,8 @@ export async function POST(request: NextRequest) {
     eventTypes.includes('submitted') ||
     workflow.state === 'sent' ||
     workflow.state === 'completed'
-  const progressedToInterviewOrNegotiation =
-    eventTypes.includes('interview') ||
-    eventTypes.includes('interview_scheduled') ||
-    eventTypes.includes('offer') ||
-    eventTypes.includes('offer_received') ||
-    eventTypes.includes('negotiation')
-  const systemPrompt = inApplicationSupport && !progressedToInterviewOrNegotiation
-    ? APPLICATION_SUPPORT_SYSTEM_PROMPT
-    : QA_SYSTEM_PROMPT
+
+  const systemPrompt = `${getSurfaceSystemPrompt(surface, inApplicationSupport)}\n\n${STRUCTURED_OUTPUT_INSTRUCTIONS}`
 
   const requirements = parseRequirements(workflow.listing.requirements)
   const profileSkills = Array.isArray(profile?.skills) ? profile.skills : []
@@ -241,11 +294,31 @@ export async function POST(request: NextRequest) {
       ? 'listing_review'
       : 'active_workflow'
 
+  const runFacts = buildRunFacts(qaAnswers ?? []).filter((fact) => fact.accepted)
+  const reusableMemoryFacts = buildReusableFacts(reusableFacts ?? [])
+  const conflicts = detectFactConflicts([...runFacts, ...reusableMemoryFacts])
+  const sharedContext = buildSharedAIContextBundle({
+    workflow: { id: workflow.id, state: workflow.state, phase: workflowPhase },
+    listing: normalizeCanonicalListing(workflow.listing),
+    profile: (profile ?? null) as Record<string, unknown> | null,
+    employment_work_history: (employment ?? []) as Record<string, unknown>[],
+    accepted_run_facts: runFacts,
+    reusable_profile_memory: reusableMemoryFacts,
+    evidence_alignment: (evidence ?? []) as Record<string, unknown>[],
+    artifact_state: ((workflow.outputs ?? []) as Record<string, unknown>[]).map((output) => ({
+      type: output.type,
+      status: output.state,
+      is_current: output.is_current,
+    })),
+    status_events: (workflow.status_events ?? []) as Record<string, unknown>[],
+    conflicts,
+  })
+
   const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
     { role: 'system', content: systemPrompt },
     {
       role: 'user',
-      content: buildQAUserMessage({
+      content: `${buildQAUserMessage({
         workflowId: workflow.id,
         workflowState: workflow.state,
         surface,
@@ -291,7 +364,7 @@ export async function POST(request: NextRequest) {
         reusableFacts: reusableFacts ?? [],
         profileSummary: profileSummaryLines.join('\n') || null,
         matchSummary,
-      }),
+      })}\n\nSHARED_CONTEXT:\n${sharedContext.contextText}`,
     },
   ]
 
@@ -307,23 +380,27 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const response = await provider.generate({
-      messages: aiMessages,
-      maxTokens: 350,
-      temperature: 0.6,
-    })
+    const aiResult = await generateStructuredResponseWithRetry({ provider, aiMessages })
+    const completionSignal = aiResult.structured.completion_signal ?? null
+    const isComplete = completionSignal === 'QA_COMPLETE'
 
     await supabaseAdmin.from('chat_messages').insert({
       thread_id: thread.id,
       role: 'assistant',
-      content: response,
+      content: aiResult.structured.message,
       metadata: {
         surface,
         workflow_state: workflow.state,
+        provider_pin: providerPin,
+        structured_output: aiResult.structured,
+        context_visibility: {
+          run_facts: runFacts.length,
+          reusable_profile_memory: reusableMemoryFacts.length,
+          conflicts: conflicts.length,
+        },
       },
     })
 
-    const isComplete = response.includes('[QA_COMPLETE]')
     if (isComplete) {
       await supabaseAdmin
         .from('workflows')
@@ -331,10 +408,35 @@ export async function POST(request: NextRequest) {
         .eq('id', workflow_id)
     }
 
+    await supabaseAdmin.from('analytics_events').insert({
+      account_id: accountId,
+      event_type: 'ai_chat_turn',
+      event_data: {
+        workflow_id,
+        thread_id: thread.id,
+        surface,
+        provider_pin: providerPin,
+        structured_attempts: aiResult.attempts,
+        completion_signal: completionSignal,
+        context_summary: {
+          run_fact_count: runFacts.length,
+          reusable_fact_count: reusableMemoryFacts.length,
+          conflict_count: conflicts.length,
+          parse_quality: normalizeCanonicalListing(workflow.listing).confidence.parse_quality,
+        },
+      },
+    })
+
     return NextResponse.json({
-      message: response.replace('[QA_COMPLETE]', '').trim(),
+      message: aiResult.structured.message,
+      suggestions: aiResult.structured.suggestions ?? [],
+      actions: aiResult.structured.actions ?? [],
+      warnings: aiResult.structured.warnings ?? [],
+      facts_to_confirm: aiResult.structured.facts_to_confirm ?? [],
+      completion_signal: completionSignal,
       isComplete,
       threadId: thread.id,
+      provider_pin: providerPin,
     })
   } catch (e) {
     return NextResponse.json(
@@ -389,12 +491,24 @@ export async function GET(request: NextRequest) {
 
   const { data: messages } = await supabaseAdmin
     .from('chat_messages')
-    .select('id, role, content, created_at')
+    .select('id, role, content, metadata, created_at')
     .eq('thread_id', thread.id)
     .order('created_at', { ascending: true })
 
   return NextResponse.json({
     threadId: thread.id,
-    messages: messages ?? [],
+    messages: messages?.map((msg) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      created_at: msg.created_at,
+      suggestions: Array.isArray((msg.metadata as Record<string, unknown> | null)?.structured_output
+        && typeof (msg.metadata as Record<string, unknown>).structured_output === 'object'
+        ? ((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).suggestions
+        : null)
+        ? ((((msg.metadata as Record<string, unknown>).structured_output as Record<string, unknown>).suggestions) as unknown[])
+          .filter((value): value is string => typeof value === 'string')
+        : [],
+    })) ?? [],
   })
 }

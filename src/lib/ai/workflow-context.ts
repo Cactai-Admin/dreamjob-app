@@ -1,4 +1,11 @@
 import type { StatusEvent } from '@/types/database'
+import { normalizeCanonicalListing } from '@/lib/ai/context/canonical-listing'
+import {
+  buildReusableFacts,
+  buildRunFacts,
+  detectFactConflicts,
+} from '@/lib/ai/context/facts'
+import { buildSharedAIContextBundle } from '@/lib/ai/context/shared-context'
 
 interface ListingContext {
   title: string | null
@@ -68,6 +75,7 @@ export interface GenerationContextBundle {
     listing_parse_quality: 'complete' | 'partial'
     accepted_run_fact_count: number
     reusable_profile_fact_count: number
+    conflict_count: number
     warnings: string[]
     precedence: string
   }
@@ -158,16 +166,37 @@ export function buildGenerationContextBundle(input: GenerationContextInput): Gen
     warnings.push('Listing parse is partial. Use editable listing fields and ask for one clarification instead of fabricating details.')
   }
 
-  const acceptedRunFacts = input.qaAnswers.filter((qa) => qa.is_accepted !== false)
+  const acceptedRunFacts = buildRunFacts(input.qaAnswers).filter((fact) => fact.accepted)
+  const reusableFacts = buildReusableFacts(input.profileMemory)
+  const conflicts = detectFactConflicts([...acceptedRunFacts, ...reusableFacts])
+  if (conflicts.length > 0) {
+    warnings.push(`Detected ${conflicts.length} fact conflict(s). Prioritize explicit user confirmation.`)
+  }
+
+  const shared = buildSharedAIContextBundle({
+    workflow: {
+      id: input.workflow.id,
+      state: input.workflow.state,
+      status_events: input.workflow.status_events ?? [],
+    },
+    listing: normalizeCanonicalListing(input.workflow.listing as unknown as { parsed_data?: Record<string, unknown> }),
+    profile: input.profile as Record<string, unknown> | null,
+    employment_work_history: input.employment as unknown as Record<string, unknown>[],
+    accepted_run_facts: acceptedRunFacts,
+    reusable_profile_memory: reusableFacts,
+    evidence_alignment: [],
+    artifact_state: [],
+    status_events: (input.workflow.status_events ?? []) as unknown as Record<string, unknown>[],
+    conflicts,
+  })
 
   const context = [
-    'WORKFLOW CONTEXT',
-    `Workflow ID: ${input.workflow.id}`,
-    `Workflow state: ${input.workflow.state}`,
-    '',
     'FACT PRECEDENCE RULES',
     `- ${PRECEDENCE_POLICY}`,
     '',
+    shared.contextText,
+    '',
+    'LEGACY RENDERED BLOCKS',
     'LISTING CONTEXT',
     formatListingContext(input.workflow.listing),
     '',
@@ -193,7 +222,8 @@ export function buildGenerationContextBundle(input: GenerationContextInput): Gen
       workflow_state: input.workflow.state,
       listing_parse_quality: hasListingDetails ? 'complete' : 'partial',
       accepted_run_fact_count: acceptedRunFacts.length,
-      reusable_profile_fact_count: input.profileMemory.length,
+      reusable_profile_fact_count: reusableFacts.length,
+      conflict_count: conflicts.length,
       warnings,
       precedence: PRECEDENCE_POLICY,
     },

@@ -19,6 +19,10 @@ export interface StructuredChatOutput {
   completion_signal?: string | null
 }
 
+export function isValidStructuredChatOutput(input: StructuredChatOutput): boolean {
+  return Boolean(input.message && input.message.trim().length > 0)
+}
+
 export function coerceStructuredChatOutput(input: unknown): StructuredChatOutput {
   if (!input || typeof input !== 'object') {
     return { message: '' }

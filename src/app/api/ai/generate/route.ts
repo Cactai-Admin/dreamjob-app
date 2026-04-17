@@ -10,6 +10,7 @@ import {
   NEGOTIATION_GUIDE_SYSTEM_PROMPT,
 } from '@/lib/ai/prompts/resume-generation'
 import { buildGenerationContextBundle } from '@/lib/ai/workflow-context'
+import { resolveProviderPin, withProviderPinMetadata } from '@/lib/ai/provider-pinning'
 
 const supabaseAdmin = getAdminClient()
 
@@ -31,17 +32,43 @@ export async function POST(request: NextRequest) {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { workflow_id, output_type, provider: providerName } = await request.json() as {
+  const { workflow_id, output_type, provider: providerName, model: requestedModel } = await request.json() as {
     workflow_id: string
     output_type: string
     provider?: ProviderName
+    model?: string
   }
 
   if (!workflow_id || !output_type) {
     return NextResponse.json({ error: 'workflow_id and output_type are required' }, { status: 400 })
   }
 
-  const provider = getProvider(providerName)
+  const initialProvider = getProvider(providerName)
+  if (!initialProvider.isConfigured()) {
+    return NextResponse.json(
+      { error: 'No AI provider configured. See docs/ai-providers-setup.md' },
+      { status: 503 }
+    )
+  }
+
+  const { data: workflow } = await supabaseAdmin
+    .from('workflows')
+    .select(`*, listing:job_listings(*)`)
+    .eq('id', workflow_id)
+    .eq('account_id', accountId)
+    .single()
+
+  if (!workflow) {
+    return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
+  }
+
+  const providerPin = resolveProviderPin(
+    workflow,
+    providerName,
+    initialProvider.name as ProviderName,
+    requestedModel
+  )
+  const provider = getProvider(providerPin.provider)
   if (!provider.isConfigured()) {
     return NextResponse.json(
       { error: 'No AI provider configured. See docs/ai-providers-setup.md' },
@@ -61,16 +88,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(existing)
   }
 
-  const { data: workflow } = await supabaseAdmin
+  await supabaseAdmin
     .from('workflows')
-    .select(`*, listing:job_listings(*)`)
+    .update({ autosave_data: withProviderPinMetadata(workflow.autosave_data, providerPin) })
     .eq('id', workflow_id)
-    .eq('account_id', accountId)
-    .single()
-
-  if (!workflow) {
-    return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
-  }
 
   const [{ data: profile }, { data: employment }, { data: qaAnswers }, { data: profileMemory }] = await Promise.all([
     supabaseAdmin.from('profiles').select('*').eq('account_id', accountId).single(),
@@ -142,6 +163,7 @@ export async function POST(request: NextRequest) {
       ],
       maxTokens: 4096,
       temperature: 0.7,
+      model: providerPin.model ?? undefined,
     })
 
     await supabaseAdmin
@@ -170,7 +192,10 @@ export async function POST(request: NextRequest) {
         version: (versions?.[0]?.version ?? 0) + 1,
         is_current: true,
         generation_model: provider.name,
-        generation_params: generationContext.metadata,
+        generation_params: {
+          ...generationContext.metadata,
+          provider_pin: providerPin,
+        },
       })
       .select()
       .single()
@@ -182,6 +207,7 @@ export async function POST(request: NextRequest) {
         workflow_id,
         output_id: output?.id,
         context: generationContext.metadata,
+        provider_pin: providerPin,
       },
     })
 
