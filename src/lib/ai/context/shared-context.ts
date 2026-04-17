@@ -1,37 +1,44 @@
-export interface SharedAIContext {
+import type { CanonicalListingContract } from '@/lib/ai/context/canonical-listing'
+import type { FactConflict, SharedFact } from '@/lib/ai/context/facts'
+
+export interface SharedAIContextInput {
   workflow: Record<string, unknown> | null
-  listing: Record<string, unknown> | null
+  listing: CanonicalListingContract
   profile: Record<string, unknown> | null
-  employmentHistory: Record<string, unknown>[]
-  runFacts: Record<string, unknown>[]
-  reusableFacts: Record<string, unknown>[]
-  outputs: Record<string, unknown>[]
-  statusEvents: Record<string, unknown>[]
-  evidenceAlignment: Record<string, unknown>[]
-  conflicts: string[]
+  employment_work_history: Record<string, unknown>[]
+  accepted_run_facts: SharedFact[]
+  reusable_profile_memory: SharedFact[]
+  evidence_alignment: Record<string, unknown>[]
+  artifact_state: Record<string, unknown>[]
+  status_events: Record<string, unknown>[]
+  conflicts: FactConflict[]
 }
 
-export function buildSharedAIContext(params: SharedAIContext): string {
-  const sections = [
-    ['WORKFLOW', params.workflow],
-    ['LISTING', params.listing],
-    ['PROFILE', params.profile],
-    ['EMPLOYMENT_HISTORY', params.employmentHistory],
-    ['RUN_FACTS', params.runFacts],
-    ['REUSABLE_FACTS', params.reusableFacts],
-    ['OUTPUTS', params.outputs],
-    ['STATUS_EVENTS', params.statusEvents],
-    ['EVIDENCE_ALIGNMENT', params.evidenceAlignment],
-    ['CONFLICTS', params.conflicts],
-  ] as const
-
-  return sections
-    .map(([label, value]) => `## ${label}\n${JSON.stringify(value ?? null, null, 2)}`)
-    .join('\n\n')
+export interface SharedAIContextBundle {
+  contextText: string
+  contextObject: Record<string, unknown>
 }
 
-export function detectSimpleConflicts(values: Array<{ field: string; values: string[] }>): string[] {
-  return values
-    .filter((item) => new Set(item.values.filter(Boolean)).size > 1)
-    .map((item) => `Conflicting values detected for ${item.field}: ${item.values.join(' | ')}`)
+export function buildSharedAIContextBundle(input: SharedAIContextInput): SharedAIContextBundle {
+  const conflictWarnings = input.conflicts.map((conflict) => conflict.warning)
+  const contextObject = {
+    workflow_state: input.workflow,
+    listing: input.listing,
+    profile: input.profile,
+    employment_work_history: input.employment_work_history,
+    accepted_run_facts: input.accepted_run_facts,
+    reusable_profile_memory: input.reusable_profile_memory,
+    evidence_alignment: input.evidence_alignment,
+    artifact_state: input.artifact_state,
+    status_events: input.status_events,
+    conflict_warnings: conflictWarnings,
+  }
+
+  const contextText = [
+    'SHARED_WORKFLOW_CONTEXT',
+    JSON.stringify(contextObject, null, 2),
+  ].join('\n')
+
+  return { contextText, contextObject }
 }
+

@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
 import { LISTING_PARSE_SYSTEM, LISTING_URL_ANALYSIS } from '@/lib/ai/prompts/listing-parse'
+import { normalizeParsedListing, toCanonicalListingFromParse } from '@/lib/ai/schemas/listing-parse'
 
 const EMPLOYMENT_TYPE_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
   { type: 'internship', pattern: /\b(intern(ship)?|co-?op)\b/i },
@@ -251,22 +252,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Parse with AI
-    const result = await provider.generate({
-      messages: [
-        { role: 'system', content: LISTING_PARSE_SYSTEM },
-        { role: 'user', content: `Parse this job listing content:\n\n${pageContent}` },
-      ],
-      temperature: 0.1,
-    })
+    // Parse with AI (+ one retry for invalid structured output)
+    let parsed: Record<string, unknown> | null = null
+    let parseAttempt = 0
+    while (!parsed && parseAttempt < 2) {
+      parseAttempt += 1
+      const result = await provider.generate({
+        messages: [
+          { role: 'system', content: LISTING_PARSE_SYSTEM },
+          {
+            role: 'user',
+            content:
+              parseAttempt === 1
+                ? `Parse this job listing content:\n\n${pageContent}`
+                : `Return valid JSON only. Re-parse this listing:\n\n${pageContent}`,
+          },
+        ],
+        temperature: 0.1,
+      })
 
-    // Extract JSON from the response
-    const jsonMatch = result.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return NextResponse.json({ error: 'Failed to parse listing data' }, { status: 422 })
+      const jsonMatch = result.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) continue
+      try {
+        parsed = JSON.parse(jsonMatch[0])
+      } catch {
+        parsed = null
+      }
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    if (!parsed) {
+      return NextResponse.json({ error: 'Failed to parse listing data' }, { status: 422 })
+    }
     const signalText = [
       typeof parsed.title === 'string' ? parsed.title : '',
       typeof parsed.description === 'string' ? parsed.description : '',
@@ -297,18 +313,43 @@ export async function POST(request: NextRequest) {
       parsed.requirements = normalizeJsonArray(parsed.requirements)
     }
 
+    const parsedRequirementsCount = Array.isArray(parsed.requirements)
+      ? parsed.requirements.length
+      : typeof parsed.requirements === 'string' && parsed.requirements.trim().length > 0
+        ? 1
+        : 0
     const parseQuality: 'complete' | 'partial' =
-      parsed.title && parsed.company_name && (parsed.description || parsed.requirements?.length > 0)
+      Boolean(parsed.title) && Boolean(parsed.company_name) && (Boolean(parsed.description) || parsedRequirementsCount > 0)
         ? 'complete'
         : 'partial'
 
     parsed.parse_quality = parseQuality
+    const normalizedParse = normalizeParsedListing({
+      title: parsed.title,
+      company_name: parsed.company_name,
+      company_website_url: parsed.company_website_url,
+      company_linkedin_url: parsed.company_linkedin_url,
+      location: parsed.location,
+      compensation: parsed.salary_range,
+      employment_type: parsed.employment_type,
+      experience_level: parsed.experience_level,
+      work_mode: workMode,
+      summary: parsed.description,
+      requirements: parsed.requirements,
+      responsibilities: Array.isArray(parsed.responsibilities)
+        ? parsed.responsibilities
+        : normalizeJsonArray(parsed.responsibilities).map((text, index) => ({ id: `resp_${index + 1}`, text })),
+      uncertainties: [],
+      parse_quality: parseQuality,
+    })
+
     parsed.parsed_data = {
       ...((typeof parsed.parsed_data === 'object' && parsed.parsed_data !== null) ? parsed.parsed_data : {}),
       work_mode: workMode,
       years_experience: yearsExperience,
       tools_platforms: toolsPlatforms,
       language_requirements: languageRequirements,
+      canonical_listing: toCanonicalListingFromParse(normalizedParse),
       parse_trace: {
         entrypoint: 'home_url_submission',
         pipeline: 'fetch_html_then_llm_with_heuristic_fallbacks',
@@ -347,7 +388,18 @@ export async function POST(request: NextRequest) {
           'If AI misses company_website_url and listing is not a job board, use listing host root URL.',
         ],
       },
+      observability: {
+        provider: provider.name,
+        structured_output_retry_count: parseAttempt - 1,
+        context_assembly: {
+          html_fetched: true,
+          html_chars_used: pageContent.length,
+          heuristics_applied: ['employment_type', 'experience_level', 'work_mode', 'years_experience', 'tools_platforms', 'language_requirements'],
+        },
+      },
     }
+
+    parsed.canonical_listing = toCanonicalListingFromParse(normalizedParse)
 
     return NextResponse.json(parsed)
   } catch {
