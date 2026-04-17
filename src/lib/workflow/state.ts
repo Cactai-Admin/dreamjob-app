@@ -33,8 +33,12 @@ export function getStatusEvent(events: StatusEvent[] | undefined, eventType: str
 }
 
 export function getWorkflowSupportState(workflow: Workflow | null) {
-  const resumeSaved = Boolean(workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
-  const coverSaved = Boolean(workflow?.outputs?.find((o) => o.type === "cover_letter" && o.is_current));
+  const completion = (workflow?.autosave_data as { completion?: Record<string, unknown> } | null)?.completion;
+  const resumeCompletedAt = typeof completion?.resume_completed_at === "string" ? completion.resume_completed_at : null;
+  const coverCompletedAt = typeof completion?.cover_letter_completed_at === "string" ? completion.cover_letter_completed_at : null;
+
+  const resumeSaved = Boolean(resumeCompletedAt || workflow?.outputs?.find((o) => o.type === "resume" && o.is_current));
+  const coverSaved = Boolean(coverCompletedAt || workflow?.outputs?.find((o) => o.type === "cover_letter" && o.is_current));
   const supportUnlocked = resumeSaved && coverSaved;
   const interviewEvent = getStatusEvent(workflow?.status_events, "interview_scheduled");
   const offerEvent = getStatusEvent(workflow?.status_events, "offer_received");

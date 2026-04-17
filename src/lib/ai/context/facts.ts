@@ -16,6 +16,7 @@ export interface FactConflict {
   values: string[]
   sources: string[]
   warning: string
+  conflict_type?: 'key_mismatch' | 'numeric_mismatch'
 }
 
 function toFactKey(raw: string, fallback: string): string {
@@ -61,6 +62,21 @@ export function buildReusableFacts(
     }))
 }
 
+function normalizeForComparison(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function parseNumericSignal(value: string): number | null {
+  const match = value.replace(/,/g, '').match(/-?\d+(\.\d+)?/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 export function detectFactConflicts(facts: SharedFact[]): FactConflict[] {
   const byKey = new Map<string, SharedFact[]>()
 
@@ -72,7 +88,7 @@ export function detectFactConflicts(facts: SharedFact[]): FactConflict[] {
   const conflicts: FactConflict[] = []
 
   byKey.forEach((items, key) => {
-    const distinctValues = [...new Set(items.map((item) => item.value.trim().toLowerCase()).filter(Boolean))]
+    const distinctValues = [...new Set(items.map((item) => normalizeForComparison(item.value)).filter(Boolean))]
     if (distinctValues.length <= 1) return
 
     conflicts.push({
@@ -80,9 +96,24 @@ export function detectFactConflicts(facts: SharedFact[]): FactConflict[] {
       values: items.map((item) => item.value),
       sources: items.map((item) => item.source),
       warning: `Conflicting fact values for "${key}" from ${[...new Set(items.map((item) => item.source))].join(', ')}`,
+      conflict_type: 'key_mismatch',
+    })
+  })
+
+  byKey.forEach((items, key) => {
+    const numericValues = items.map((item) => parseNumericSignal(item.value)).filter((value): value is number => value !== null)
+    if (numericValues.length < 2) return
+    const uniqueNumericValues = [...new Set(numericValues)]
+    if (uniqueNumericValues.length <= 1) return
+
+    conflicts.push({
+      key,
+      values: items.map((item) => item.value),
+      sources: items.map((item) => item.source),
+      warning: `Numeric disagreement detected for "${key}". Ask the user to confirm the correct number.`,
+      conflict_type: 'numeric_mismatch',
     })
   })
 
   return conflicts
 }
-

@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import type { ChatMessage } from "@/lib/types";
-import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, toThreadTurn } from "@/lib/chat-thread-model";
+import { DEFAULT_SHARED_CHAT_STAGE_CONFIG, toThreadTurn, type ThreadAction } from "@/lib/chat-thread-model";
 import { SharedChatShell } from "@/components/chat/shared-chat-shell";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,7 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   const [seededProactiveReview, setSeededProactiveReview] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
+  const expandKey = `dreamjob_chat_expanded:${surface}`;
 
   const copyBySurface: Partial<Record<string, { subtitle: string; placeholder: string; empty: string }>> = {
     listing_review: {
@@ -88,6 +89,22 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
     })),
     warnings: message.warnings ?? [],
   });
+
+  useEffect(() => {
+    try {
+      setExpanded(localStorage.getItem(expandKey) === "1");
+    } catch {
+      setExpanded(false);
+    }
+  }, [expandKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(expandKey, expanded ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [expandKey, expanded]);
 
   useEffect(() => {
     let active = true;
@@ -249,6 +266,20 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
     }
   };
 
+  const handleAction = async (action: ThreadAction) => {
+    const actionType = typeof action.payload?.type === "string" ? action.payload.type : null;
+    const actionValue = typeof action.payload?.value === "string" ? action.payload.value : null;
+    if (actionType === "open_tab" && actionValue) {
+      window.open(actionValue, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (actionType === "save_to_drive") {
+      await sendMessage("Please save the current draft to Google Docs.");
+      return;
+    }
+    await sendMessage(actionValue ?? action.label);
+  };
+
   return (
     <div
       className={cn(
@@ -262,6 +293,7 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         isTyping={isTyping}
         onSend={sendMessage}
         onSuggestion={sendMessage}
+        onAction={handleAction}
         onClose={onClose}
         onToggleExpand={() => setExpanded((value) => !value)}
         expanded={expanded}

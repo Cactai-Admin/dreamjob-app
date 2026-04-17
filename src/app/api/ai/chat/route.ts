@@ -12,7 +12,7 @@ import { buildReusableFacts, buildRunFacts, detectFactConflicts } from '@/lib/ai
 import { buildSharedAIContextBundle } from '@/lib/ai/context/shared-context'
 import { coerceStructuredChatOutput, isValidStructuredChatOutput } from '@/lib/ai/schemas/chat-output'
 import type { StructuredChatOutput } from '@/lib/ai/schemas/chat-output'
-import { resolveProviderPin, withProviderPinMetadata } from '@/lib/ai/provider-pinning'
+import { resolveProviderPin } from '@/lib/ai/provider-pinning'
 
 const supabaseAdmin = getAdminClient()
 
@@ -95,7 +95,7 @@ async function generateStructuredResponseWithRetry(input: {
   provider: ReturnType<typeof getProvider>
   aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[]
 }): Promise<{ structured: StructuredChatOutput; raw: string; attempts: number }> {
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
     const response = await input.provider.generate({
       messages: input.aiMessages,
       maxTokens: 500,
@@ -118,6 +118,11 @@ async function generateStructuredResponseWithRetry(input: {
       input.aiMessages.push({
         role: 'user',
         content: 'Your previous answer was invalid. Return valid JSON only using the required keys.',
+      })
+    } else if (attempt === 2) {
+      input.aiMessages.push({
+        role: 'user',
+        content: `Repair and return JSON now. Use this exact shape: {"message":"...","suggestions":[],"actions":[],"warnings":[],"facts_to_confirm":[],"completion_signal":null}`,
       })
     }
   }
@@ -167,13 +172,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Workflow not found' }, { status: 404 })
   }
 
-  const providerPin = resolveProviderPin(workflow, providerName, preliminaryProvider.name as ProviderName, requestedModel)
-  const provider = getProvider(providerPin.provider)
+  const { data: userPreferences } = await supabaseAdmin
+    .from('user_preferences')
+    .select('preferred_ai_provider, preferred_ai_model')
+    .eq('account_id', accountId)
+    .single()
 
-  await supabaseAdmin
-    .from('workflows')
-    .update({ autosave_data: withProviderPinMetadata(workflow.autosave_data, providerPin) })
-    .eq('id', workflow_id)
+  const providerPin = resolveProviderPin(
+    workflow,
+    userPreferences ?? null,
+    providerName,
+    preliminaryProvider.name as ProviderName,
+    requestedModel
+  )
+  const provider = getProvider(providerPin.provider)
 
   let { data: thread } = await supabaseAdmin
     .from('chat_threads')
@@ -316,6 +328,17 @@ export async function POST(request: NextRequest) {
     })),
     status_events: (workflow.status_events ?? []) as Record<string, unknown>[],
     conflicts,
+    listing_confidence: {
+      parse_quality: canonicalListing.confidence.parse_quality,
+      requirement_confidence_counts: [...canonicalListing.exact_requirements, ...canonicalListing.nice_to_haves].reduce<Record<string, number>>((acc, item) => {
+        acc[item.confidence] = (acc[item.confidence] ?? 0) + 1
+        return acc
+      }, {}),
+      evidence_confidence_counts: canonicalListing.evidence_map.reduce<Record<string, number>>((acc, item) => {
+        acc[item.confidence] = (acc[item.confidence] ?? 0) + 1
+        return acc
+      }, {}),
+    },
   })
 
   const aiMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [

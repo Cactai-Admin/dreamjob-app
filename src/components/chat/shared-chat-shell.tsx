@@ -25,6 +25,7 @@ interface Props {
 function renderRichText(content: string) {
   return content
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\n/g, "<br/>");
 }
 

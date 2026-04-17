@@ -432,6 +432,8 @@ export interface UserPreferences {
   sidebar_collapsed: boolean
   google_drive_root_folder_id: string | null
   google_drive_root_folder_url: string | null
+  preferred_ai_provider: string | null
+  preferred_ai_model: string | null
   created_at: string
   updated_at: string
 }

@@ -49,6 +49,7 @@ export default function HomePage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
   const loadWorkflows = () => {
     fetch("/api/workflows")
@@ -116,10 +117,20 @@ export default function HomePage() {
   const handleBulkSoftDelete = async () => {
     if (selectedIds.length === 0 || bulkDeleting) return;
     setBulkDeleting(true);
+    setBulkDeleteError(null);
     try {
-      await Promise.all(selectedIds.map((id) => fetch(`/api/workflows/${id}`, { method: "DELETE" })));
+      const failedIds: string[] = [];
+      await Promise.all(selectedIds.map(async (id) => {
+        const response = await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+        if (!response.ok) failedIds.push(id);
+      }));
       setWorkflows((prev) => prev.filter((workflow) => !selectedIds.includes(workflow.id)));
-      setSelectedIds([]);
+      if (failedIds.length > 0) {
+        setBulkDeleteError(`${failedIds.length} of ${selectedIds.length} items could not be moved to Trash. Please retry those items.`);
+        setSelectedIds(failedIds);
+      } else {
+        setSelectedIds([]);
+      }
       setConfirmBulkDelete(false);
     } finally {
       setBulkDeleting(false);
@@ -178,6 +189,16 @@ export default function HomePage() {
         )}
       </form>
 
+      {submitting && (
+        <div className="card-base p-6">
+          <div className="mx-auto max-w-xl text-center">
+            <div className="mx-auto h-12 w-12 rounded-full border-2 border-slate-300 border-t-slate-900 animate-spin" />
+            <h2 className="mt-4 text-sm font-semibold text-slate-900">Parsing listing details…</h2>
+            <p className="mt-1 text-xs text-slate-500">This usually takes a few seconds while we extract role and requirement structure.</p>
+          </div>
+        </div>
+      )}
+
       {hasContent && (
         <div className="card-base overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b border-slate-100">
@@ -230,6 +251,11 @@ export default function HomePage() {
               )}
             </div>
           )}
+          {bulkDeleteError ? (
+            <div className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-100">
+              {bulkDeleteError}
+            </div>
+          ) : null}
           <div className="grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-100">
             <div className="col-span-1">
               <input

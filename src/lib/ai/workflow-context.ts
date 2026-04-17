@@ -173,13 +173,14 @@ export function buildGenerationContextBundle(input: GenerationContextInput): Gen
     warnings.push(`Detected ${conflicts.length} fact conflict(s). Prioritize explicit user confirmation.`)
   }
 
+  const canonicalListing = normalizeCanonicalListing(input.workflow.listing as unknown as { parsed_data?: Record<string, unknown> })
   const shared = buildSharedAIContextBundle({
     workflow: {
       id: input.workflow.id,
       state: input.workflow.state,
       status_events: input.workflow.status_events ?? [],
     },
-    listing: normalizeCanonicalListing(input.workflow.listing as unknown as { parsed_data?: Record<string, unknown> }),
+    listing: canonicalListing,
     profile: input.profile as Record<string, unknown> | null,
     employment_work_history: input.employment as unknown as Record<string, unknown>[],
     accepted_run_facts: acceptedRunFacts,
@@ -188,6 +189,15 @@ export function buildGenerationContextBundle(input: GenerationContextInput): Gen
     artifact_state: [],
     status_events: (input.workflow.status_events ?? []) as unknown as Record<string, unknown>[],
     conflicts,
+    listing_confidence: {
+      parse_quality: canonicalListing.confidence.parse_quality,
+      requirement_confidence_counts: canonicalListing.exact_requirements
+        .concat(canonicalListing.nice_to_haves)
+        .reduce<Record<string, number>>((acc, item) => {
+          acc[item.confidence] = (acc[item.confidence] ?? 0) + 1
+          return acc
+        }, {}),
+    },
   })
 
   const context = [

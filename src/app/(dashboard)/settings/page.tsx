@@ -92,6 +92,11 @@ export default function SettingsPage() {
       }
     }).catch(() => {});
     fetch("/api/settings/providers").then(r => r.json()).then(d => { if (!d.error) setProviders(d); }).catch(() => {});
+    fetch("/api/settings/ai-preferences").then(r => r.json()).then((d) => {
+      if (!d.error && (d.preferred_ai_provider === "openai" || d.preferred_ai_provider === "anthropic")) {
+        setAiProvider(d.preferred_ai_provider);
+      }
+    }).catch(() => {});
     fetch("/api/linkedin/session").then(r => r.json()).then(d => { if (!d.error) setLinkedIn(d); }).catch(() => {});
     fetch("/api/settings/google-drive").then(r => r.json()).then((d) => {
       if (!d.error) {
@@ -102,7 +107,6 @@ export default function SettingsPage() {
 
     const stored = loadSettings();
     if (stored.theme) setTheme(stored.theme);
-    if (stored.aiProvider) setAiProvider(stored.aiProvider);
     if (stored.notifications) setNotifications(stored.notifications);
     if (stored.privacy) setPrivacy(stored.privacy);
     if (stored.privacyScreenTimeout) setPrivacyScreenTimeout(stored.privacyScreenTimeout);
@@ -128,6 +132,11 @@ export default function SettingsPage() {
         setGoogleRootSaved(d.rootFolderUrl ?? d.rootFolderId ?? null);
         setGoogleConnected(Boolean(d.hasGoogleToken));
       }
+    }).catch(() => {});
+    await fetch("/api/settings/ai-preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferred_ai_provider: aiProvider }),
     }).catch(() => {});
     // Also write remaining settings to localStorage
     saveSettings({ theme, aiProvider, notifications, privacy, privacyScreenTimeout, privacyScreenEnabled, profileIcon });
@@ -460,7 +469,7 @@ export default function SettingsPage() {
             )}
             <p className="text-xs text-slate-400 mt-1">
               {providers[aiProvider]
-                ? `${PROVIDER_INFO[aiProvider].name} will be used for all AI generation. Click Save Preferences to apply.`
+                ? `${PROVIDER_INFO[aiProvider].name} is pinned as your default AI provider across workflows.`
                 : "Select a configured provider above, then Save."}
             </p>
           </div>

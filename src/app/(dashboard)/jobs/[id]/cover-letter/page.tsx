@@ -24,6 +24,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [coverDoc, setCoverDoc] = useState<NativeDocument | null>(null);
   const [googleSyncState, setGoogleSyncState] = useState<{ status: string; message: string; url?: string } | null>(null);
@@ -71,6 +72,7 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
   const ensureGeneration = async () => {
     if (generating) return;
     setGenerating(true);
+    setGenerationError(null);
     let provider: string | undefined;
     try {
       const s = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
@@ -79,13 +81,22 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
       // ignore
     }
 
-    await fetch("/api/ai/generate", {
+    const generateResponse = await fetch("/api/ai/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workflow_id: id, output_type: "cover_letter", provider }),
     });
+    if (!generateResponse.ok) {
+      const payload = await generateResponse.json().catch(() => null);
+      setGenerationError(payload?.error ?? "Unable to generate cover letter right now.");
+      setGenerating(false);
+      return;
+    }
 
+    let attempts = 0;
+    const maxAttempts = 24;
     pollingRef.current = setInterval(async () => {
+      attempts += 1;
       const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
       const output = wf.outputs?.find((o) => o.type === "cover_letter" && o.is_current);
       if (output) {
@@ -93,6 +104,12 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
         setWorkflow(wf);
         setCoverDoc(parseNativeDocument("cover_letter", output));
         setGenerating(false);
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        setGenerating(false);
+        setGenerationError("Cover letter generation timed out. Please try again.");
       }
     }, 2500);
   };
@@ -110,6 +127,19 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
     }
     setCoverDirty(false);
     setSaveState("saved");
+    await fetch(`/api/workflows/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        autosave_data: {
+          ...(workflow?.autosave_data && typeof workflow.autosave_data === "object" ? workflow.autosave_data : {}),
+          completion: {
+            ...((workflow?.autosave_data as { completion?: Record<string, unknown> } | null)?.completion ?? {}),
+            cover_letter_completed_at: new Date().toISOString(),
+          },
+        },
+      }),
+    }).catch(() => null);
     await loadWorkflow();
   };
 
@@ -264,6 +294,11 @@ export default function CoverLetterWorkspacePage({ params }: Props) {
               <p className="text-sm text-slate-600 mt-2">Generating cover letter…</p>
             </div>
           )}
+          {generationError ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+              {generationError}
+            </div>
+          ) : null}
 
           {googleSyncState && (
             <div className={cn("rounded-lg border px-3 py-2 text-xs", googleSyncState.status === "synced" ? "border-emerald-200 bg-emerald-50 text-emerald-900" : googleSyncState.status === "error" ? "border-red-200 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900")}>
