@@ -78,6 +78,12 @@ Rules:
 - Compensation extraction should capture obvious base/OTE/hourly/bonus/equity/location qualifiers in salary_range when present.
 - Treat OTE / on-target earnings as first-class compensation signal and preserve exact OTE text.
 - Context-aware requirement prioritization: sales should strongly weight quota/ACV/OTE signals; engineering should down-weight those unless clearly relevant.
+- Keep compensation semantics strict:
+  - Candidate pay = salary/base/OTE/bonus/equity (only these go in salary_range and compensation details).
+  - Sales economics = ACV/deal size/quota/segment/expansion context (never treat these as salary).
+- Job-context hierarchy confidence discipline:
+  - Only populate industry/offering/team when evidence is strong.
+  - Prefer partial hierarchy with nulls over clean-but-unsupported inference.
 - Never output HTML/meta fragments (such as og:title/og:description/company about text) in salary_range. Use null when compensation is unclear.
 - If uncertain, include a short note in uncertainties.`
 

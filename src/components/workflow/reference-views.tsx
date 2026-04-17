@@ -64,6 +64,9 @@ export function ListingReferenceView({ workflow }: { workflow: Workflow | null }
         {canonical.opportunity_review?.compensation_summary ? (
           <p className="text-[11px] text-slate-600">Compensation: {canonical.opportunity_review.compensation_summary}</p>
         ) : null}
+        {canonical.opportunity_review?.sales_motion_summary?.length ? (
+          <p className="text-[11px] text-slate-600 mt-1">Sales motion economics: {canonical.opportunity_review.sales_motion_summary.slice(0, 2).join(" · ")}</p>
+        ) : null}
         {canonical.opportunity_review?.what_matters_most?.length ? (
           <ul className="mt-1 space-y-1">
             {canonical.opportunity_review.what_matters_most.slice(0, 3).map((item, idx) => (
@@ -83,8 +86,9 @@ export function ListingReferenceView({ workflow }: { workflow: Workflow | null }
         <p className="text-[11px] text-slate-700">
           {[canonical.job_context?.industry, canonical.job_context?.offering_detail ?? canonical.job_context?.offering_type, canonical.job_context?.department, canonical.job_context?.team, canonical.job_context?.title_role ?? canonical.title]
             .filter(Boolean)
-            .join(" → ") || "Not enough context signals yet."}
+            .join(" → ") || "Not enough strong context signals yet."}
         </p>
+        <p className="text-[10px] text-slate-500 mt-1">Confidence: {canonical.job_context?.context_confidence ?? "low"}</p>
       </div>
 
       <div className="rounded-md border border-slate-200 bg-white p-2">

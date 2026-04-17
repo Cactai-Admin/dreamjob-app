@@ -33,6 +33,7 @@ export interface ParsedListingContentBuckets {
 
 export interface ParsedListingOpportunityReview {
   compensation_summary: string | null
+  sales_motion_summary: string[]
   top_requirements_ranked: Array<{ requirement_id: string; requirement_text: string; priority_weight: number }>
   top_resume_proof_needed: string[]
   top_cover_letter_angles: string[]
@@ -40,6 +41,18 @@ export interface ParsedListingOpportunityReview {
   suppressed_requirements: Array<{ requirement_id: string; requirement_text: string; suppression_reason: string | null }>
   who_this_role_is_really_for: string | null
   what_matters_most: string[]
+  role_motion_operating_context: string[]
+  provisional_alignment: {
+    likely_strengths: string[]
+    likely_missing_proof: string[]
+    confidence_caveats: string[]
+  }
+  assistant_guidance: {
+    gap_priorities: string[]
+    resume_targets: string[]
+    cover_letter_angles: string[]
+    compensation_flags: string[]
+  }
   recommended_resume_emphasis: string[]
   recommended_cover_letter_emphasis: string[]
 }
@@ -181,6 +194,7 @@ const parsedContentBucketsSchema = z.object({
 
 const parsedOpportunityReviewSchema = z.object({
   compensation_summary: z.string().trim().min(1).nullable().optional(),
+  sales_motion_summary: z.array(z.string().trim().min(1)).default([]),
   top_requirements_ranked: z.array(
     z.object({
       requirement_id: z.string().trim().min(1),
@@ -200,6 +214,18 @@ const parsedOpportunityReviewSchema = z.object({
   ).default([]),
   who_this_role_is_really_for: z.string().trim().min(1).nullable().optional(),
   what_matters_most: z.array(z.string().trim().min(1)).default([]),
+  role_motion_operating_context: z.array(z.string().trim().min(1)).default([]),
+  provisional_alignment: z.object({
+    likely_strengths: z.array(z.string().trim().min(1)).default([]),
+    likely_missing_proof: z.array(z.string().trim().min(1)).default([]),
+    confidence_caveats: z.array(z.string().trim().min(1)).default([]),
+  }).default({ likely_strengths: [], likely_missing_proof: [], confidence_caveats: [] }),
+  assistant_guidance: z.object({
+    gap_priorities: z.array(z.string().trim().min(1)).default([]),
+    resume_targets: z.array(z.string().trim().min(1)).default([]),
+    cover_letter_angles: z.array(z.string().trim().min(1)).default([]),
+    compensation_flags: z.array(z.string().trim().min(1)).default([]),
+  }).default({ gap_priorities: [], resume_targets: [], cover_letter_angles: [], compensation_flags: [] }),
   recommended_resume_emphasis: z.array(z.string().trim().min(1)).default([]),
   recommended_cover_letter_emphasis: z.array(z.string().trim().min(1)).default([]),
 })
@@ -532,6 +558,7 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
       record.opportunity_review && typeof record.opportunity_review === 'object'
         ? {
           compensation_summary: asString((record.opportunity_review as Record<string, unknown>).compensation_summary),
+          sales_motion_summary: asArray<string>((record.opportunity_review as Record<string, unknown>).sales_motion_summary).filter(Boolean),
           top_requirements_ranked: asArray<Record<string, unknown>>((record.opportunity_review as Record<string, unknown>).top_requirements_ranked)
             .map((item) => ({
               requirement_id: asString(item.requirement_id) ?? '',
@@ -551,6 +578,28 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
             .filter((item) => Boolean(item.requirement_id && item.requirement_text)),
           who_this_role_is_really_for: asString((record.opportunity_review as Record<string, unknown>).who_this_role_is_really_for),
           what_matters_most: asArray<string>((record.opportunity_review as Record<string, unknown>).what_matters_most).filter(Boolean),
+          role_motion_operating_context: asArray<string>((record.opportunity_review as Record<string, unknown>).role_motion_operating_context).filter(Boolean),
+          provisional_alignment: (() => {
+            const provisional = (record.opportunity_review as Record<string, unknown>).provisional_alignment
+            if (!provisional || typeof provisional !== 'object') return { likely_strengths: [], likely_missing_proof: [], confidence_caveats: [] }
+            const input = provisional as Record<string, unknown>
+            return {
+              likely_strengths: asArray<string>(input.likely_strengths).filter(Boolean),
+              likely_missing_proof: asArray<string>(input.likely_missing_proof).filter(Boolean),
+              confidence_caveats: asArray<string>(input.confidence_caveats).filter(Boolean),
+            }
+          })(),
+          assistant_guidance: (() => {
+            const guidance = (record.opportunity_review as Record<string, unknown>).assistant_guidance
+            if (!guidance || typeof guidance !== 'object') return { gap_priorities: [], resume_targets: [], cover_letter_angles: [], compensation_flags: [] }
+            const input = guidance as Record<string, unknown>
+            return {
+              gap_priorities: asArray<string>(input.gap_priorities).filter(Boolean),
+              resume_targets: asArray<string>(input.resume_targets).filter(Boolean),
+              cover_letter_angles: asArray<string>(input.cover_letter_angles).filter(Boolean),
+              compensation_flags: asArray<string>(input.compensation_flags).filter(Boolean),
+            }
+          })(),
           recommended_resume_emphasis: asArray<string>((record.opportunity_review as Record<string, unknown>).recommended_resume_emphasis).filter(Boolean),
           recommended_cover_letter_emphasis: asArray<string>((record.opportunity_review as Record<string, unknown>).recommended_cover_letter_emphasis).filter(Boolean),
         }
