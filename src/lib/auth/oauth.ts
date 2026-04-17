@@ -1,6 +1,12 @@
 type RedirectParams = Record<string, string | undefined>
 
 function getBaseUrl() {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin.endsWith('/')
+      ? window.location.origin
+      : `${window.location.origin}/`
+  }
+
   let baseUrl =
     process.env.NEXT_PUBLIC_VERCEL_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||

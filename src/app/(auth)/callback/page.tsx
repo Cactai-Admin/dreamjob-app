@@ -10,8 +10,31 @@ function getFirst(value: string | string[] | undefined) {
 
 export default async function LegacyCallbackPage({ searchParams }: CallbackPageProps) {
   const resolved = (await searchParams) ?? {}
-  const next = getFirst(resolved.redirect) || getFirst(resolved.next) || '/home'
+  const forwardParams = new URLSearchParams()
 
-  const redirectUrl = `/auth/callback?next=${encodeURIComponent(next)}`
+  const code = getFirst(resolved.code)
+  if (code) {
+    forwardParams.set('code', code)
+  }
+
+  const next = getFirst(resolved.next) || getFirst(resolved.redirect) || '/home'
+  forwardParams.set('next', next)
+
+  const state = getFirst(resolved.state)
+  if (state) {
+    forwardParams.set('state', state)
+  }
+
+  const error = getFirst(resolved.error)
+  if (error) {
+    forwardParams.set('error', error)
+  }
+
+  const errorDescription = getFirst(resolved.error_description)
+  if (errorDescription) {
+    forwardParams.set('error_description', errorDescription)
+  }
+
+  const redirectUrl = `/auth/callback?${forwardParams.toString()}`
   redirect(redirectUrl)
 }
