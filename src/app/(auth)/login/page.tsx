@@ -59,7 +59,10 @@ function LoginForm() {
     }
   }
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+
     setError('')
     setOauthLoading(true)
 
