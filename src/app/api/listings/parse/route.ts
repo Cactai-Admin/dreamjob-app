@@ -167,13 +167,15 @@ function classifyPriority(text: string, kind: ParsedListingRequirement['kind']):
   return { priority: 'important', priority_weight: 0.7 }
 }
 
-function inferSuppression(text: string): {
+function inferSuppression(text: string, sourceContext: { englishAppContext: boolean }): {
   user_facing_relevance: ParsedListingRequirement['user_facing_relevance']
   suppression_reason: string | null
   force_user_suppression: boolean
 } {
   const normalized = text.toLowerCase()
-  if (/\b(english|english fluency|fluent in english|cefr|ilr)\b/.test(normalized)) {
+  const isEnglishFluencySignal = /\b(english|english fluency|fluent in english|english proficiency|proficiency in english|written english|spoken english|strong english communication|cefr|ilr)\b/.test(normalized)
+  const isBilingualRequirement = /\b(bilingual|multilingual|spanish|french|german|mandarin|cantonese|japanese|korean|portuguese|arabic|hindi)\b/.test(normalized)
+  if (isEnglishFluencySignal && !isBilingualRequirement && sourceContext.englishAppContext) {
     return {
       user_facing_relevance: 'suppress',
       suppression_reason: 'already_evident_english_fluency',
@@ -196,11 +198,14 @@ function inferEvidenceNeeded(text: string, requirementType: ParsedListingRequire
   return 'Concrete, role-relevant evidence from resume or work history'
 }
 
-function applyRequirementIntelligence(requirements: ParsedListingRequirement[]): ParsedListingRequirement[] {
+function applyRequirementIntelligence(
+  requirements: ParsedListingRequirement[],
+  sourceContext: { englishAppContext: boolean }
+): ParsedListingRequirement[] {
   return requirements.map((requirement) => {
     const requirementType = requirement.requirement_type ?? inferRequirementType(requirement.text)
     const priority = classifyPriority(requirement.text, requirement.kind)
-    const suppression = inferSuppression(requirement.text)
+    const suppression = inferSuppression(requirement.text, sourceContext)
     const numericSignal = requirement.numeric_signal ?? detectNumericSignal(requirement.text)
     const defaultShowDecision = priority.priority === 'suppressible' ? 'suppress' : 'show'
 
@@ -226,20 +231,64 @@ function applyRequirementIntelligence(requirements: ParsedListingRequirement[]):
   })
 }
 
-const COMPENSATION_MONEY_PATTERN = /(?:\$|usd|cad|eur|gbp)\s?\d[\d,.]*(?:\s?[kKmM])?(?:\s*(?:-|to|–)\s*(?:\$|usd|cad|eur|gbp)?\s?\d[\d,.]*(?:\s?[kKmM])?)?/i
+const COMPENSATION_MONEY_PATTERN = /(?:\$|usd|cad|eur|gbp)\s?\d[\d,.]*(?:\s?[kKmM])?(?:\s*(?:-|to|–|—)\s*(?:\$|usd|cad|eur|gbp)?\s?\d[\d,.]*(?:\s?[kKmM])?)?/i
+const COMPENSATION_EXACT_RANGE_PATTERN = /\$\s?\d[\d,.]*(?:\s?[kKmM])?\s*(?:-|to|–|—)\s*\$?\s?\d[\d,.]*(?:\s?[kKmM])?/i
 const COMPENSATION_RATE_PATTERN = /\b(?:per\s*(?:year|annum|hour|hr)|hourly|annual(?:ly)?|salary|base pay|pay range|compensation|ote|on-target earnings)\b/i
-const COMPENSATION_CONTAMINATION_PATTERN = /\b(?:og:title|og:description|meta\s+name=|<meta|<title|<\/|<script|job description|about us|founded in|mission)\b/i
+const COMPENSATION_KEYWORD_PATTERN = /\b(?:compensation|salary|pay|pay range|base pay|ote|on[-\s]?target earnings?)\b/i
+const OTE_PATTERN = /\b(?:ote|on[-\s]?target earnings?)\b/i
+const COMPENSATION_CONTAMINATION_PATTERN = /\b(?:og:title|og:description|meta\s+name=|meta\s+property=|<meta|<title|<\/|<script|<!doctype|html>|http-equiv|content=|job description|about us|founded in|mission)\b/i
 
 function sanitizeCompensationText(value: unknown): string | null {
   if (typeof value !== 'string') return null
-  const normalized = value.replace(/\s+/g, ' ').trim()
+  const normalized = value
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!normalized || normalized.length > 220) return null
   if (COMPENSATION_CONTAMINATION_PATTERN.test(normalized)) return null
+  if (/[<>]/.test(normalized)) return null
+  if ((normalized.match(/[.:;]/g) ?? []).length > 4) return null
   const hasMoney = COMPENSATION_MONEY_PATTERN.test(normalized)
   const hasRateSignal = COMPENSATION_RATE_PATTERN.test(normalized)
+  const hasKeywordSignal = COMPENSATION_KEYWORD_PATTERN.test(normalized)
   if (!hasMoney && !hasRateSignal) return null
   if (hasRateSignal && normalized.split(' ').length <= 3 && !hasMoney) return null
+  if (hasMoney && normalized.split(' ').length > 28 && !hasKeywordSignal) return null
   return normalized
+}
+
+function buildCompensationSnippet(sourceText: string): string[] {
+  const lines = sourceText
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.length > 0 && line.length <= 260)
+
+  const sentenceSpans = sourceText.match(/[^.\n]{0,40}(?:compensation|salary|pay|ote|on-target earnings)[^.\n]{0,180}/gi) ?? []
+  return [...new Set([...lines, ...sentenceSpans].map((line) => line.trim()))]
+}
+
+function extractDeterministicCompensation(sourceText: string): {
+  compensation: string | null
+  ote: string | null
+  exact_range_text: string | null
+} {
+  const candidates = buildCompensationSnippet(sourceText)
+    .filter((candidate) => COMPENSATION_MONEY_PATTERN.test(candidate) && COMPENSATION_KEYWORD_PATTERN.test(candidate))
+    .map((candidate) => sanitizeCompensationText(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate))
+
+  const primary = candidates.find((candidate) => OTE_PATTERN.test(candidate))
+    ?? candidates[0]
+    ?? null
+
+  const ote = candidates.find((candidate) => OTE_PATTERN.test(candidate)) ?? null
+  const exactRangeFromCandidate = primary?.match(COMPENSATION_EXACT_RANGE_PATTERN)?.[0]?.replace(/\s+/g, ' ').trim() ?? null
+  const globalRange = sourceText.match(COMPENSATION_EXACT_RANGE_PATTERN)?.[0]?.replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim() ?? null
+  return {
+    compensation: primary,
+    ote,
+    exact_range_text: exactRangeFromCandidate ?? globalRange,
+  }
 }
 
 function extractCompensationDetails(sourceText: string): {
@@ -251,11 +300,14 @@ function extractCompensationDetails(sourceText: string): {
     has_variable_pay: boolean
     transparency_note: string | null
     location_qualifier: string | null
+    ote: string | null
+    exact_range_text: string | null
   }
 } {
+  const deterministic = extractDeterministicCompensation(sourceText)
   const snippets = sourceText.match(/([^\n]{0,90}(?:salary|compensation|pay range|base pay|hourly|ote|on-target earnings|commission|bonus|equity|total compensation)[^\n]{0,160})/gi) ?? []
   const normalizedSnippets = [...new Set(snippets.map((item) => sanitizeCompensationText(item)).filter((item): item is string => Boolean(item)))].slice(0, 3)
-  const combined = sanitizeCompensationText(normalizedSnippets.join(' | ').slice(0, 320))
+  const combined = sanitizeCompensationText(deterministic.compensation) ?? sanitizeCompensationText(normalizedSnippets.join(' | ').slice(0, 320))
   const payType: 'annual' | 'hourly' | 'unknown' =
     /\b(hour|hourly|hr)\b/i.test(sourceText) ? 'hourly' : /\b(year|annual|annually|per year)\b/i.test(sourceText) ? 'annual' : 'unknown'
   const transparencyNote = /\b(pay transparency|salary may vary|depending on location|based on location|depending on experience)\b/i.test(sourceText)
@@ -272,6 +324,8 @@ function extractCompensationDetails(sourceText: string): {
       has_variable_pay: /\bcommission|variable compensation|ote|on-target earnings\b/i.test(sourceText),
       transparency_note: transparencyNote,
       location_qualifier: locationQualifierMatch?.[0]?.trim() ?? null,
+      ote: deterministic.ote,
+      exact_range_text: deterministic.exact_range_text,
     },
   }
 }
@@ -656,13 +710,14 @@ export async function POST(request: NextRequest) {
     if (!parsed.company_website_url && listingDomainUrl) {
       parsed.company_website_url = listingDomainUrl
     }
+    const deterministicCompensation = extractDeterministicCompensation(signalText)
     const normalizedPassOne = normalizeParsedListing({
       title: parsed.title,
       company_name: parsed.company_name,
       company_website_url: parsed.company_website_url,
       company_linkedin_url: parsed.company_linkedin_url,
       location: parsed.location,
-      compensation: sanitizeCompensationText(parsed.salary_range ?? parsed.compensation),
+      compensation: sanitizeCompensationText(parsed.salary_range ?? parsed.compensation) ?? deterministicCompensation.compensation,
       employment_type: parsed.employment_type,
       experience_level: parsed.experience_level,
       work_mode: workMode,
@@ -676,10 +731,18 @@ export async function POST(request: NextRequest) {
     })
 
     const compensationHeuristic = extractCompensationDetails(signalText)
-    const enrichedRequirements = applyRequirementIntelligence(normalizedPassOne.requirements)
+    const enrichedRequirements = applyRequirementIntelligence(normalizedPassOne.requirements, { englishAppContext: true })
     const enrichedPassOne = normalizeParsedListing({
       ...normalizedPassOne,
-      compensation: sanitizeCompensationText(normalizedPassOne.compensation) ?? compensationHeuristic.compensation,
+      compensation:
+        sanitizeCompensationText(normalizedPassOne.compensation)
+        ?? sanitizeCompensationText(deterministicCompensation.compensation)
+        ?? compensationHeuristic.compensation,
+      compensation_details: {
+        ...compensationHeuristic.details,
+        ote: sanitizeCompensationText(deterministicCompensation.ote) ?? compensationHeuristic.details.ote,
+        exact_range_text: sanitizeCompensationText(deterministicCompensation.exact_range_text) ?? compensationHeuristic.details.exact_range_text,
+      },
       requirements: enrichedRequirements,
     })
 
@@ -747,6 +810,7 @@ export async function POST(request: NextRequest) {
       uncertainties: [],
       parse_quality: parseQuality,
       evidence_map: evidenceMap,
+      compensation_details: enrichedPassOne.compensation_details,
     })
 
     parsed.requirements = normalizedParse.requirements.map((item) => item.text)
@@ -782,8 +846,11 @@ export async function POST(request: NextRequest) {
           title: 'llm_extraction',
           company_name: 'llm_extraction',
           location: 'llm_extraction',
-          salary_range: 'llm_extraction',
-          compensation_details: compensationHeuristic.compensation ? 'heuristic_or_llm' : 'missing',
+          salary_range:
+            enrichedPassOne.compensation
+              ? (deterministicCompensation.compensation ? 'deterministic_or_llm' : 'llm_or_heuristic')
+              : 'missing',
+          compensation_details: enrichedPassOne.compensation_details ? 'deterministic_and_heuristic' : 'missing',
           requirements: 'llm_extraction',
           responsibilities: 'llm_extraction',
           benefits: 'llm_extraction',
@@ -814,7 +881,7 @@ export async function POST(request: NextRequest) {
         evidence_mapping_retry_count: Math.max(0, evidenceAttemptCount - 1),
       },
       intake_classification: intake.intake_classification,
-      compensation_details: compensationHeuristic.details,
+      compensation_details: enrichedPassOne.compensation_details ?? compensationHeuristic.details,
     }
 
     parsed.canonical_listing = toCanonicalListingFromParse(normalizedParse)

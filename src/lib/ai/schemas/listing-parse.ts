@@ -25,6 +25,17 @@ export interface ParsedListingResponsibilities {
   confidence: ParseConfidence
 }
 
+export interface ParsedListingCompensationDetails {
+  pay_type: 'annual' | 'hourly' | 'unknown'
+  has_bonus: boolean
+  has_equity: boolean
+  has_variable_pay: boolean
+  transparency_note: string | null
+  location_qualifier: string | null
+  ote: string | null
+  exact_range_text: string | null
+}
+
 export interface ParsedListingResult {
   title: string | null
   company_name: string | null
@@ -42,6 +53,7 @@ export interface ParsedListingResult {
   parse_quality: 'complete' | 'partial'
   parse_trace?: Record<string, unknown>
   evidence_map: ParsedListingEvidenceMapItem[]
+  compensation_details?: ParsedListingCompensationDetails
 }
 
 export interface CanonicalListingFromParse {
@@ -60,6 +72,7 @@ export interface CanonicalListingFromParse {
     uncertainty_notes: string[]
   }
   evidence_map: ParsedListingEvidenceMapItem[]
+  compensation_details?: ParsedListingCompensationDetails
 }
 
 export interface ParsedListingEvidenceMapItem {
@@ -107,6 +120,17 @@ const parsedEvidenceMapItemSchema = z.object({
   confidence: parseConfidenceSchema.default('medium'),
 })
 
+const parsedCompensationDetailsSchema = z.object({
+  pay_type: z.enum(['annual', 'hourly', 'unknown']).default('unknown'),
+  has_bonus: z.boolean().default(false),
+  has_equity: z.boolean().default(false),
+  has_variable_pay: z.boolean().default(false),
+  transparency_note: z.string().trim().min(1).nullable().optional(),
+  location_qualifier: z.string().trim().min(1).nullable().optional(),
+  ote: z.string().trim().min(1).nullable().optional(),
+  exact_range_text: z.string().trim().min(1).nullable().optional(),
+})
+
 export const parsedListingSchema = z.object({
   title: z.string().trim().nullable().optional(),
   company_name: z.string().trim().nullable().optional(),
@@ -124,6 +148,7 @@ export const parsedListingSchema = z.object({
   parse_quality: z.enum(['complete', 'partial']).default('partial'),
   parse_trace: z.record(z.string(), z.unknown()).optional(),
   evidence_map: z.array(parsedEvidenceMapItemSchema).default([]),
+  compensation_details: parsedCompensationDetailsSchema.optional(),
 })
 
 function asString(value: unknown): string | null {
@@ -342,6 +367,24 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
     parse_quality: record.parse_quality === 'complete' ? 'complete' : 'partial',
     parse_trace: typeof record.parse_trace === 'object' ? record.parse_trace as Record<string, unknown> : undefined,
     evidence_map: evidenceMap,
+    compensation_details: (
+      record.compensation_details && typeof record.compensation_details === 'object'
+        ? {
+          pay_type: (record.compensation_details as Record<string, unknown>).pay_type === 'annual'
+            ? 'annual'
+            : (record.compensation_details as Record<string, unknown>).pay_type === 'hourly'
+              ? 'hourly'
+              : 'unknown',
+          has_bonus: Boolean((record.compensation_details as Record<string, unknown>).has_bonus),
+          has_equity: Boolean((record.compensation_details as Record<string, unknown>).has_equity),
+          has_variable_pay: Boolean((record.compensation_details as Record<string, unknown>).has_variable_pay),
+          transparency_note: asString((record.compensation_details as Record<string, unknown>).transparency_note),
+          location_qualifier: asString((record.compensation_details as Record<string, unknown>).location_qualifier),
+          ote: asString((record.compensation_details as Record<string, unknown>).ote),
+          exact_range_text: asString((record.compensation_details as Record<string, unknown>).exact_range_text),
+        }
+        : undefined
+    ),
   }
 
   const schemaResult = parsedListingSchema.safeParse(normalized)
@@ -371,5 +414,6 @@ export function toCanonicalListingFromParse(parsed: ParsedListingResult): Canoni
       uncertainty_notes: parsed.uncertainties,
     },
     evidence_map: parsed.evidence_map ?? [],
+    compensation_details: parsed.compensation_details,
   }
 }

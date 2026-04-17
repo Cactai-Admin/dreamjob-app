@@ -6,6 +6,9 @@ Pass 1 (Normalization): return canonical listing fields and requirement intellig
   "company_name": "...",
   "location": "...",
   "salary_range": "..." or null,
+  "compensation_details": {
+    "ote": "exact OTE text/range when present (e.g., $120K-$160K OTE)" or null
+  } or null,
   "employment_type": "..." or null,
   "experience_level": "..." or null,
   "description": "..." or null,
@@ -47,6 +50,7 @@ Rules:
   - suppressible: low-signal or redundant to surface
 - Suppress user-facing noise when strongly implied by context (example: basic English fluency in standard English-language roles).
 - Compensation extraction should capture obvious base/OTE/hourly/bonus/equity/location qualifiers in salary_range when present.
+- Treat OTE / on-target earnings as first-class compensation signal and preserve exact OTE text.
 - Never output HTML/meta fragments (such as og:title/og:description/company about text) in salary_range. Use null when compensation is unclear.
 - If uncertain, include a short note in uncertainties.`
 
