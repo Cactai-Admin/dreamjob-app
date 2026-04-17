@@ -51,7 +51,14 @@ export default function ListingReviewPage({ params }: Props) {
   const [description, setDescription] = useState("");
   const [reqs, setReqs] = useState<string[]>([]);
   const [newReq, setNewReq] = useState("");
-  const [additionalDetails, setAdditionalDetails] = useState("");
+  const [manualBuckets, setManualBuckets] = useState({
+    responsibilities: "",
+    roleMotion: "",
+    proofNeeded: "",
+    interviewSignals: "",
+    contextNotes: "",
+  });
+  const [editorOpen, setEditorOpen] = useState(false);
 
   // Profile for match
   const [skills, setSkills] = useState<string[]>([]);
@@ -107,7 +114,13 @@ export default function ListingReviewPage({ params }: Props) {
           .sort((a, b) => b.priority_weight - a.priority_weight)
           .map((item) => item.text);
         setReqs(canonicalReqs.length > 0 ? canonicalReqs : parseRequirements(l.requirements));
-        setAdditionalDetails(l.responsibilities ?? "");
+        setManualBuckets({
+          responsibilities: l.responsibilities ?? "",
+          roleMotion: canonical.opportunity_review?.role_motion_operating_context?.join('\n') ?? "",
+          proofNeeded: canonical.opportunity_review?.top_resume_proof_needed?.join('\n') ?? "",
+          interviewSignals: canonical.content_buckets?.hiring_logistics?.join('\n') ?? "",
+          contextNotes: canonical.content_buckets?.company_context?.join('\n') ?? "",
+        });
         setLinkedInUrl(wf.company?.linkedin_url ?? "");
       }
       if (prof && !prof.error) {
@@ -176,7 +189,17 @@ export default function ListingReviewPage({ params }: Props) {
           experience_level: expLevel || null,
           description: description || null,
           requirements: reqs.length > 0 ? JSON.stringify(reqs) : null,
-          responsibilities: additionalDetails || null,
+          responsibilities: manualBuckets.responsibilities || null,
+          parsed_data: {
+            ...(typeof workflow?.listing?.parsed_data === "object" && workflow?.listing?.parsed_data ? workflow.listing.parsed_data : {}),
+            manual_review_buckets: {
+              responsibilities: manualBuckets.responsibilities || null,
+              role_motion: manualBuckets.roleMotion || null,
+              proof_needed: manualBuckets.proofNeeded || null,
+              interview_signals: manualBuckets.interviewSignals || null,
+              context_notes: manualBuckets.contextNotes || null,
+            },
+          },
           company_website_url: companyWebsite || null,
         },
         company: (linkedInUrl || companyWebsite) ? {
@@ -188,7 +211,7 @@ export default function ListingReviewPage({ params }: Props) {
     setSaving(false);
     setDirty(false);
     window.dispatchEvent(new CustomEvent("dreamjob:listing-saved"));
-  }, [id, companyName, title, location, salary, empType, expLevel, description, reqs, additionalDetails, companyWebsite, linkedInUrl]);
+  }, [id, companyName, title, location, salary, empType, expLevel, description, reqs, manualBuckets, companyWebsite, linkedInUrl, workflow]);
 
   useEffect(() => {
     const onSaveProgress = () => {
@@ -263,6 +286,36 @@ export default function ListingReviewPage({ params }: Props) {
     },
     { includeAllMissingWhenNoProfileTerms: true }
   );
+  const rankedRequirements = [...canonicalListing.exact_requirements, ...canonicalListing.nice_to_haves]
+    .filter((item) => item.user_facing_relevance !== "suppress")
+    .sort((a, b) => b.priority_weight - a.priority_weight)
+    .slice(0, 8);
+  const jobContextParts = [
+    canonicalListing.job_context?.industry,
+    canonicalListing.job_context?.offering_detail ?? canonicalListing.job_context?.offering_type,
+    canonicalListing.job_context?.department,
+    canonicalListing.job_context?.team,
+    canonicalListing.job_context?.title_role ?? title,
+  ].filter(Boolean);
+  const provisionalAlignment = {
+    strengths: canonicalListing.opportunity_review?.provisional_alignment?.likely_strengths?.length
+      ? canonicalListing.opportunity_review.provisional_alignment.likely_strengths
+      : match.matched.slice(0, 4),
+    gaps: canonicalListing.opportunity_review?.provisional_alignment?.likely_missing_proof?.length
+      ? canonicalListing.opportunity_review.provisional_alignment.likely_missing_proof
+      : match.missing.slice(0, 4),
+    caveats: [
+      ...(canonicalListing.opportunity_review?.provisional_alignment?.confidence_caveats ?? []),
+      ...(skills.length === 0 && keywords.length === 0 && profileTools.length === 0 ? ["Profile skills/tools are sparse, so this is a partial read."] : []),
+      ...(tech.length === 0 ? ["Work history technologies/outcomes are limited, reducing confidence."] : []),
+    ].filter(Boolean),
+  };
+  const assistantGuidance = canonicalListing.opportunity_review?.assistant_guidance ?? {
+    gap_priorities: [],
+    resume_targets: canonicalListing.opportunity_review?.top_resume_proof_needed ?? [],
+    cover_letter_angles: canonicalListing.opportunity_review?.top_cover_letter_angles ?? [],
+    compensation_flags: [],
+  };
 
   if (loading) {
     return (
@@ -315,19 +368,21 @@ export default function ListingReviewPage({ params }: Props) {
         <div className="space-y-5">
           <div className="card-base p-5">
             <h2 className="font-semibold text-slate-900 mb-2">Opportunity Intelligence</h2>
-            <p className="text-xs text-slate-500 mb-3">Derived from canonical listing + job context hierarchy.</p>
+            <p className="text-xs text-slate-500 mb-3">Strategic review first. Manual field edits are available in the secondary editor below.</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Job context</p>
                 <p className="text-xs text-slate-700 mt-1">
-                  {[canonicalListing.job_context?.industry, canonicalListing.job_context?.offering_detail ?? canonicalListing.job_context?.offering_type, canonicalListing.job_context?.department, canonicalListing.job_context?.team, canonicalListing.job_context?.title_role ?? title]
-                    .filter(Boolean)
-                    .join(" → ") || "Context still being inferred."}
+                  {jobContextParts.join(" → ") || "Context still uncertain; hierarchy intentionally partial."}
                 </p>
+                <p className="text-[10px] text-slate-500 mt-1">Confidence: {canonicalListing.job_context?.context_confidence ?? "low"}</p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Compensation summary</p>
-                <p className="text-xs text-slate-700 mt-1">{canonicalListing.opportunity_review?.compensation_summary ?? canonicalListing.compensation ?? "Not clearly listed."}</p>
+                <p className="text-xs text-slate-700 mt-1">{canonicalListing.opportunity_review?.compensation_summary ?? canonicalListing.compensation ?? "Candidate pay not clearly listed yet."}</p>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  {canonicalListing.opportunity_review?.sales_motion_summary?.length ? `Sales economics: ${canonicalListing.opportunity_review.sales_motion_summary.slice(0, 2).join(" · ")}` : "Sales economics shown separately when present."}
+                </p>
               </div>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -349,10 +404,38 @@ export default function ListingReviewPage({ params }: Props) {
             </div>
           </div>
 
-          <section className="space-y-1">
-            <h2 className="text-sm font-semibold text-slate-800">Core listing details</h2>
-            <p className="text-xs text-slate-500">Confirm foundational role and company context before moving forward.</p>
-          </section>
+          <div className="card-base p-5">
+            <h2 className="font-semibold text-slate-900 mb-3 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-sky-500" />Provisional alignment</h2>
+            <p className="text-xs text-slate-500 mb-3">Early signal from profile + work history + listing intelligence. Not a final score.</p>
+            <div className="grid gap-3 sm:grid-cols-3 text-xs">
+              <div><p className="font-semibold text-emerald-700 mb-1">Likely strengths</p><ul className="space-y-1 text-slate-700">{provisionalAlignment.strengths.slice(0, 4).map((item, idx) => <li key={`strength-${idx}`}>• {item}</li>)}</ul></div>
+              <div><p className="font-semibold text-amber-700 mb-1">Top proof gaps</p><ul className="space-y-1 text-slate-700">{provisionalAlignment.gaps.slice(0, 4).map((item, idx) => <li key={`gap-${idx}`}>• {item}</li>)}</ul></div>
+              <div><p className="font-semibold text-slate-700 mb-1">Confidence caveats</p><ul className="space-y-1 text-slate-600">{provisionalAlignment.caveats.slice(0, 4).map((item, idx) => <li key={`caveat-${idx}`}>• {item}</li>)}</ul></div>
+            </div>
+          </div>
+
+          <div className="card-base p-5">
+            <h2 className="font-semibold text-slate-900 mb-3">Role motion / operating context</h2>
+            <ul className="space-y-1 text-xs text-slate-700">
+              {(canonicalListing.opportunity_review?.role_motion_operating_context ?? []).slice(0, 6).map((item, idx) => <li key={`motion-${idx}`}>• {item}</li>)}
+            </ul>
+          </div>
+
+          <div className="card-base p-4 border-dashed">
+            <button
+              onClick={() => setEditorOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Manual listing editor (secondary)</p>
+                <p className="text-xs text-slate-500">Use only for corrections and structured rebucketing.</p>
+              </div>
+              <ChevronRight className={cn("w-4 h-4 text-slate-500 transition-transform", editorOpen && "rotate-90")} />
+            </button>
+          </div>
+
+          {editorOpen && (
+          <>
 
           {/* Core fields */}
           <div className="card-base p-5">
@@ -486,23 +569,35 @@ export default function ListingReviewPage({ params }: Props) {
           </div>
 
           <section className="space-y-1 pt-1">
-            <h2 className="text-sm font-semibold text-slate-800">Additional extracted context</h2>
-            <p className="text-xs text-slate-500">Keep extra signals that matter for tailoring, interview prep, and expectations.</p>
+            <h2 className="text-sm font-semibold text-slate-800">Supporting extracted context</h2>
+            <p className="text-xs text-slate-500">Re-bucket context into semantic sections (not a catch-all dump).</p>
           </section>
 
           <div className="card-base p-5">
-            <h2 className="font-semibold text-slate-900 mb-1">Additional Details</h2>
-            <p className="text-xs text-slate-400 mb-3">Anything from the listing that wasn&apos;t captured above — responsibilities, benefits, interview process, deadlines, work authorization, etc.</p>
-            <textarea
-              value={additionalDetails}
-              ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
-              onChange={e => { setAdditionalDetails(e.target.value); mark(); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-              rows={1}
-              style={{ minHeight: '5rem' }}
-              placeholder="Paste extra listing content here…"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-none overflow-hidden"
-            />
+            <h2 className="font-semibold text-slate-900 mb-3">Context buckets</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([
+                { key: "responsibilities", label: "Responsibilities", placeholder: "Execution and ownership expectations…" },
+                { key: "roleMotion", label: "Role Motion", placeholder: "ACV, expansion, demos, stakeholder complexity…" },
+                { key: "proofNeeded", label: "Proof Needed", placeholder: "Evidence targets for resume/interview…" },
+                { key: "interviewSignals", label: "Interview Signals", placeholder: "Process, loops, timeline, authorization…" },
+                { key: "contextNotes", label: "Context Notes", placeholder: "Operating context and non-core notes…" },
+              ] as const).map((bucket) => (
+                <div key={bucket.key} className={cn(bucket.key === "contextNotes" && "sm:col-span-2")}>
+                  <label className="text-xs font-medium text-slate-500 mb-1 block">{bucket.label}</label>
+                  <textarea
+                    value={manualBuckets[bucket.key]}
+                    onChange={e => { setManualBuckets((prev) => ({ ...prev, [bucket.key]: e.target.value })); mark(); }}
+                    rows={3}
+                    placeholder={bucket.placeholder}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-200 resize-y"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
+          </>
+          )}
         </div>
 
           {/* Core actions */}
@@ -536,9 +631,10 @@ export default function ListingReviewPage({ params }: Props) {
               Alignment signals
             </h2>
             {skills.length === 0 && keywords.length === 0 && profileTools.length === 0 && tech.length === 0 ? (
-              <div className="text-sm text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
-                <Link href="/profile?tab=skills" className="text-sky-500 hover:underline">Add skills to your profile</Link>
-                <span className="text-slate-400"> to see your match score.</span>
+              <div className="text-sm py-4 border-2 border-dashed border-slate-200 rounded-xl px-3">
+                <p className="text-slate-700">Partial provisional read is available from listing intelligence and requirement structure.</p>
+                <p className="text-slate-400 mt-1">Add more profile/work history detail to increase confidence and uncover stronger matches.</p>
+                <Link href="/profile?tab=skills" className="text-sky-500 hover:underline text-xs mt-2 inline-block">Add profile evidence</Link>
               </div>
             ) : reqs.length === 0 ? (
               <p className="text-slate-400 text-sm">Add requirements to the listing to see how your experience matches.</p>
@@ -637,6 +733,40 @@ export default function ListingReviewPage({ params }: Props) {
                 </span>
               </li>
             </ul>
+          </div>
+
+          <div className="card-base p-5">
+            <h2 className="font-semibold text-slate-900 mb-3">Ranked requirements</h2>
+            <ul className="space-y-2">
+              {rankedRequirements.slice(0, 6).map((item) => (
+                <li key={item.id} className="rounded-lg border border-slate-200 p-2">
+                  <p className="text-sm text-slate-800">{item.text}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">{item.priority} · {Math.round(item.priority_weight * 100)}% weight</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card-base p-5">
+            <h2 className="font-semibold text-slate-900 mb-3">Assistant guidance for this opportunity</h2>
+            <div className="grid gap-3 sm:grid-cols-2 text-xs text-slate-700">
+              <div>
+                <p className="font-semibold text-slate-900 mb-1">Ranked proof gaps</p>
+                <ul className="space-y-1">{assistantGuidance.gap_priorities.slice(0, 4).map((item, idx) => <li key={`ag-gap-${idx}`}>• {item}</li>)}</ul>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 mb-1">Resume evidence targets</p>
+                <ul className="space-y-1">{assistantGuidance.resume_targets.slice(0, 4).map((item, idx) => <li key={`ag-resume-${idx}`}>• {item}</li>)}</ul>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 mb-1">Cover letter angles</p>
+                <ul className="space-y-1">{assistantGuidance.cover_letter_angles.slice(0, 4).map((item, idx) => <li key={`ag-cover-${idx}`}>• {item}</li>)}</ul>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 mb-1">Compensation ambiguity flags</p>
+                <ul className="space-y-1">{assistantGuidance.compensation_flags.slice(0, 3).map((item, idx) => <li key={`ag-comp-${idx}`}>• {item}</li>)}</ul>
+              </div>
+            </div>
           </div>
 
           {/* LinkedIn Connections */}

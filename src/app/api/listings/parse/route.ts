@@ -151,64 +151,49 @@ function inferRequirementType(text: string): ParsedListingRequirement['requireme
 
 function inferJobContextHierarchy(sourceText: string, title: string | null): ParsedListingJobContext {
   const normalized = `${title ?? ''}\n${sourceText}`.toLowerCase()
-  const industry = /\b(fintech|payments|banking)\b/.test(normalized)
-    ? 'Fintech'
-    : /\b(healthcare|clinical|patient|hipaa)\b/.test(normalized)
-      ? 'Healthcare'
-      : /\b(e-?commerce|marketplace|retail)\b/.test(normalized)
-        ? 'E-commerce'
-        : /\b(edtech|education|student)\b/.test(normalized)
-          ? 'Education'
-          : /\b(govtech|public sector|federal|state government)\b/.test(normalized)
-            ? 'GovTech'
-            : /\b(manufacturing|factory|supply chain)\b/.test(normalized)
-              ? 'Manufacturing'
-              : /\b(saas|software|platform|cloud)\b/.test(normalized)
-                ? 'SaaS'
-                : null
-  const department = /\b(account executive|sales|quota|pipeline)\b/.test(normalized)
-    ? 'Sales'
-    : /\b(revenue operations|revops)\b/.test(normalized)
-      ? 'RevOps'
-      : /\b(marketing|demand gen|lifecycle)\b/.test(normalized)
-        ? 'Marketing'
-        : /\b(engineer|developer|software|platform)\b/.test(normalized)
-          ? 'Engineering'
-          : /\b(customer success|account manager)\b/.test(normalized)
-            ? 'Customer Success'
-            : /\b(finance|accounting|fp&a)\b/.test(normalized)
-              ? 'Finance'
-              : /\b(hr|talent|recruit)\b/.test(normalized)
-                ? 'HR'
-                : /\b(it|help desk|systems administrator)\b/.test(normalized)
-                  ? 'IT'
-                  : /\b(operations|ops)\b/.test(normalized)
-                    ? 'Operations'
-                    : null
-  const team = /\b(smb)\b/.test(normalized)
-    ? 'SMB Sales'
-    : /\b(mid[- ]market)\b/.test(normalized)
-      ? 'Mid-Market Sales'
-      : /\b(enterprise)\b/.test(normalized)
-        ? 'Enterprise Sales'
-        : /\b(revenue operations|revops)\b/.test(normalized)
-          ? 'Revenue Operations'
-          : /\b(platform engineering)\b/.test(normalized)
-            ? 'Platform Engineering'
-            : /\b(security)\b/.test(normalized)
-              ? 'Security Engineering'
-              : null
-  const offeringType = /\b(marketplace)\b/.test(normalized)
-    ? 'marketplace'
-    : /\b(services|consulting|implementation)\b/.test(normalized)
-      ? 'services'
-      : /\b(hardware|device)\b/.test(normalized)
-        ? 'hardware product'
-        : /\b(subscription|media)\b/.test(normalized)
-          ? 'subscription/media'
-          : /\b(platform|software|saas|cloud)\b/.test(normalized)
-            ? 'software product'
-            : null
+  const signalCount = (...patterns: RegExp[]) => patterns.reduce((sum, pattern) => sum + (pattern.test(normalized) ? 1 : 0), 0)
+  const chooseWithConfidence = <T extends string>(candidates: Array<{ value: T; score: number }>, minScore: number): T | null => {
+    const best = candidates.sort((a, b) => b.score - a.score)[0]
+    if (!best || best.score < minScore) return null
+    return best.value
+  }
+  const industry = chooseWithConfidence([
+    { value: 'Fintech', score: signalCount(/\bfintech\b/, /\bpayments?\b/, /\bbanking\b/) },
+    { value: 'Healthcare', score: signalCount(/\bhealthcare\b/, /\bclinical\b/, /\bpatient\b/, /\bhipaa\b/) },
+    { value: 'E-commerce', score: signalCount(/\be-?commerce\b/, /\bmarketplace\b/, /\bretail\b/) },
+    { value: 'Education', score: signalCount(/\bedtech\b/, /\beducation\b/, /\bstudent\b/) },
+    { value: 'GovTech', score: signalCount(/\bgovtech\b/, /\bpublic sector\b/, /\bfederal\b/, /\bstate government\b/) },
+    { value: 'Manufacturing', score: signalCount(/\bmanufacturing\b/, /\bfactory\b/, /\bsupply chain\b/) },
+    { value: 'SaaS', score: signalCount(/\bsaas\b/, /\bsoftware\b/, /\bplatform\b/, /\bcloud\b/) },
+  ], 2)
+  const department = chooseWithConfidence([
+    { value: 'Sales', score: signalCount(/\baccount executive\b/, /\bsales\b/, /\bquota\b/, /\bpipeline\b/) },
+    { value: 'RevOps', score: signalCount(/\brevenue operations\b/, /\brevops\b/) },
+    { value: 'Marketing', score: signalCount(/\bmarketing\b/, /\bdemand gen\b/, /\blifecycle\b/) },
+    { value: 'Engineering', score: signalCount(/\bengineer\b/, /\bdeveloper\b/, /\bsoftware\b/, /\bplatform\b/) },
+    { value: 'Customer Success', score: signalCount(/\bcustomer success\b/, /\baccount manager\b/) },
+    { value: 'Finance', score: signalCount(/\bfinance\b/, /\baccounting\b/, /\bfp&a\b/) },
+    { value: 'HR', score: signalCount(/\bhr\b/, /\btalent\b/, /\brecruit/) },
+    { value: 'IT', score: signalCount(/\bit\b/, /\bhelp desk\b/, /\bsystems administrator\b/) },
+    { value: 'Operations', score: signalCount(/\boperations\b/, /\bops\b/) },
+  ], 2)
+  const team = chooseWithConfidence([
+    { value: 'SMB Sales', score: signalCount(/\bsmb\b/, /\bsmb sales\b/) },
+    { value: 'Mid-Market Sales', score: signalCount(/\bmid[- ]market\b/, /\bmm\b/) },
+    { value: 'Enterprise Sales', score: signalCount(/\benterprise\b/, /\bstrategic accounts?\b/) },
+    { value: 'Revenue Operations', score: signalCount(/\brevenue operations\b/, /\brevops\b/) },
+    { value: 'Platform Engineering', score: signalCount(/\bplatform engineering\b/, /\binfrastructure team\b/) },
+    { value: 'Security Engineering', score: signalCount(/\bsecurity\b/, /\bsecurity engineering\b/) },
+  ], 2)
+  const offeringType = chooseWithConfidence([
+    { value: 'marketplace', score: signalCount(/\bmarketplace\b/, /\bbuyers?\b/, /\bsellers?\b/) },
+    { value: 'services', score: signalCount(/\bservices\b/, /\bconsulting\b/, /\bimplementation\b/) },
+    { value: 'hardware product', score: signalCount(/\bhardware\b/, /\bdevice\b/) },
+    { value: 'subscription/media', score: signalCount(/\bsubscription\b/, /\bmedia\b/) },
+    { value: 'software product', score: signalCount(/\bplatform\b/, /\bsoftware\b/, /\bsaas\b/, /\bcloud\b/) },
+  ], 2)
+  const titleRole = title?.trim() ? title.trim() : null
+  const confidenceScore = [industry, offeringType, department, team, titleRole].filter(Boolean).length
   const jobFamily = department?.toLowerCase().replace(/\s+/g, '_') ?? 'other'
   return {
     industry,
@@ -216,11 +201,11 @@ function inferJobContextHierarchy(sourceText: string, title: string | null): Par
     offering_detail: /\b(cybersecurity|crm|payments|analytics|community)\b/i.exec(sourceText)?.[0] ?? null,
     department,
     team,
-    title_role: title ?? null,
+    title_role: titleRole,
     job_family: jobFamily,
     buyer_or_user_context: /\b(b2b|b2c|enterprise|smb|mid-market)\b/i.exec(sourceText)?.[0] ?? null,
     operating_motion: /\b(sales-led|product-led|plg|enterprise motion|field sales)\b/i.exec(sourceText)?.[0] ?? null,
-    context_confidence: industry || department ? 'medium' : 'low',
+    context_confidence: confidenceScore >= 4 ? 'high' : confidenceScore >= 2 ? 'medium' : 'low',
   }
 }
 
@@ -333,6 +318,7 @@ const COMPENSATION_EXACT_RANGE_PATTERN = /\$\s?\d[\d,.]*(?:\s?[kKmM])?\s*(?:-|to
 const COMPENSATION_RATE_PATTERN = /\b(?:per\s*(?:year|annum|hour|hr)|hourly|annual(?:ly)?|salary|base pay|pay range|compensation|ote|on-target earnings)\b/i
 const COMPENSATION_KEYWORD_PATTERN = /\b(?:compensation|salary|pay|pay range|base pay|ote|on[-\s]?target earnings?)\b/i
 const OTE_PATTERN = /\b(?:ote|on[-\s]?target earnings?)\b/i
+const SALES_ECONOMICS_PATTERN = /\b(?:acv|deal size|quota|arr|pipeline|bookings?|territory|segment|expansion|renewal)\b/i
 const COMPENSATION_CONTAMINATION_PATTERN = /\b(?:og:title|og:description|meta\s+name=|meta\s+property=|<meta|<title|<\/|<script|<!doctype|html>|http-equiv|content=|job description|about us|founded in|mission)\b/i
 
 function sanitizeCompensationText(value: unknown): string | null {
@@ -368,11 +354,17 @@ function extractDeterministicCompensation(sourceText: string): {
   compensation: string | null
   ote: string | null
   exact_range_text: string | null
+  sales_motion_summary: string[]
 } {
   const candidates = buildCompensationSnippet(sourceText)
-    .filter((candidate) => COMPENSATION_MONEY_PATTERN.test(candidate) && COMPENSATION_KEYWORD_PATTERN.test(candidate))
+    .filter((candidate) => COMPENSATION_MONEY_PATTERN.test(candidate) && COMPENSATION_KEYWORD_PATTERN.test(candidate) && !SALES_ECONOMICS_PATTERN.test(candidate))
     .map((candidate) => sanitizeCompensationText(candidate))
     .filter((candidate): candidate is string => Boolean(candidate))
+  const salesMotionSummary = buildCompensationSnippet(sourceText)
+    .filter((candidate) => SALES_ECONOMICS_PATTERN.test(candidate))
+    .map((candidate) => sanitizeCompensationText(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate))
+    .slice(0, 4)
 
   const primary = candidates.find((candidate) => OTE_PATTERN.test(candidate))
     ?? candidates[0]
@@ -385,11 +377,13 @@ function extractDeterministicCompensation(sourceText: string): {
     compensation: primary,
     ote,
     exact_range_text: exactRangeFromCandidate ?? globalRange,
+    sales_motion_summary: salesMotionSummary,
   }
 }
 
 function extractCompensationDetails(sourceText: string): {
   compensation: string | null
+  sales_motion_summary: string[]
   details: {
     pay_type: 'annual' | 'hourly' | 'unknown'
     has_bonus: boolean
@@ -414,6 +408,7 @@ function extractCompensationDetails(sourceText: string): {
 
   return {
     compensation: combined,
+    sales_motion_summary: deterministic.sales_motion_summary,
     details: {
       pay_type: payType,
       has_bonus: /\bbonus\b/i.test(sourceText),
@@ -600,17 +595,19 @@ function buildOpportunityReview(params: {
   requirements: ParsedListingRequirement[]
   compensation: string | null
   compensationDetails: { ote: string | null; exact_range_text: string | null } | undefined
+  salesMotionSummary: string[]
   jobContext: ParsedListingJobContext
 }): ParsedListingOpportunityReview {
   const ranked = [...params.requirements].sort((a, b) => b.priority_weight - a.priority_weight).slice(0, 8)
   const visible = ranked.filter((item) => item.user_facing_relevance !== 'suppress')
   const suppressed = params.requirements.filter((item) => item.user_facing_relevance === 'suppress')
-  const compensationSummary = params.compensationDetails?.ote ?? params.compensationDetails?.exact_range_text ?? params.compensation ?? null
+  const compensationSummary = params.compensationDetails?.exact_range_text ?? params.compensationDetails?.ote ?? params.compensation ?? null
   const strategicLens = [params.jobContext.department, params.jobContext.team, params.jobContext.offering_detail ?? params.jobContext.offering_type]
     .filter(Boolean)
     .join(' · ')
   return {
     compensation_summary: compensationSummary,
+    sales_motion_summary: params.salesMotionSummary,
     top_requirements_ranked: ranked.map((item) => ({
       requirement_id: item.id,
       requirement_text: item.text,
@@ -626,6 +623,28 @@ function buildOpportunityReview(params: {
     })),
     who_this_role_is_really_for: strategicLens || params.jobContext.title_role,
     what_matters_most: visible.map((item) => item.text).slice(0, 4),
+    role_motion_operating_context: [
+      ...params.salesMotionSummary,
+      params.jobContext.operating_motion ?? null,
+      params.jobContext.buyer_or_user_context ?? null,
+      ...visible
+        .map((item) => item.text)
+        .filter((text) => /\b(discovery|demo|stakeholder|expansion|close|pipeline|territory|enterprise|segment)\b/i.test(text)),
+    ].filter((item): item is string => Boolean(item)).slice(0, 6),
+    provisional_alignment: {
+      likely_strengths: visible.filter((item) => item.priority_weight >= 0.8).slice(0, 3).map((item) => item.text),
+      likely_missing_proof: visible.filter((item) => item.priority === 'essential').slice(0, 4).map((item) => item.text),
+      confidence_caveats: [
+        compensationSummary ? '' : 'Candidate compensation is not clearly stated in the listing.',
+        params.jobContext.context_confidence === 'low' ? 'Job context hierarchy remains low-confidence and intentionally partial.' : '',
+      ].filter(Boolean),
+    },
+    assistant_guidance: {
+      gap_priorities: visible.filter((item) => item.priority === 'essential').slice(0, 3).map((item) => `Prioritize proof for: ${item.text}`),
+      resume_targets: visible.slice(0, 4).map((item) => item.evidence_needed ?? `Quantified resume proof for ${item.text}`),
+      cover_letter_angles: visible.slice(0, 4).map((item) => `Connect your impact story to ${item.text}`),
+      compensation_flags: compensationSummary ? [] : ['Compensation is ambiguous — validate salary, OTE, bonus, and equity expectations before offer stage.'],
+    },
     recommended_resume_emphasis: visible.map((item) => item.evidence_needed ?? item.text).slice(0, 5),
     recommended_cover_letter_emphasis: visible.map((item) => `Address ${item.requirement_type} signal with proof.`).slice(0, 4),
   }
@@ -888,7 +907,11 @@ export async function POST(request: NextRequest) {
       company_website_url: parsed.company_website_url,
       company_linkedin_url: parsed.company_linkedin_url,
       location: parsed.location,
-      compensation: sanitizeCompensationText(parsed.salary_range ?? parsed.compensation) ?? deterministicCompensation.compensation,
+      compensation: (() => {
+        const parsedComp = sanitizeCompensationText(parsed.salary_range ?? parsed.compensation)
+        if (parsedComp && !SALES_ECONOMICS_PATTERN.test(parsedComp)) return parsedComp
+        return deterministicCompensation.compensation
+      })(),
       employment_type: parsed.employment_type,
       experience_level: parsed.experience_level,
       work_mode: workMode,
@@ -916,8 +939,12 @@ export async function POST(request: NextRequest) {
     const enrichedPassOne = normalizeParsedListing({
       ...normalizedPassOne,
       compensation:
-        sanitizeCompensationText(normalizedPassOne.compensation)
-        ?? sanitizeCompensationText(deterministicCompensation.compensation)
+        (normalizedPassOne.compensation && !SALES_ECONOMICS_PATTERN.test(normalizedPassOne.compensation)
+          ? sanitizeCompensationText(normalizedPassOne.compensation)
+          : null)
+        ?? (deterministicCompensation.compensation && !SALES_ECONOMICS_PATTERN.test(deterministicCompensation.compensation)
+          ? sanitizeCompensationText(deterministicCompensation.compensation)
+          : null)
         ?? compensationHeuristic.compensation,
       compensation_details: {
         ...compensationHeuristic.details,
@@ -932,6 +959,7 @@ export async function POST(request: NextRequest) {
       requirements: enrichedPassOne.requirements,
       compensation: enrichedPassOne.compensation,
       compensationDetails: enrichedPassOne.compensation_details,
+      salesMotionSummary: compensationHeuristic.sales_motion_summary,
       jobContext,
     })
 

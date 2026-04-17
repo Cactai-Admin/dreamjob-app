@@ -54,6 +54,7 @@ export interface CanonicalContentBuckets {
 
 export interface CanonicalOpportunityReview {
   compensation_summary: string | null
+  sales_motion_summary: string[]
   top_requirements_ranked: Array<{ requirement_id: string; requirement_text: string; priority_weight: number }>
   top_resume_proof_needed: string[]
   top_cover_letter_angles: string[]
@@ -61,6 +62,18 @@ export interface CanonicalOpportunityReview {
   suppressed_requirements: Array<{ requirement_id: string; requirement_text: string; suppression_reason: string | null }>
   who_this_role_is_really_for: string | null
   what_matters_most: string[]
+  role_motion_operating_context: string[]
+  provisional_alignment: {
+    likely_strengths: string[]
+    likely_missing_proof: string[]
+    confidence_caveats: string[]
+  }
+  assistant_guidance: {
+    gap_priorities: string[]
+    resume_targets: string[]
+    cover_letter_angles: string[]
+    compensation_flags: string[]
+  }
   recommended_resume_emphasis: string[]
   recommended_cover_letter_emphasis: string[]
 }
@@ -106,6 +119,11 @@ function asStringArray(value: unknown): string[] {
 
 function asConfidence(value: unknown): ListingConfidence {
   return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium'
+}
+
+function looksLikeSalesEconomics(value: string | null | undefined): boolean {
+  if (!value) return false
+  return /\b(acv|deal size|quota|pipeline|bookings?|arr|segment|expansion)\b/i.test(value)
 }
 
 function normalizeRequirementList(value: unknown, fallbackPrefix: string): CanonicalRequirement[] {
@@ -277,6 +295,7 @@ function normalizeOpportunityReview(value: unknown): CanonicalOpportunityReview 
   const record = value as Record<string, unknown>
   return {
     compensation_summary: asString(record.compensation_summary),
+    sales_motion_summary: asStringArray(record.sales_motion_summary),
     top_requirements_ranked: Array.isArray(record.top_requirements_ranked)
       ? record.top_requirements_ranked
         .map((item) => {
@@ -314,6 +333,30 @@ function normalizeOpportunityReview(value: unknown): CanonicalOpportunityReview 
       : [],
     who_this_role_is_really_for: asString(record.who_this_role_is_really_for),
     what_matters_most: asStringArray(record.what_matters_most),
+    role_motion_operating_context: asStringArray(record.role_motion_operating_context),
+    provisional_alignment: (() => {
+      if (!record.provisional_alignment || typeof record.provisional_alignment !== 'object') {
+        return { likely_strengths: [], likely_missing_proof: [], confidence_caveats: [] }
+      }
+      const provisional = record.provisional_alignment as Record<string, unknown>
+      return {
+        likely_strengths: asStringArray(provisional.likely_strengths),
+        likely_missing_proof: asStringArray(provisional.likely_missing_proof),
+        confidence_caveats: asStringArray(provisional.confidence_caveats),
+      }
+    })(),
+    assistant_guidance: (() => {
+      if (!record.assistant_guidance || typeof record.assistant_guidance !== 'object') {
+        return { gap_priorities: [], resume_targets: [], cover_letter_angles: [], compensation_flags: [] }
+      }
+      const guidance = record.assistant_guidance as Record<string, unknown>
+      return {
+        gap_priorities: asStringArray(guidance.gap_priorities),
+        resume_targets: asStringArray(guidance.resume_targets),
+        cover_letter_angles: asStringArray(guidance.cover_letter_angles),
+        compensation_flags: asStringArray(guidance.compensation_flags),
+      }
+    })(),
     recommended_resume_emphasis: asStringArray(record.recommended_resume_emphasis),
     recommended_cover_letter_emphasis: asStringArray(record.recommended_cover_letter_emphasis),
   }
@@ -338,8 +381,16 @@ export function deriveOpportunityReview(listing: CanonicalListingContract): Cano
     .filter(Boolean)
     .join(' · ')
 
+  const candidateCompensation = listing.compensation_details?.exact_range_text
+    ?? listing.compensation_details?.ote
+    ?? (looksLikeSalesEconomics(listing.compensation) ? null : listing.compensation)
+    ?? null
+
   return {
-    compensation_summary: listing.compensation_details?.ote ?? listing.compensation_details?.exact_range_text ?? listing.compensation ?? null,
+    compensation_summary: candidateCompensation,
+    sales_motion_summary: listing.content_buckets?.company_context
+      ?.filter((line) => /\b(acv|deal size|quota|pipeline|expansion|territory|segment|enterprise|smb|mid-market)\b/i.test(line))
+      .slice(0, 4) ?? [],
     top_requirements_ranked: ranked,
     top_resume_proof_needed: ranked
       .map((item) => visible.find((requirement) => requirement.id === item.requirement_id)?.evidence_needed)
@@ -350,6 +401,22 @@ export function deriveOpportunityReview(listing: CanonicalListingContract): Cano
     suppressed_requirements: suppressed,
     who_this_role_is_really_for: roleFor || null,
     what_matters_most: ranked.slice(0, 4).map((item) => item.requirement_text),
+    role_motion_operating_context: [
+      ...(listing.content_buckets?.responsibilities ?? []).filter((line) => /\b(demo|discovery|stakeholder|close|forecast|expansion|renewal|pipeline|territory)\b/i.test(line)),
+      ...(listing.content_buckets?.company_context ?? []).filter((line) => /\b(acv|segment|enterprise|smb|motion|go-to-market|customer)\b/i.test(line)),
+      listing.job_context?.operating_motion ?? null,
+    ].filter((line): line is string => Boolean(line)).slice(0, 6),
+    provisional_alignment: {
+      likely_strengths: ranked.filter((item) => item.priority_weight >= 0.8).slice(0, 3).map((item) => item.requirement_text),
+      likely_missing_proof: visible.filter((item) => item.priority === 'essential').slice(0, 3).map((item) => item.text),
+      confidence_caveats: listing.confidence.uncertainty_notes.slice(0, 3),
+    },
+    assistant_guidance: {
+      gap_priorities: visible.filter((item) => item.priority === 'essential').slice(0, 3).map((item) => `Close proof gap for: ${item.text}`),
+      resume_targets: ranked.slice(0, 4).map((item) => `Resume bullet evidence for ${item.requirement_text}`),
+      cover_letter_angles: ranked.slice(0, 3).map((item) => `Cover letter angle: why your impact fits ${item.requirement_text}`),
+      compensation_flags: listing.confidence.uncertainty_notes.filter((note) => /\b(compensation|salary|ote|pay)\b/i.test(note)).slice(0, 2),
+    },
     recommended_resume_emphasis: visible.slice(0, 5).map((item) => item.evidence_needed ?? item.text),
     recommended_cover_letter_emphasis: visible.slice(0, 4).map((item) => `Show fit for ${item.requirement_type}: ${item.text}`),
   }
