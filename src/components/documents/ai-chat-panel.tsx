@@ -15,6 +15,16 @@ interface Props {
   className?: string;
 }
 
+interface ApiMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  suggestions?: string[];
+  actions?: Array<{ id?: string; type: string; label: string; value?: string }>;
+  warnings?: Array<{ code?: string; message: string; severity?: string }>;
+}
+
 export function AiChatPanel({ workflowId, surface = "document", onClose, className }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -22,7 +32,9 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   const [requestError, setRequestError] = useState<string | null>(null);
   const [stageKey, setStageKey] = useState<"stage1" | "stage2" | "support">("stage2");
   const [seededProactiveReview, setSeededProactiveReview] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const stageConfig = DEFAULT_SHARED_CHAT_STAGE_CONFIG[stageKey];
+
   const copyBySurface: Partial<Record<string, { subtitle: string; placeholder: string; empty: string }>> = {
     listing_review: {
       subtitle: "Listing review assistant",
@@ -61,6 +73,22 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
     },
   };
   const surfaceCopy = copyBySurface[surface];
+
+  const mapApiMessage = (message: ApiMessage): ChatMessage => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    timestamp: message.created_at,
+    suggestions: message.suggestions ?? [],
+    actions: (message.actions ?? []).map((action, index) => ({
+      id: action.id ?? `action-${message.id}-${index}`,
+      type: action.type,
+      label: action.label,
+      value: action.value,
+    })),
+    warnings: message.warnings ?? [],
+  });
+
   useEffect(() => {
     let active = true;
     const loadThread = async () => {
@@ -87,12 +115,7 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
 
         if (threadRes.ok && Array.isArray(data.messages)) {
           if (data.messages.length > 0) {
-            setMessages(data.messages.map((message: { id: string; role: "user" | "assistant"; content: string; created_at: string }) => ({
-              id: message.id,
-              role: message.role,
-              content: message.content,
-              timestamp: message.created_at,
-            })));
+            setMessages(data.messages.map((message: ApiMessage) => mapApiMessage(message)));
           } else {
             setMessages([]);
           }
@@ -105,7 +128,9 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
     };
 
     loadThread();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [workflowId, surface]);
 
   useEffect(() => {
@@ -121,12 +146,18 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
       .then((res) => res.json())
       .then((data) => {
         if (!data?.message) return;
-        setMessages((prev) => [...prev, {
-          id: `msg-${Date.now()}-proactive`,
-          role: "assistant",
-          content: data.message,
-          timestamp: new Date().toISOString(),
-        }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-proactive`,
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date().toISOString(),
+            suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+            actions: Array.isArray(data.actions) ? data.actions : [],
+            warnings: Array.isArray(data.warnings) ? data.warnings : [],
+          },
+        ]);
       })
       .finally(() => setIsTyping(false));
   }, [workflowId, surface, loadingThread, messages, seededProactiveReview]);
@@ -144,12 +175,18 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         .then((res) => res.json())
         .then((data) => {
           if (!data?.message) return;
-          setMessages((prev) => [...prev, {
-            id: `msg-${Date.now()}-refresh`,
-            role: "assistant",
-            content: data.message,
-            timestamp: new Date().toISOString(),
-          }]);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${Date.now()}-refresh`,
+              role: "assistant",
+              content: data.message,
+              timestamp: new Date().toISOString(),
+              suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+              actions: Array.isArray(data.actions) ? data.actions : [],
+              warnings: Array.isArray(data.warnings) ? data.warnings : [],
+            },
+          ]);
         })
         .finally(() => setIsTyping(false));
     };
@@ -181,7 +218,9 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
       try {
         const stored = JSON.parse(localStorage.getItem("dreamjob_settings") ?? "{}");
         if (stored.aiProvider) provider = stored.aiProvider;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       const res = await fetch("/api/ai/chat", {
         method: "POST",
@@ -198,6 +237,9 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
         role: "assistant",
         content: data.message,
         timestamp: new Date().toISOString(),
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+        actions: Array.isArray(data.actions) ? data.actions : [],
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
@@ -208,15 +250,23 @@ export function AiChatPanel({ workflowId, surface = "document", onClose, classNa
   };
 
   return (
-    <div className={cn("flex flex-col bg-slate-50 border-l border-slate-200", className)}>
+    <div
+      className={cn(
+        "flex flex-col bg-slate-50 border-l border-slate-200",
+        expanded && "lg:fixed lg:inset-y-0 lg:right-0 lg:z-50 lg:w-[min(720px,88vw)] lg:shadow-2xl",
+        className
+      )}
+    >
       <SharedChatShell
         messages={messages.map(toThreadTurn)}
         isTyping={isTyping}
         onSend={sendMessage}
         onSuggestion={sendMessage}
         onClose={onClose}
+        onToggleExpand={() => setExpanded((value) => !value)}
+        expanded={expanded}
         headerTitle="AI Assistant"
-        headerSubtitle={loadingThread ? "Loading thread…" : (requestError ?? surfaceCopy?.subtitle ?? "Ready to help")}
+        headerSubtitle={loadingThread ? "Loading thread…" : (requestError ?? `${surfaceCopy?.subtitle ?? "Workflow assistant"} · ${stageConfig.stage.toUpperCase()}`)}
         placeholder={surfaceCopy?.placeholder ?? stageConfig.placeholder}
         emptyStateText={surfaceCopy?.empty ?? stageConfig.emptyStateText}
         className="h-full border-0 rounded-none"
