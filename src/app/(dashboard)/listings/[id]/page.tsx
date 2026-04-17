@@ -2,7 +2,7 @@
 
 // ── Listing Review — Verify parsed data, check match score, find connections, then decide to apply ──
 
-import { useState, useEffect, use, useCallback } from "react";
+import { useState, useEffect, use, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { Workflow } from "@/lib/types";
 import { parseRequirements, computeRequirementMatch } from "@/lib/listing-match";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
+import { normalizeCanonicalListing } from "@/lib/ai/context/canonical-listing";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -91,6 +92,7 @@ export default function ListingReviewPage({ params }: Props) {
       if (wf?.id) {
         setWorkflow(wf);
         const l = wf.listing ?? {};
+        const canonical = normalizeCanonicalListing(l);
         setTitle(l.title ?? wf.title ?? "");
         setCompanyName(l.company_name ?? wf.company?.name ?? "");
         setLocation(l.location ?? "");
@@ -100,7 +102,11 @@ export default function ListingReviewPage({ params }: Props) {
         // Prefer the listing row (always linked), fall back to company join
         setCompanyWebsite(wf.listing?.company_website_url ?? wf.company?.website_url ?? "");
         setDescription(l.description ?? "");
-        setReqs(parseRequirements(l.requirements));
+        const canonicalReqs = canonical.exact_requirements
+          .filter((item) => item.user_facing_relevance !== "suppress")
+          .sort((a, b) => b.priority_weight - a.priority_weight)
+          .map((item) => item.text);
+        setReqs(canonicalReqs.length > 0 ? canonicalReqs : parseRequirements(l.requirements));
         setAdditionalDetails(l.responsibilities ?? "");
         setLinkedInUrl(wf.company?.linkedin_url ?? "");
       }
@@ -123,6 +129,7 @@ export default function ListingReviewPage({ params }: Props) {
   }, [id]);
 
   const mark = () => setDirty(true);
+  const canonicalListing = useMemo(() => normalizeCanonicalListing(workflow?.listing), [workflow?.listing]);
 
   const addToProfile = async (category: ProfileCategory, term: string) => {
     if (!term.trim()) return;
@@ -306,6 +313,42 @@ export default function ListingReviewPage({ params }: Props) {
 
       <div className="grid gap-5">
         <div className="space-y-5">
+          <div className="card-base p-5">
+            <h2 className="font-semibold text-slate-900 mb-2">Opportunity Intelligence</h2>
+            <p className="text-xs text-slate-500 mb-3">Derived from canonical listing + job context hierarchy.</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Job context</p>
+                <p className="text-xs text-slate-700 mt-1">
+                  {[canonicalListing.job_context?.industry, canonicalListing.job_context?.offering_detail ?? canonicalListing.job_context?.offering_type, canonicalListing.job_context?.department, canonicalListing.job_context?.team, canonicalListing.job_context?.title_role ?? title]
+                    .filter(Boolean)
+                    .join(" → ") || "Context still being inferred."}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Compensation summary</p>
+                <p className="text-xs text-slate-700 mt-1">{canonicalListing.opportunity_review?.compensation_summary ?? canonicalListing.compensation ?? "Not clearly listed."}</p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 mb-1">What matters most</p>
+                <ul className="space-y-1 text-xs text-slate-700">
+                  {(canonicalListing.opportunity_review?.what_matters_most ?? []).slice(0, 4).map((item, idx) => <li key={`${item}-${idx}`}>• {item}</li>)}
+                </ul>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 mb-1">Top proof needed</p>
+                <ul className="space-y-1 text-xs text-slate-700">
+                  {(canonicalListing.opportunity_review?.top_resume_proof_needed ?? []).slice(0, 4).map((item, idx) => <li key={`${item}-${idx}`}>• {item}</li>)}
+                </ul>
+                <p className="mt-2 text-[10px] text-slate-500">
+                  {(canonicalListing.opportunity_review?.suppressed_requirements.length ?? 0)} suppressed low-value requirement(s) hidden from actioning.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <section className="space-y-1">
             <h2 className="text-sm font-semibold text-slate-800">Core listing details</h2>
             <p className="text-xs text-slate-500">Confirm foundational role and company context before moving forward.</p>

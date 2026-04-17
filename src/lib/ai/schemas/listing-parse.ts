@@ -3,6 +3,46 @@ import { z } from 'zod'
 export type ParseConfidence = 'high' | 'medium' | 'low'
 export type RequirementPriority = 'essential' | 'important' | 'secondary' | 'suppressible'
 export type RequirementSurfaceDecision = 'show' | 'suppress'
+export type RequirementDownstreamUse = 'resume' | 'cover_letter' | 'interview' | 'negotiation'
+
+export interface ParsedListingJobContext {
+  industry: string | null
+  offering_type: string | null
+  offering_detail: string | null
+  department: string | null
+  team: string | null
+  title_role: string | null
+  job_family: string | null
+  buyer_or_user_context: string | null
+  operating_motion: string | null
+  context_confidence: ParseConfidence
+}
+
+export interface ParsedListingContentBuckets {
+  role_summary: string[]
+  responsibilities: string[]
+  exact_requirements: string[]
+  nice_to_haves: string[]
+  compensation: string[]
+  location_work_mode: string[]
+  benefits: string[]
+  company_context: string[]
+  values_culture: string[]
+  hiring_logistics: string[]
+}
+
+export interface ParsedListingOpportunityReview {
+  compensation_summary: string | null
+  top_requirements_ranked: Array<{ requirement_id: string; requirement_text: string; priority_weight: number }>
+  top_resume_proof_needed: string[]
+  top_cover_letter_angles: string[]
+  top_risks_or_gaps: string[]
+  suppressed_requirements: Array<{ requirement_id: string; requirement_text: string; suppression_reason: string | null }>
+  who_this_role_is_really_for: string | null
+  what_matters_most: string[]
+  recommended_resume_emphasis: string[]
+  recommended_cover_letter_emphasis: string[]
+}
 
 export interface ParsedListingRequirement {
   id: string
@@ -15,6 +55,7 @@ export interface ParsedListingRequirement {
   user_facing_relevance: RequirementSurfaceDecision
   suppression_reason: string | null
   numeric_signal: string | null
+  downstream_use: RequirementDownstreamUse[]
   confidence: ParseConfidence
   source: 'llm' | 'heuristic' | 'user'
 }
@@ -54,6 +95,9 @@ export interface ParsedListingResult {
   parse_trace?: Record<string, unknown>
   evidence_map: ParsedListingEvidenceMapItem[]
   compensation_details?: ParsedListingCompensationDetails
+  job_context?: ParsedListingJobContext
+  content_buckets?: ParsedListingContentBuckets
+  opportunity_review?: ParsedListingOpportunityReview
 }
 
 export interface CanonicalListingFromParse {
@@ -73,6 +117,9 @@ export interface CanonicalListingFromParse {
   }
   evidence_map: ParsedListingEvidenceMapItem[]
   compensation_details?: ParsedListingCompensationDetails
+  job_context?: ParsedListingJobContext
+  content_buckets?: ParsedListingContentBuckets
+  opportunity_review?: ParsedListingOpportunityReview
 }
 
 export interface ParsedListingEvidenceMapItem {
@@ -88,6 +135,7 @@ export interface ParsedListingEvidenceMapItem {
 const parseConfidenceSchema = z.enum(['high', 'medium', 'low'])
 const requirementPrioritySchema = z.enum(['essential', 'important', 'secondary', 'suppressible'])
 const requirementSurfaceDecisionSchema = z.enum(['show', 'suppress'])
+const requirementDownstreamUseSchema = z.enum(['resume', 'cover_letter', 'interview', 'negotiation'])
 
 const parsedRequirementSchema = z.object({
   id: z.string().trim().optional(),
@@ -100,8 +148,60 @@ const parsedRequirementSchema = z.object({
   user_facing_relevance: requirementSurfaceDecisionSchema.default('show'),
   suppression_reason: z.string().trim().min(1).nullable().optional(),
   numeric_signal: z.string().trim().min(1).nullable().optional(),
+  downstream_use: z.array(requirementDownstreamUseSchema).default(['resume', 'interview']),
   confidence: parseConfidenceSchema.default('medium'),
   source: z.enum(['llm', 'heuristic', 'user']).default('llm'),
+})
+
+const parsedJobContextSchema = z.object({
+  industry: z.string().trim().min(1).nullable().optional(),
+  offering_type: z.string().trim().min(1).nullable().optional(),
+  offering_detail: z.string().trim().min(1).nullable().optional(),
+  department: z.string().trim().min(1).nullable().optional(),
+  team: z.string().trim().min(1).nullable().optional(),
+  title_role: z.string().trim().min(1).nullable().optional(),
+  job_family: z.string().trim().min(1).nullable().optional(),
+  buyer_or_user_context: z.string().trim().min(1).nullable().optional(),
+  operating_motion: z.string().trim().min(1).nullable().optional(),
+  context_confidence: parseConfidenceSchema.default('medium'),
+})
+
+const parsedContentBucketsSchema = z.object({
+  role_summary: z.array(z.string().trim().min(1)).default([]),
+  responsibilities: z.array(z.string().trim().min(1)).default([]),
+  exact_requirements: z.array(z.string().trim().min(1)).default([]),
+  nice_to_haves: z.array(z.string().trim().min(1)).default([]),
+  compensation: z.array(z.string().trim().min(1)).default([]),
+  location_work_mode: z.array(z.string().trim().min(1)).default([]),
+  benefits: z.array(z.string().trim().min(1)).default([]),
+  company_context: z.array(z.string().trim().min(1)).default([]),
+  values_culture: z.array(z.string().trim().min(1)).default([]),
+  hiring_logistics: z.array(z.string().trim().min(1)).default([]),
+})
+
+const parsedOpportunityReviewSchema = z.object({
+  compensation_summary: z.string().trim().min(1).nullable().optional(),
+  top_requirements_ranked: z.array(
+    z.object({
+      requirement_id: z.string().trim().min(1),
+      requirement_text: z.string().trim().min(1),
+      priority_weight: z.number().min(0).max(1),
+    })
+  ).default([]),
+  top_resume_proof_needed: z.array(z.string().trim().min(1)).default([]),
+  top_cover_letter_angles: z.array(z.string().trim().min(1)).default([]),
+  top_risks_or_gaps: z.array(z.string().trim().min(1)).default([]),
+  suppressed_requirements: z.array(
+    z.object({
+      requirement_id: z.string().trim().min(1),
+      requirement_text: z.string().trim().min(1),
+      suppression_reason: z.string().trim().min(1).nullable().optional(),
+    })
+  ).default([]),
+  who_this_role_is_really_for: z.string().trim().min(1).nullable().optional(),
+  what_matters_most: z.array(z.string().trim().min(1)).default([]),
+  recommended_resume_emphasis: z.array(z.string().trim().min(1)).default([]),
+  recommended_cover_letter_emphasis: z.array(z.string().trim().min(1)).default([]),
 })
 
 const parsedResponsibilitySchema = z.object({
@@ -149,6 +249,9 @@ export const parsedListingSchema = z.object({
   parse_trace: z.record(z.string(), z.unknown()).optional(),
   evidence_map: z.array(parsedEvidenceMapItemSchema).default([]),
   compensation_details: parsedCompensationDetailsSchema.optional(),
+  job_context: parsedJobContextSchema.optional(),
+  content_buckets: parsedContentBucketsSchema.optional(),
+  opportunity_review: parsedOpportunityReviewSchema.optional(),
 })
 
 function asString(value: unknown): string | null {
@@ -202,6 +305,7 @@ function normalizeLegacyRequirementList(value: unknown): ParsedListingRequiremen
         user_facing_relevance: 'show' as const,
         suppression_reason: null,
         numeric_signal: null,
+        downstream_use: ['resume', 'interview'],
         confidence: 'medium' as const,
         source: 'llm' as const,
       }))
@@ -219,6 +323,7 @@ function normalizeLegacyRequirementList(value: unknown): ParsedListingRequiremen
       user_facing_relevance: 'show',
       suppression_reason: null,
       numeric_signal: null,
+      downstream_use: ['resume', 'interview'],
       confidence: 'medium',
       source: 'llm',
     }))
@@ -330,6 +435,12 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
           user_facing_relevance: userFacingRelevance,
           suppression_reason: asString(item.suppression_reason),
           numeric_signal: asString(item.numeric_signal),
+          downstream_use: (() => {
+            const filtered: RequirementDownstreamUse[] = asArray<string>(item.downstream_use)
+              .filter((value): value is RequirementDownstreamUse => value === 'resume' || value === 'cover_letter' || value === 'interview' || value === 'negotiation')
+            const fallback: RequirementDownstreamUse[] = ['resume', 'interview']
+            return filtered.length > 0 ? filtered : fallback
+          })(),
           confidence: asConfidence(item.confidence),
           source: item.source === 'heuristic' ? 'heuristic' as const : item.source === 'user' ? 'user' as const : 'llm' as const,
         }
@@ -385,6 +496,66 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
         }
         : undefined
     ),
+    job_context: (
+      record.job_context && typeof record.job_context === 'object'
+        ? {
+          industry: asString((record.job_context as Record<string, unknown>).industry),
+          offering_type: asString((record.job_context as Record<string, unknown>).offering_type),
+          offering_detail: asString((record.job_context as Record<string, unknown>).offering_detail),
+          department: asString((record.job_context as Record<string, unknown>).department),
+          team: asString((record.job_context as Record<string, unknown>).team),
+          title_role: asString((record.job_context as Record<string, unknown>).title_role),
+          job_family: asString((record.job_context as Record<string, unknown>).job_family),
+          buyer_or_user_context: asString((record.job_context as Record<string, unknown>).buyer_or_user_context),
+          operating_motion: asString((record.job_context as Record<string, unknown>).operating_motion),
+          context_confidence: asConfidence((record.job_context as Record<string, unknown>).context_confidence),
+        }
+        : undefined
+    ),
+    content_buckets: (
+      record.content_buckets && typeof record.content_buckets === 'object'
+        ? {
+          role_summary: asArray<string>((record.content_buckets as Record<string, unknown>).role_summary).filter(Boolean),
+          responsibilities: asArray<string>((record.content_buckets as Record<string, unknown>).responsibilities).filter(Boolean),
+          exact_requirements: asArray<string>((record.content_buckets as Record<string, unknown>).exact_requirements).filter(Boolean),
+          nice_to_haves: asArray<string>((record.content_buckets as Record<string, unknown>).nice_to_haves).filter(Boolean),
+          compensation: asArray<string>((record.content_buckets as Record<string, unknown>).compensation).filter(Boolean),
+          location_work_mode: asArray<string>((record.content_buckets as Record<string, unknown>).location_work_mode).filter(Boolean),
+          benefits: asArray<string>((record.content_buckets as Record<string, unknown>).benefits).filter(Boolean),
+          company_context: asArray<string>((record.content_buckets as Record<string, unknown>).company_context).filter(Boolean),
+          values_culture: asArray<string>((record.content_buckets as Record<string, unknown>).values_culture).filter(Boolean),
+          hiring_logistics: asArray<string>((record.content_buckets as Record<string, unknown>).hiring_logistics).filter(Boolean),
+        }
+        : undefined
+    ),
+    opportunity_review: (
+      record.opportunity_review && typeof record.opportunity_review === 'object'
+        ? {
+          compensation_summary: asString((record.opportunity_review as Record<string, unknown>).compensation_summary),
+          top_requirements_ranked: asArray<Record<string, unknown>>((record.opportunity_review as Record<string, unknown>).top_requirements_ranked)
+            .map((item) => ({
+              requirement_id: asString(item.requirement_id) ?? '',
+              requirement_text: asString(item.requirement_text) ?? '',
+              priority_weight: typeof item.priority_weight === 'number' && Number.isFinite(item.priority_weight) ? Math.max(0, Math.min(1, item.priority_weight)) : 0.7,
+            }))
+            .filter((item) => Boolean(item.requirement_id && item.requirement_text)),
+          top_resume_proof_needed: asArray<string>((record.opportunity_review as Record<string, unknown>).top_resume_proof_needed).filter(Boolean),
+          top_cover_letter_angles: asArray<string>((record.opportunity_review as Record<string, unknown>).top_cover_letter_angles).filter(Boolean),
+          top_risks_or_gaps: asArray<string>((record.opportunity_review as Record<string, unknown>).top_risks_or_gaps).filter(Boolean),
+          suppressed_requirements: asArray<Record<string, unknown>>((record.opportunity_review as Record<string, unknown>).suppressed_requirements)
+            .map((item) => ({
+              requirement_id: asString(item.requirement_id) ?? '',
+              requirement_text: asString(item.requirement_text) ?? '',
+              suppression_reason: asString(item.suppression_reason),
+            }))
+            .filter((item) => Boolean(item.requirement_id && item.requirement_text)),
+          who_this_role_is_really_for: asString((record.opportunity_review as Record<string, unknown>).who_this_role_is_really_for),
+          what_matters_most: asArray<string>((record.opportunity_review as Record<string, unknown>).what_matters_most).filter(Boolean),
+          recommended_resume_emphasis: asArray<string>((record.opportunity_review as Record<string, unknown>).recommended_resume_emphasis).filter(Boolean),
+          recommended_cover_letter_emphasis: asArray<string>((record.opportunity_review as Record<string, unknown>).recommended_cover_letter_emphasis).filter(Boolean),
+        }
+        : undefined
+    ),
   }
 
   const schemaResult = parsedListingSchema.safeParse(normalized)
@@ -415,5 +586,8 @@ export function toCanonicalListingFromParse(parsed: ParsedListingResult): Canoni
     },
     evidence_map: parsed.evidence_map ?? [],
     compensation_details: parsed.compensation_details,
+    job_context: parsed.job_context,
+    content_buckets: parsed.content_buckets,
+    opportunity_review: parsed.opportunity_review,
   }
 }

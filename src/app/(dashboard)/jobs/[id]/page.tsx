@@ -111,12 +111,25 @@ export default function WorkHistoryPage({ params }: Props) {
   );
 
   const requirementItems = useMemo(
-    () => canonicalListing.exact_requirements.filter((item) => item.user_facing_relevance !== "suppress"),
-    [canonicalListing.exact_requirements],
+    () => {
+      const rankedIds = canonicalListing.opportunity_review?.top_requirements_ranked.map((item) => item.requirement_id) ?? [];
+      const rank = new Map(rankedIds.map((id, index) => [id, index]));
+      return canonicalListing.exact_requirements
+        .filter((item) => item.user_facing_relevance !== "suppress")
+        .sort((a, b) => {
+          const aRank = rank.get(a.id) ?? 999;
+          const bRank = rank.get(b.id) ?? 999;
+          if (aRank !== bRank) return aRank - bRank;
+          return b.priority_weight - a.priority_weight;
+        });
+    },
+    [canonicalListing.exact_requirements, canonicalListing.opportunity_review?.top_requirements_ranked],
   );
 
   const niceToHaveItems = useMemo(
-    () => canonicalListing.nice_to_haves.filter((item) => item.user_facing_relevance !== "suppress"),
+    () => canonicalListing.nice_to_haves
+      .filter((item) => item.user_facing_relevance !== "suppress")
+      .sort((a, b) => b.priority_weight - a.priority_weight),
     [canonicalListing.nice_to_haves],
   );
 

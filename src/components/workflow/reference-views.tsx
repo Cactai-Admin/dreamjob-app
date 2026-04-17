@@ -28,8 +28,16 @@ export function ListingReferenceView({ workflow }: { workflow: Workflow | null }
     ...canonical.exact_requirements,
     ...canonical.nice_to_haves,
   ];
-  const visibleRequirements = requirements.filter((item) => item.user_facing_relevance !== "suppress");
-  const suppressedRequirements = requirements.filter((item) => item.user_facing_relevance === "suppress");
+  const rankedRequirementIds = canonical.opportunity_review?.top_requirements_ranked.map((item) => item.requirement_id) ?? [];
+  const requirementOrder = new Map(rankedRequirementIds.map((id, index) => [id, index]));
+  const rankedRequirements = [...requirements].sort((a, b) => {
+    const aRank = requirementOrder.get(a.id) ?? 999;
+    const bRank = requirementOrder.get(b.id) ?? 999;
+    if (aRank !== bRank) return aRank - bRank;
+    return b.priority_weight - a.priority_weight;
+  });
+  const visibleRequirements = rankedRequirements.filter((item) => item.user_facing_relevance !== "suppress");
+  const suppressedRequirements = rankedRequirements.filter((item) => item.user_facing_relevance === "suppress");
   const responsibilities = parseResponsibilities(listing?.responsibilities);
 
   return (
@@ -50,6 +58,34 @@ export function ListingReferenceView({ workflow }: { workflow: Workflow | null }
           <p className="text-xs text-slate-700 whitespace-pre-wrap">{listing.description}</p>
         </div>
       ) : null}
+
+      <div className="rounded-md border border-slate-200 bg-white p-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Opportunity review</p>
+        {canonical.opportunity_review?.compensation_summary ? (
+          <p className="text-[11px] text-slate-600">Compensation: {canonical.opportunity_review.compensation_summary}</p>
+        ) : null}
+        {canonical.opportunity_review?.what_matters_most?.length ? (
+          <ul className="mt-1 space-y-1">
+            {canonical.opportunity_review.what_matters_most.slice(0, 3).map((item, idx) => (
+              <li key={`${item}-${idx}`} className="text-[11px] text-slate-700">• {item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-slate-400">Opportunity review will populate after listing intelligence is available.</p>
+        )}
+        <p className="mt-2 text-[10px] text-slate-500">
+          {(canonical.opportunity_review?.suppressed_requirements.length ?? suppressedRequirements.length)} suppressed low-value requirement{(canonical.opportunity_review?.suppressed_requirements.length ?? suppressedRequirements.length) === 1 ? "" : "s"}.
+        </p>
+      </div>
+
+      <div className="rounded-md border border-slate-200 bg-white p-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Job context hierarchy</p>
+        <p className="text-[11px] text-slate-700">
+          {[canonical.job_context?.industry, canonical.job_context?.offering_detail ?? canonical.job_context?.offering_type, canonical.job_context?.department, canonical.job_context?.team, canonical.job_context?.title_role ?? canonical.title]
+            .filter(Boolean)
+            .join(" → ") || "Not enough context signals yet."}
+        </p>
+      </div>
 
       <div className="rounded-md border border-slate-200 bg-white p-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Requirements</p>
