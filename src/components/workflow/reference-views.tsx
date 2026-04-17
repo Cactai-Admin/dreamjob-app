@@ -1,7 +1,7 @@
 "use client";
 
-import { parseRequirements } from "@/lib/listing-match";
 import type { Workflow } from "@/lib/types";
+import { normalizeCanonicalListing } from "@/lib/ai/context/canonical-listing";
 
 export interface EvidenceReferenceItem {
   key: string;
@@ -23,7 +23,11 @@ export function parseResponsibilities(raw: string | null | undefined): string[] 
 
 export function ListingReferenceView({ workflow }: { workflow: Workflow | null }) {
   const listing = workflow?.listing;
-  const requirements = parseRequirements(listing?.requirements);
+  const canonical = normalizeCanonicalListing(listing);
+  const requirements = [
+    ...canonical.exact_requirements.map((item) => item.text),
+    ...canonical.nice_to_haves.map((item) => item.text),
+  ];
   const responsibilities = parseResponsibilities(listing?.responsibilities);
 
   return (

@@ -10,7 +10,7 @@ import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
 import type { Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { parseRequirements } from "@/lib/listing-match";
+import { normalizeCanonicalListing, type CanonicalEvidenceMapItem } from "@/lib/ai/context/canonical-listing";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -26,26 +26,14 @@ interface EmploymentRecord {
 }
 
 type EvidenceMatch = EvidenceReferenceItem & {
+  requirementId: string;
+  listingKind: "requirement" | "nice_to_have";
   extractedEvidence: string;
   customEvidenceText: string;
   evidenceValue: string;
   missing: boolean;
+  placeholder: string;
 };
-
-function parseStructuredItems(raw: unknown): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) {
-    return raw
-      .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0 && entry.length <= 220);
-  }
-  if (typeof raw !== "string") return [];
-  return raw
-    .split(/\n|•|\*|;/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0 && entry.length <= 220);
-}
 
 function splitTerms(text: string): string[] {
   return text
@@ -67,15 +55,6 @@ function cleanEvidence(entry: string): string {
   if (!trimmed) return "";
   if (trimmed.length <= 180) return trimmed;
   return `${trimmed.slice(0, 177).trimEnd()}…`;
-}
-
-function deriveNiceToHaves(parsedData: unknown): string[] {
-  if (!parsedData || typeof parsedData !== "object") return [];
-  const parsed = parsedData as Record<string, unknown>;
-  const fromPreferred = parseStructuredItems(parsed.preferred_qualifications);
-  const fromNiceToHave = parseStructuredItems(parsed.nice_to_haves);
-  const fromNiceToHaves = parseStructuredItems(parsed.nice_to_have);
-  return [...new Set([...fromPreferred, ...fromNiceToHave, ...fromNiceToHaves])];
 }
 
 export default function WorkHistoryPage({ params }: Props) {
@@ -125,14 +104,19 @@ export default function WorkHistoryPage({ params }: Props) {
       .catch(() => setLoading(false));
   }, [id, router]);
 
-  const requirements = useMemo(
-    () => parseRequirements(workflow?.listing?.requirements),
-    [workflow?.listing?.requirements],
+  const canonicalListing = useMemo(
+    () => normalizeCanonicalListing(workflow?.listing),
+    [workflow?.listing],
   );
 
-  const niceToHaves = useMemo(
-    () => deriveNiceToHaves(workflow?.listing?.parsed_data),
-    [workflow?.listing?.parsed_data],
+  const requirementItems = useMemo(
+    () => canonicalListing.exact_requirements,
+    [canonicalListing.exact_requirements],
+  );
+
+  const niceToHaveItems = useMemo(
+    () => canonicalListing.nice_to_haves,
+    [canonicalListing.nice_to_haves],
   );
 
   const employmentEvidence = useMemo(() => {
@@ -151,17 +135,22 @@ export default function WorkHistoryPage({ params }: Props) {
 
   const evidenceMap = useMemo(() => {
     const listingItems = [
-      ...requirements.map((item) => ({ source: "Requirement", item })),
-      ...niceToHaves.map((item) => ({ source: "Nice to have", item })),
+      ...requirementItems.map((item) => ({ source: "Requirement", item })),
+      ...niceToHaveItems.map((item) => ({ source: "Nice to have", item })),
     ];
+    const evidenceByRequirement = new Map<string, CanonicalEvidenceMapItem>(
+      canonicalListing.evidence_map.map((item) => [item.requirement_id, item]),
+    );
 
     const mapped: EvidenceMatch[] = listingItems.map(({ source, item }) => {
-      const key = `${source}:${item}`;
-      const matchedProfileData = profileTerms.filter((term) => hasSharedSignal(item, term)).slice(0, 4);
-      const matchedWorkHistory = employmentEvidence.filter((entry) => hasSharedSignal(item, entry)).slice(0, 3);
+      const key = `${source}:${item.id}`;
+      const matchedProfileData = profileTerms.filter((term) => hasSharedSignal(item.text, term)).slice(0, 4);
+      const matchedWorkHistory = employmentEvidence.filter((entry) => hasSharedSignal(item.text, entry)).slice(0, 3);
       const customEvidenceText = (customEvidenceByItem[key] ?? "").trim();
+      const mappedEvidence = evidenceByRequirement.get(item.id);
       const extractedEvidence = cleanEvidence(
-        matchedWorkHistory[0]
+        mappedEvidence?.evidence
+          ?? matchedWorkHistory[0]
           ?? matchedProfileData[0]
           ?? ""
       );
@@ -170,7 +159,9 @@ export default function WorkHistoryPage({ params }: Props) {
       return {
         key,
         source,
-        item,
+        item: item.text,
+        requirementId: item.id,
+        listingKind: source === "Nice to have" ? "nice_to_have" : "requirement",
         matchedProfileData,
         matchedWorkHistory,
         customEvidence: customEvidenceText ? [customEvidenceText] : [],
@@ -178,11 +169,12 @@ export default function WorkHistoryPage({ params }: Props) {
         customEvidenceText,
         evidenceValue,
         missing: evidenceValue.length === 0,
+        placeholder: mappedEvidence?.placeholder ?? "Add concise evidence for this requirement",
       };
     });
 
     return mapped;
-  }, [requirements, niceToHaves, profileTerms, employmentEvidence, customEvidenceByItem]);
+  }, [requirementItems, niceToHaveItems, profileTerms, employmentEvidence, customEvidenceByItem, canonicalListing.evidence_map]);
 
   useEffect(() => {
     if (!workflow?.notes) return;
@@ -212,6 +204,8 @@ export default function WorkHistoryPage({ params }: Props) {
     setAlignmentSaved(false);
     const evidenceAlignment = evidenceMap.map((entry) => ({
       key: entry.key,
+      requirement_id: entry.requirementId,
+      listing_kind: entry.listingKind,
       source: entry.source,
       item: entry.item,
       matchedProfileData: entry.matchedProfileData,
@@ -297,13 +291,15 @@ export default function WorkHistoryPage({ params }: Props) {
                           {entry.evidenceValue}
                         </p>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setEditingEvidenceKey(entry.key)}
-                          className="mt-1 rounded-md border border-dashed border-slate-300 bg-white px-2 py-1 text-left text-xs text-slate-500 hover:border-sky-300 hover:text-sky-700"
-                        >
-                          Click to add evidence for this item
-                        </button>
+                        <input
+                          value={customEvidenceByItem[entry.key] ?? ""}
+                          onChange={(event) => {
+                            setCustomEvidenceByItem((prev) => ({ ...prev, [entry.key]: event.target.value }));
+                            setAlignmentSaved(false);
+                          }}
+                          className="mt-1 w-full rounded-md border border-dashed border-slate-300 bg-white px-2 py-1 text-xs"
+                          placeholder={entry.placeholder}
+                        />
                       )}
                     </div>
                     <div>
