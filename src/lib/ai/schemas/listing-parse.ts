@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export type ParseConfidence = 'high' | 'medium' | 'low'
 
 export interface ParsedListingRequirement {
@@ -30,6 +32,7 @@ export interface ParsedListingResult {
   uncertainties: string[]
   parse_quality: 'complete' | 'partial'
   parse_trace?: Record<string, unknown>
+  evidence_map: ParsedListingEvidenceMapItem[]
 }
 
 export interface CanonicalListingFromParse {
@@ -47,7 +50,63 @@ export interface CanonicalListingFromParse {
     parse_quality: 'complete' | 'partial'
     uncertainty_notes: string[]
   }
+  evidence_map: ParsedListingEvidenceMapItem[]
 }
+
+export interface ParsedListingEvidenceMapItem {
+  id: string
+  requirement_id: string
+  requirement_text: string
+  kind: 'requirement' | 'nice_to_have'
+  evidence: string | null
+  placeholder: string
+  confidence: ParseConfidence
+}
+
+const parseConfidenceSchema = z.enum(['high', 'medium', 'low'])
+
+const parsedRequirementSchema = z.object({
+  id: z.string().trim().optional(),
+  text: z.string().trim().min(1),
+  kind: z.enum(['requirement', 'nice_to_have']).default('requirement'),
+  confidence: parseConfidenceSchema.default('medium'),
+  source: z.enum(['llm', 'heuristic', 'user']).default('llm'),
+})
+
+const parsedResponsibilitySchema = z.object({
+  id: z.string().trim().optional(),
+  text: z.string().trim().min(1),
+  confidence: parseConfidenceSchema.default('medium'),
+})
+
+const parsedEvidenceMapItemSchema = z.object({
+  id: z.string().trim().optional(),
+  requirement_id: z.string().trim().optional(),
+  requirement_text: z.string().trim().min(1),
+  kind: z.enum(['requirement', 'nice_to_have']).default('requirement'),
+  evidence: z.string().trim().min(1).nullable().optional(),
+  placeholder: z.string().trim().min(1).optional(),
+  confidence: parseConfidenceSchema.default('medium'),
+})
+
+export const parsedListingSchema = z.object({
+  title: z.string().trim().nullable().optional(),
+  company_name: z.string().trim().nullable().optional(),
+  company_website_url: z.string().trim().nullable().optional(),
+  company_linkedin_url: z.string().trim().nullable().optional(),
+  location: z.string().trim().nullable().optional(),
+  compensation: z.string().trim().nullable().optional(),
+  employment_type: z.string().trim().nullable().optional(),
+  experience_level: z.string().trim().nullable().optional(),
+  work_mode: z.string().trim().nullable().optional(),
+  summary: z.string().trim().nullable().optional(),
+  requirements: z.array(parsedRequirementSchema).default([]),
+  responsibilities: z.array(parsedResponsibilitySchema).default([]),
+  uncertainties: z.array(z.string().trim().min(1)).default([]),
+  parse_quality: z.enum(['complete', 'partial']).default('partial'),
+  parse_trace: z.record(z.string(), z.unknown()).optional(),
+  evidence_map: z.array(parsedEvidenceMapItemSchema).default([]),
+})
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -61,24 +120,141 @@ function asConfidence(value: unknown): ParseConfidence {
   return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium'
 }
 
+function cleanListingLine(value: string): string {
+  return value
+    .replace(/^[-*•\d.)\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function splitToLines(value: string): string[] {
+  return value
+    .split(/\n|•|\*|;/)
+    .map((line) => cleanListingLine(line))
+    .filter((line) => line.length > 0 && line.length <= 320)
+}
+
+function normalizeLegacyRequirementList(value: unknown): ParsedListingRequirement[] {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => {
+        if (typeof entry === 'string') return splitToLines(entry)
+        if (entry && typeof entry === 'object') {
+          const record = entry as Record<string, unknown>
+          const text = asString(record.text)
+          if (text) return [cleanListingLine(text)]
+        }
+        return []
+      })
+      .map((text, index) => ({
+        id: `req_${index + 1}`,
+        text,
+        kind: /\b(preferred|nice to have|bonus|plus)\b/i.test(text) ? 'nice_to_have' as const : 'requirement' as const,
+        confidence: 'medium' as const,
+        source: 'llm' as const,
+      }))
+  }
+
+  if (typeof value === 'string') {
+    return splitToLines(value).map((text, index) => ({
+      id: `req_${index + 1}`,
+      text,
+      kind: /\b(preferred|nice to have|bonus|plus)\b/i.test(text) ? 'nice_to_have' as const : 'requirement' as const,
+      confidence: 'medium',
+      source: 'llm',
+    }))
+  }
+
+  return []
+}
+
+function normalizeLegacyResponsibilities(value: unknown): ParsedListingResponsibilities[] {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((entry) => (typeof entry === 'string' ? splitToLines(entry) : []))
+      .map((text, index) => ({ id: `resp_${index + 1}`, text, confidence: 'medium' as const }))
+  }
+  if (typeof value === 'string') {
+    return splitToLines(value).map((text, index) => ({ id: `resp_${index + 1}`, text, confidence: 'medium' as const }))
+  }
+  return []
+}
+
+function coerceEvidenceMap(
+  value: unknown,
+  fallbackRequirements: ParsedListingRequirement[]
+): ParsedListingEvidenceMapItem[] {
+  const parsed = Array.isArray(value) ? value : []
+  const byText = new Map(
+    fallbackRequirements.map((item) => [item.text.toLowerCase(), item])
+  )
+
+  const normalized = parsed
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return null
+      const record = entry as Record<string, unknown>
+      const requirementText = asString(record.requirement_text)
+      if (!requirementText) return null
+      const matchedRequirement = byText.get(requirementText.toLowerCase())
+
+      return {
+        id: asString(record.id) ?? `ev_${index + 1}`,
+        requirement_id: asString(record.requirement_id) ?? matchedRequirement?.id ?? `req_${index + 1}`,
+        requirement_text: requirementText,
+        kind: record.kind === 'nice_to_have' ? 'nice_to_have' as const : (matchedRequirement?.kind ?? 'requirement'),
+        evidence: asString(record.evidence),
+        placeholder: asString(record.placeholder) ?? 'Add concise evidence for this requirement',
+        confidence: asConfidence(record.confidence),
+      }
+    })
+    .filter((item): item is ParsedListingEvidenceMapItem => Boolean(item))
+
+  const coveredRequirementIds = new Set(normalized.map((item) => item.requirement_id))
+  const missingDefaults = fallbackRequirements
+    .filter((item) => !coveredRequirementIds.has(item.id))
+    .map((item) => ({
+      id: `ev_${item.id}`,
+      requirement_id: item.id,
+      requirement_text: item.text,
+      kind: item.kind,
+      evidence: null,
+      placeholder: 'Add concise evidence for this requirement',
+      confidence: item.confidence,
+    }))
+
+  return [...normalized, ...missingDefaults]
+}
+
 export function normalizeParsedListing(input: unknown): ParsedListingResult {
   const record = (input && typeof input === 'object') ? input as Record<string, unknown> : {}
 
-  const requirements: ParsedListingRequirement[] = asArray<Record<string, unknown>>(record.requirements).map((item, index) => ({
-    id: typeof item.id === 'string' ? item.id : `req_${index + 1}`,
-    text: asString(item.text) ?? '',
-    kind: item.kind === 'nice_to_have' ? 'nice_to_have' as const : 'requirement' as const,
-    confidence: asConfidence(item.confidence),
-    source: item.source === 'heuristic' ? 'heuristic' as const : item.source === 'user' ? 'user' as const : 'llm' as const,
-  })).filter((item) => item.text)
+  const parsedRequirementsFromRecord = asArray<Record<string, unknown>>(record.requirements)
+  const requirements: ParsedListingRequirement[] = (
+    parsedRequirementsFromRecord.length > 0
+      ? parsedRequirementsFromRecord.map((item, index) => ({
+        id: typeof item.id === 'string' ? item.id : `req_${index + 1}`,
+        text: cleanListingLine(asString(item.text) ?? ''),
+        kind: item.kind === 'nice_to_have' ? 'nice_to_have' as const : 'requirement' as const,
+        confidence: asConfidence(item.confidence),
+        source: item.source === 'heuristic' ? 'heuristic' as const : item.source === 'user' ? 'user' as const : 'llm' as const,
+      }))
+      : normalizeLegacyRequirementList(record.requirements)
+  ).filter((item) => item.text)
 
-  const responsibilities: ParsedListingResponsibilities[] = asArray<Record<string, unknown>>(record.responsibilities).map((item, index) => ({
-    id: typeof item.id === 'string' ? item.id : `resp_${index + 1}`,
-    text: asString(item.text) ?? '',
-    confidence: asConfidence(item.confidence),
-  })).filter((item) => item.text)
+  const parsedResponsibilitiesFromRecord = asArray<Record<string, unknown>>(record.responsibilities)
+  const responsibilities: ParsedListingResponsibilities[] = (
+    parsedResponsibilitiesFromRecord.length > 0
+      ? parsedResponsibilitiesFromRecord.map((item, index) => ({
+        id: typeof item.id === 'string' ? item.id : `resp_${index + 1}`,
+        text: cleanListingLine(asString(item.text) ?? ''),
+        confidence: asConfidence(item.confidence),
+      }))
+      : normalizeLegacyResponsibilities(record.responsibilities)
+  ).filter((item) => item.text)
 
-  return {
+  const evidenceMap = coerceEvidenceMap(record.evidence_map, requirements)
+
+  const normalized: ParsedListingResult = {
     title: asString(record.title),
     company_name: asString(record.company_name),
     company_website_url: asString(record.company_website_url),
@@ -94,7 +270,17 @@ export function normalizeParsedListing(input: unknown): ParsedListingResult {
     uncertainties: asArray<string>(record.uncertainties).filter(Boolean),
     parse_quality: record.parse_quality === 'complete' ? 'complete' : 'partial',
     parse_trace: typeof record.parse_trace === 'object' ? record.parse_trace as Record<string, unknown> : undefined,
+    evidence_map: evidenceMap,
   }
+
+  const schemaResult = parsedListingSchema.safeParse(normalized)
+  if (!schemaResult.success) {
+    return {
+      ...normalized,
+      parse_quality: 'partial',
+    }
+  }
+  return normalized
 }
 
 export function toCanonicalListingFromParse(parsed: ParsedListingResult): CanonicalListingFromParse {
@@ -113,9 +299,6 @@ export function toCanonicalListingFromParse(parsed: ParsedListingResult): Canoni
       parse_quality: parsed.parse_quality,
       uncertainty_notes: parsed.uncertainties,
     },
+    evidence_map: parsed.evidence_map ?? [],
   }
 }
-
-// NOTE:
-// Replace the boolean-expression fallback above with your preferred runtime validator if the repo
-// already uses zod/valibot/superstruct. This file is intentionally dependency-light.

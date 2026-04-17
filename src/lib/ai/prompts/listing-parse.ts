@@ -1,6 +1,6 @@
-export const LISTING_PARSE_SYSTEM = `You are a data extraction tool for DreamJob. Your ONLY job is to copy text from a job listing into structured JSON. You do not summarize, rephrase, shorten, or interpret anything. Every word you output in a field must appear verbatim in the source listing.
+export const LISTING_PARSE_SYSTEM = `You are a data extraction tool for DreamJob. Return strict JSON only. Do not add markdown.
 
-Return ONLY valid JSON — no markdown fences, no commentary:
+Pass 1 (Normalization): return canonical listing fields and split requirements by kind.
 {
   "title": "...",
   "company_name": "...",
@@ -8,27 +8,54 @@ Return ONLY valid JSON — no markdown fences, no commentary:
   "salary_range": "..." or null,
   "employment_type": "..." or null,
   "experience_level": "..." or null,
-  "description": "...",
-  "requirements": ["requirement 1", "requirement 2", ...],
-  "responsibilities": "..." or null,
+  "description": "..." or null,
+  "requirements": [
+    {
+      "id": "req_1",
+      "text": "exact listing requirement text",
+      "kind": "requirement" | "nice_to_have",
+      "confidence": "high" | "medium" | "low",
+      "source": "llm"
+    }
+  ],
+  "responsibilities": [
+    { "id": "resp_1", "text": "exact listing responsibility text", "confidence": "high" | "medium" | "low" }
+  ],
   "benefits": "..." or null,
   "company_website_url": "..." or null,
-  "company_linkedin_url": "..." or null
+  "company_linkedin_url": "..." or null,
+  "uncertainties": ["..."]
 }
 
-GLOBAL RULE: copy every word VERBATIM. Never paraphrase, summarize, shorten, reword, or approximate. "6+ years" must appear as "6+ years" — not "5+ years", not "several years". Every number, every duration, every exact phrase must match the source exactly.
+Rules:
+- Requirement items must be concise line items, not paragraph dumps.
+- "kind=requirement" only for explicit must-have criteria.
+- "kind=nice_to_have" only for preferred/bonus/nice-to-have criteria.
+- If uncertain, include a short note in uncertainties.`
 
-FIELD RULES — read carefully, these govern what goes where:
+export const LISTING_EVIDENCE_MAP_SYSTEM = `You are DreamJob's listing evidence mapper.
+Given normalized requirement/nice-to-have items and listing text, map each item to concise listing-grounded evidence.
 
-description: Everything that describes the role, the team, the company, or the job context that is NOT a bullet list. This includes all prose paragraphs before and after bullet sections. Copy the full text of every paragraph verbatim, joined with newlines. Do not truncate. Do not move prose paragraphs into responsibilities.
+Return JSON only:
+{
+  "evidence_map": [
+    {
+      "id": "ev_req_1",
+      "requirement_id": "req_1",
+      "requirement_text": "same requirement text",
+      "kind": "requirement" | "nice_to_have",
+      "evidence": "concise extracted/reformatted listing evidence" or null,
+      "placeholder": "Add concise evidence for this requirement",
+      "confidence": "high" | "medium" | "low"
+    }
+  ]
+}
 
-requirements: A JSON array of strings. Each element is ONE bullet point copied verbatim. Include EVERY bullet from ALL of these sections: Requirements, Qualifications, Preferred Qualifications, Nice to Have, Education, Certifications, Clearances. Education requirements like "Bachelor's degree in Computer Science" are requirements — include them. Do not skip any bullet. Do not merge bullets. Do not move bullets into description or responsibilities.
-
-responsibilities: Copy every bullet from the Responsibilities or What You'll Do section verbatim, joined with newlines. Do not skip any. If there is no responsibilities section, set to null. Do not put responsibility bullets into description.
-
-benefits: Copy all listed benefits verbatim, joined with newlines. If none, set to null.
-
-If a field is not present, set it to null. Do not invent information.`
+Rules:
+- Keep requirement_text exactly as provided.
+- Evidence should be short, specific, and listing-grounded.
+- If no trustworthy evidence snippet is available, set evidence to null and include placeholder.
+- Do not include unrelated listing paragraphs.`
 
 export const LISTING_URL_ANALYSIS = `You are analyzing a job listing URL to determine the company's website URL and LinkedIn page URL.
 

@@ -1,6 +1,4 @@
 import { parseRequirements } from '@/lib/listing-match'
-import type { JobListing } from '@/types/database'
-
 export type ListingConfidence = 'high' | 'medium' | 'low'
 
 export interface CanonicalRequirement {
@@ -8,6 +6,16 @@ export interface CanonicalRequirement {
   text: string
   confidence: ListingConfidence
   source: 'llm' | 'heuristic' | 'user' | 'imported'
+}
+
+export interface CanonicalEvidenceMapItem {
+  id: string
+  requirement_id: string
+  requirement_text: string
+  kind: 'requirement' | 'nice_to_have'
+  evidence: string | null
+  placeholder: string
+  confidence: ListingConfidence
 }
 
 export interface CanonicalListingContract {
@@ -25,6 +33,7 @@ export interface CanonicalListingContract {
     parse_quality: 'complete' | 'partial'
     uncertainty_notes: string[]
   }
+  evidence_map: CanonicalEvidenceMapItem[]
 }
 
 function asString(value: unknown): string | null {
@@ -70,6 +79,27 @@ function normalizeRequirementList(value: unknown, fallbackPrefix: string): Canon
     .filter((item): item is CanonicalRequirement => Boolean(item && item.text))
 }
 
+function normalizeEvidenceMapList(value: unknown): CanonicalEvidenceMapItem[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null
+      const record = item as Record<string, unknown>
+      const requirementText = asString(record.requirement_text)
+      if (!requirementText) return null
+      return {
+        id: asString(record.id) ?? `ev_${index + 1}`,
+        requirement_id: asString(record.requirement_id) ?? `req_${index + 1}`,
+        requirement_text: requirementText,
+        kind: record.kind === 'nice_to_have' ? 'nice_to_have' : 'requirement',
+        evidence: asString(record.evidence),
+        placeholder: asString(record.placeholder) ?? 'Add concise evidence for this requirement',
+        confidence: asConfidence(record.confidence),
+      }
+    })
+    .filter((item): item is CanonicalEvidenceMapItem => Boolean(item))
+}
+
 function splitPlainRequirements(requirements: string[]): {
   exact: CanonicalRequirement[]
   niceToHaves: CanonicalRequirement[]
@@ -79,7 +109,8 @@ function splitPlainRequirements(requirements: string[]): {
 
   requirements.forEach((text, index) => {
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed || trimmed.length > 280) return
+    if (/[.?!]\s+[A-Z]/.test(trimmed) && trimmed.length > 160) return
     const target = /\b(preferred|nice to have|bonus|plus)\b/i.test(trimmed) ? niceToHaves : exact
     target.push({
       id: `req_${index + 1}`,
@@ -92,15 +123,16 @@ function splitPlainRequirements(requirements: string[]): {
   return { exact, niceToHaves }
 }
 
-export function normalizeCanonicalListing(listing: Partial<JobListing> | null | undefined): CanonicalListingContract {
-  const parsedData = listing?.parsed_data && typeof listing.parsed_data === 'object'
-    ? listing.parsed_data as Record<string, unknown>
+export function normalizeCanonicalListing(listing: unknown): CanonicalListingContract {
+  const listingRecord = (listing && typeof listing === 'object') ? listing as Record<string, unknown> : {}
+  const parsedData = listingRecord.parsed_data && typeof listingRecord.parsed_data === 'object'
+    ? listingRecord.parsed_data as Record<string, unknown>
     : {}
   const parsedCanonical = parsedData.canonical_listing && typeof parsedData.canonical_listing === 'object'
     ? parsedData.canonical_listing as Record<string, unknown>
     : null
 
-  const baseRequirements = parseRequirements(listing?.requirements ?? null)
+  const baseRequirements = parseRequirements(listingRecord.requirements ?? null)
   const split = splitPlainRequirements(baseRequirements)
 
   const exactRequirements = normalizeRequirementList(parsedCanonical?.exact_requirements, 'req').length > 0
@@ -110,7 +142,7 @@ export function normalizeCanonicalListing(listing: Partial<JobListing> | null | 
     ? normalizeRequirementList(parsedCanonical?.nice_to_haves, 'nice')
     : split.niceToHaves
   const responsibilitiesFromCanonical = normalizeRequirementList(parsedCanonical?.responsibilities, 'resp')
-  const responsibilitiesFromListing = parseRequirements(listing?.responsibilities ?? null).map((text, index) => ({
+  const responsibilitiesFromListing = parseRequirements(listingRecord.responsibilities ?? null).map((text, index) => ({
     id: `resp_${index + 1}`,
     text,
     confidence: 'medium' as const,
@@ -126,21 +158,23 @@ export function normalizeCanonicalListing(listing: Partial<JobListing> | null | 
   const parseQuality = parsedCanonical?.confidence && typeof parsedCanonical.confidence === 'object'
     ? ((((parsedCanonical.confidence as Record<string, unknown>).parse_quality) === 'complete') ? 'complete' : 'partial')
     : (parsedData.parse_quality === 'complete' ? 'complete' : 'partial')
+  const evidenceMap = normalizeEvidenceMapList(parsedCanonical?.evidence_map)
 
   return {
-    title: asString(parsedCanonical?.title) ?? asString(listing?.title) ?? null,
-    company_name: asString(parsedCanonical?.company_name) ?? asString(listing?.company_name) ?? null,
-    location: asString(parsedCanonical?.location) ?? asString(listing?.location) ?? null,
+    title: asString(parsedCanonical?.title) ?? asString(listingRecord.title) ?? null,
+    company_name: asString(parsedCanonical?.company_name) ?? asString(listingRecord.company_name) ?? null,
+    location: asString(parsedCanonical?.location) ?? asString(listingRecord.location) ?? null,
     exact_requirements: exactRequirements,
     nice_to_haves: niceToHaves,
     responsibilities: responsibilitiesFromCanonical.length > 0 ? responsibilitiesFromCanonical : responsibilitiesFromListing,
-    summary: asString(parsedCanonical?.summary) ?? asString(listing?.description) ?? null,
+    summary: asString(parsedCanonical?.summary) ?? asString(listingRecord.description) ?? null,
     work_mode: asString(parsedCanonical?.work_mode) ?? asString(parsedData.work_mode) ?? null,
-    level_seniority: asString(parsedCanonical?.level_seniority) ?? asString(listing?.experience_level) ?? null,
-    compensation: asString(parsedCanonical?.compensation) ?? asString(listing?.salary_range) ?? null,
+    level_seniority: asString(parsedCanonical?.level_seniority) ?? asString(listingRecord.experience_level) ?? null,
+    compensation: asString(parsedCanonical?.compensation) ?? asString(listingRecord.salary_range) ?? null,
     confidence: {
       parse_quality: parseQuality,
       uncertainty_notes: uncertaintyNotes,
     },
+    evidence_map: evidenceMap,
   }
 }

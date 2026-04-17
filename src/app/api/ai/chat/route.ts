@@ -6,7 +6,7 @@ import { buildQAUserMessage } from '@/lib/ai/prompts/qa-guidance'
 import { getSurfaceSystemPrompt } from '@/lib/ai/prompts/surface-orchestration'
 import { getAdminClient } from '@/lib/supabase/admin'
 import type { StatusEvent } from '@/types/database'
-import { computeRequirementMatch, parseRequirements } from '@/lib/listing-match'
+import { computeRequirementMatch } from '@/lib/listing-match'
 import { normalizeCanonicalListing } from '@/lib/ai/context/canonical-listing'
 import { buildReusableFacts, buildRunFacts, detectFactConflicts } from '@/lib/ai/context/facts'
 import { buildSharedAIContextBundle } from '@/lib/ai/context/shared-context'
@@ -258,7 +258,11 @@ export async function POST(request: NextRequest) {
 
   const systemPrompt = `${getSurfaceSystemPrompt(surface, inApplicationSupport)}\n\n${STRUCTURED_OUTPUT_INSTRUCTIONS}`
 
-  const requirements = parseRequirements(workflow.listing.requirements)
+  const canonicalListing = normalizeCanonicalListing(workflow.listing)
+  const requirements = [
+    ...canonicalListing.exact_requirements.map((item) => item.text),
+    ...canonicalListing.nice_to_haves.map((item) => item.text),
+  ]
   const profileSkills = Array.isArray(profile?.skills) ? profile.skills : []
   const profileKeywords = Array.isArray(profile?.keywords) ? profile.keywords : []
   const profileTools = Array.isArray(profile?.tools) ? profile.tools : []
@@ -299,7 +303,7 @@ export async function POST(request: NextRequest) {
   const conflicts = detectFactConflicts([...runFacts, ...reusableMemoryFacts])
   const sharedContext = buildSharedAIContextBundle({
     workflow: { id: workflow.id, state: workflow.state, phase: workflowPhase },
-    listing: normalizeCanonicalListing(workflow.listing),
+    listing: canonicalListing,
     profile: (profile ?? null) as Record<string, unknown> | null,
     employment_work_history: (employment ?? []) as Record<string, unknown>[],
     accepted_run_facts: runFacts,
@@ -332,7 +336,7 @@ export async function POST(request: NextRequest) {
           employment_type: workflow.listing.employment_type,
           experience_level: workflow.listing.experience_level,
           description: workflow.listing.description,
-          requirements: workflow.listing.requirements,
+          requirements: requirements.join('\n'),
           responsibilities: workflow.listing.responsibilities,
           benefits: workflow.listing.benefits,
           company_website_url: workflow.listing.company_website_url ?? workflow.company?.website_url ?? null,
@@ -351,14 +355,8 @@ export async function POST(request: NextRequest) {
           tools_platforms: Array.isArray(workflow.listing.parsed_data?.tools_platforms)
             ? workflow.listing.parsed_data.tools_platforms.filter((value: unknown): value is string => typeof value === 'string')
             : [],
-          preferred_qualifications:
-            typeof workflow.listing.parsed_data?.preferred_qualifications === 'string'
-              ? workflow.listing.parsed_data.preferred_qualifications
-              : null,
-          parse_quality:
-            typeof workflow.listing.parsed_data?.parse_quality === 'string'
-              ? workflow.listing.parsed_data.parse_quality
-              : null,
+          preferred_qualifications: canonicalListing.nice_to_haves.map((item) => item.text).join('\n') || null,
+          parse_quality: canonicalListing.confidence.parse_quality,
         },
         qaAnswers: qaAnswers ?? [],
         reusableFacts: reusableFacts ?? [],
@@ -422,7 +420,7 @@ export async function POST(request: NextRequest) {
           run_fact_count: runFacts.length,
           reusable_fact_count: reusableMemoryFacts.length,
           conflict_count: conflicts.length,
-          parse_quality: normalizeCanonicalListing(workflow.listing).confidence.parse_quality,
+          parse_quality: canonicalListing.confidence.parse_quality,
         },
       },
     })

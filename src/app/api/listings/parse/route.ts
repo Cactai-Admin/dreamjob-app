@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getProvider, type ProviderName } from '@/lib/ai/provider'
-import { LISTING_PARSE_SYSTEM, LISTING_URL_ANALYSIS } from '@/lib/ai/prompts/listing-parse'
-import { normalizeParsedListing, toCanonicalListingFromParse } from '@/lib/ai/schemas/listing-parse'
+import { LISTING_EVIDENCE_MAP_SYSTEM, LISTING_PARSE_SYSTEM, LISTING_URL_ANALYSIS } from '@/lib/ai/prompts/listing-parse'
+import {
+  normalizeParsedListing,
+  parsedListingSchema,
+  toCanonicalListingFromParse,
+  type ParsedListingEvidenceMapItem,
+  type ParsedListingRequirement,
+} from '@/lib/ai/schemas/listing-parse'
 
 const EMPLOYMENT_TYPE_PATTERNS: Array<{ type: string; pattern: RegExp }> = [
   { type: 'internship', pattern: /\b(intern(ship)?|co-?op)\b/i },
@@ -30,11 +36,6 @@ const WORK_MODE_PATTERNS: Array<{ mode: string; pattern: RegExp }> = [
 ]
 
 const YEARS_EXPERIENCE_PATTERN = /\b(\d{1,2})(?:\s*-\s*(\d{1,2}))?\+?\s*(?:years?|yrs?)\b/i
-
-function normalizeJsonArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-}
 
 function normalizeEmploymentType(existing: unknown, sourceText: string): string | null {
   const existingValue = typeof existing === 'string' ? existing.trim() : ''
@@ -119,6 +120,49 @@ function sanitizeLinkedInCompanyUrl(url: string): string {
   const clean = url.match(/https?:\/\/(?:www\.)?linkedin\.com\/company\/[a-zA-Z0-9_%-]+/i)
   if (!clean) return url
   return clean[0]
+}
+
+function trimLine(value: string): string {
+  return value
+    .replace(/^[-*•\d.)\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function splitLines(value: string): string[] {
+  return value
+    .split(/\n|•|\*|;/)
+    .map((line) => trimLine(line))
+    .filter((line) => line.length > 0 && line.length <= 320)
+}
+
+function buildDeterministicEvidenceMap(
+  requirements: ParsedListingRequirement[],
+  signalText: string
+): ParsedListingEvidenceMapItem[] {
+  const candidateLines = splitLines(signalText)
+  const uniqueLines = [...new Set(candidateLines)]
+
+  return requirements.map((requirement) => {
+    const reqTerms = requirement.text.toLowerCase().split(/[^a-z0-9+#.]+/).filter((term) => term.length > 2)
+    const bestLine = uniqueLines
+      .map((line) => {
+        const lowered = line.toLowerCase()
+        const score = reqTerms.reduce((sum, term) => sum + (lowered.includes(term) ? 1 : 0), 0)
+        return { line, score }
+      })
+      .sort((a, b) => b.score - a.score)[0]
+    const evidence = bestLine && bestLine.score > 0 ? bestLine.line.slice(0, 220) : null
+    return {
+      id: `ev_${requirement.id}`,
+      requirement_id: requirement.id,
+      requirement_text: requirement.text,
+      kind: requirement.kind,
+      evidence,
+      placeholder: 'Add concise evidence for this requirement',
+      confidence: evidence ? 'medium' : requirement.confidence,
+    }
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -252,10 +296,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Parse with AI (+ one retry for invalid structured output)
+    // Pass 1: listing normalization with strict schema validation (+ retries)
     let parsed: Record<string, unknown> | null = null
     let parseAttempt = 0
-    while (!parsed && parseAttempt < 2) {
+    while (!parsed && parseAttempt < 3) {
       parseAttempt += 1
       const result = await provider.generate({
         messages: [
@@ -265,7 +309,7 @@ export async function POST(request: NextRequest) {
             content:
               parseAttempt === 1
                 ? `Parse this job listing content:\n\n${pageContent}`
-                : `Return valid JSON only. Re-parse this listing:\n\n${pageContent}`,
+                : `Return valid JSON only and follow the required schema exactly. Re-parse this listing:\n\n${pageContent}`,
           },
         ],
         temperature: 0.1,
@@ -274,7 +318,28 @@ export async function POST(request: NextRequest) {
       const jsonMatch = result.match(/\{[\s\S]*\}/)
       if (!jsonMatch) continue
       try {
-        parsed = JSON.parse(jsonMatch[0])
+        const candidate = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+        const normalizedCandidate = normalizeParsedListing({
+          title: candidate.title,
+          company_name: candidate.company_name,
+          company_website_url: candidate.company_website_url,
+          company_linkedin_url: candidate.company_linkedin_url,
+          location: candidate.location,
+          compensation: candidate.salary_range ?? candidate.compensation,
+          employment_type: candidate.employment_type,
+          experience_level: candidate.experience_level,
+          work_mode: candidate.work_mode,
+          summary: candidate.description ?? candidate.summary,
+          requirements: candidate.requirements,
+          responsibilities: candidate.responsibilities,
+          uncertainties: candidate.uncertainties,
+          parse_quality: candidate.parse_quality,
+          parse_trace: candidate.parse_trace,
+          evidence_map: candidate.evidence_map,
+        })
+
+        const validation = parsedListingSchema.safeParse(normalizedCandidate)
+        parsed = validation.success ? candidate : null
       } catch {
         parsed = null
       }
@@ -286,8 +351,34 @@ export async function POST(request: NextRequest) {
     const signalText = [
       typeof parsed.title === 'string' ? parsed.title : '',
       typeof parsed.description === 'string' ? parsed.description : '',
-      Array.isArray(parsed.requirements) ? parsed.requirements.join('\n') : typeof parsed.requirements === 'string' ? parsed.requirements : '',
-      typeof parsed.responsibilities === 'string' ? parsed.responsibilities : '',
+      Array.isArray(parsed.requirements)
+        ? parsed.requirements
+          .map((item) => {
+            if (typeof item === 'string') return item
+            if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).text === 'string') {
+              return (item as Record<string, unknown>).text as string
+            }
+            return ''
+          })
+          .filter(Boolean)
+          .join('\n')
+        : typeof parsed.requirements === 'string'
+          ? parsed.requirements
+          : '',
+      Array.isArray(parsed.responsibilities)
+        ? parsed.responsibilities
+          .map((item) => {
+            if (typeof item === 'string') return item
+            if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).text === 'string') {
+              return (item as Record<string, unknown>).text as string
+            }
+            return ''
+          })
+          .filter(Boolean)
+          .join('\n')
+        : typeof parsed.responsibilities === 'string'
+          ? parsed.responsibilities
+          : '',
       pageContent,
     ]
       .filter(Boolean)
@@ -309,39 +400,96 @@ export async function POST(request: NextRequest) {
     if (!parsed.company_website_url && listingDomainUrl) {
       parsed.company_website_url = listingDomainUrl
     }
-    if (!Array.isArray(parsed.requirements)) {
-      parsed.requirements = normalizeJsonArray(parsed.requirements)
-    }
-
-    const parsedRequirementsCount = Array.isArray(parsed.requirements)
-      ? parsed.requirements.length
-      : typeof parsed.requirements === 'string' && parsed.requirements.trim().length > 0
-        ? 1
-        : 0
-    const parseQuality: 'complete' | 'partial' =
-      Boolean(parsed.title) && Boolean(parsed.company_name) && (Boolean(parsed.description) || parsedRequirementsCount > 0)
-        ? 'complete'
-        : 'partial'
-
-    parsed.parse_quality = parseQuality
-    const normalizedParse = normalizeParsedListing({
+    const normalizedPassOne = normalizeParsedListing({
       title: parsed.title,
       company_name: parsed.company_name,
       company_website_url: parsed.company_website_url,
       company_linkedin_url: parsed.company_linkedin_url,
       location: parsed.location,
-      compensation: parsed.salary_range,
+      compensation: parsed.salary_range ?? parsed.compensation,
       employment_type: parsed.employment_type,
       experience_level: parsed.experience_level,
       work_mode: workMode,
-      summary: parsed.description,
+      summary: parsed.description ?? parsed.summary,
       requirements: parsed.requirements,
-      responsibilities: Array.isArray(parsed.responsibilities)
-        ? parsed.responsibilities
-        : normalizeJsonArray(parsed.responsibilities).map((text, index) => ({ id: `resp_${index + 1}`, text })),
+      responsibilities: parsed.responsibilities,
+      uncertainties: parsed.uncertainties,
+      parse_quality: parsed.parse_quality,
+      parse_trace: parsed.parse_trace,
+      evidence_map: parsed.evidence_map,
+    })
+
+    const parsedRequirementsCount = normalizedPassOne.requirements.length
+    const parseQuality: 'complete' | 'partial' =
+      Boolean(normalizedPassOne.title) && Boolean(normalizedPassOne.company_name) && (Boolean(normalizedPassOne.summary) || parsedRequirementsCount > 0)
+        ? 'complete'
+        : 'partial'
+
+    // Pass 2: map requirements to listing-grounded evidence strings (fallback: deterministic cleanup)
+    let evidenceMap = buildDeterministicEvidenceMap(normalizedPassOne.requirements, signalText)
+    let evidenceAttemptCount = 0
+    if (normalizedPassOne.requirements.length > 0) {
+      for (let evidenceAttempt = 1; evidenceAttempt <= 2; evidenceAttempt += 1) {
+        evidenceAttemptCount = evidenceAttempt
+        const evidenceRaw = await provider.generate({
+          messages: [
+            { role: 'system', content: LISTING_EVIDENCE_MAP_SYSTEM },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                listing_excerpt: pageContent.slice(0, 12000),
+                requirements: normalizedPassOne.requirements.map((item) => ({
+                  id: item.id,
+                  text: item.text,
+                  kind: item.kind,
+                })),
+              }),
+            },
+          ],
+          temperature: 0.1,
+        })
+        const evidenceJson = evidenceRaw.match(/\{[\s\S]*\}/)
+        if (!evidenceJson) continue
+        try {
+          const parsedEvidence = JSON.parse(evidenceJson[0]) as { evidence_map?: unknown[] }
+          const merged = normalizeParsedListing({
+            ...normalizedPassOne,
+            parse_quality: parseQuality,
+            evidence_map: parsedEvidence.evidence_map,
+          })
+          if (merged.evidence_map.length > 0) {
+            evidenceMap = merged.evidence_map
+            break
+          }
+        } catch {
+          // continue retry loop
+        }
+      }
+    }
+
+    const normalizedParse = normalizeParsedListing({
+      title: normalizedPassOne.title,
+      company_name: normalizedPassOne.company_name,
+      company_website_url: parsed.company_website_url,
+      company_linkedin_url: parsed.company_linkedin_url,
+      location: normalizedPassOne.location,
+      compensation: normalizedPassOne.compensation,
+      employment_type: normalizedPassOne.employment_type,
+      experience_level: normalizedPassOne.experience_level,
+      work_mode: workMode,
+      summary: normalizedPassOne.summary,
+      requirements: normalizedPassOne.requirements,
+      responsibilities: normalizedPassOne.responsibilities,
       uncertainties: [],
       parse_quality: parseQuality,
+      evidence_map: evidenceMap,
     })
+
+    parsed.requirements = normalizedParse.requirements.map((item) => item.text)
+    parsed.responsibilities = normalizedParse.responsibilities.map((item) => item.text).join('\n')
+    parsed.description = normalizedParse.summary
+    parsed.salary_range = normalizedParse.compensation
+    parsed.parse_quality = parseQuality
 
     parsed.parsed_data = {
       ...((typeof parsed.parsed_data === 'object' && parsed.parsed_data !== null) ? parsed.parsed_data : {}),
@@ -396,6 +544,7 @@ export async function POST(request: NextRequest) {
           html_chars_used: pageContent.length,
           heuristics_applied: ['employment_type', 'experience_level', 'work_mode', 'years_experience', 'tools_platforms', 'language_requirements'],
         },
+        evidence_mapping_retry_count: Math.max(0, evidenceAttemptCount - 1),
       },
     }
 
