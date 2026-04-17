@@ -36,6 +36,191 @@ const WORK_MODE_PATTERNS: Array<{ mode: string; pattern: RegExp }> = [
 ]
 
 const YEARS_EXPERIENCE_PATTERN = /\b(\d{1,2})(?:\s*-\s*(\d{1,2}))?\+?\s*(?:years?|yrs?)\b/i
+const JOB_BOARD_DOMAINS = [
+  'linkedin.com', 'indeed.com', 'glassdoor.com', 'greenhouse.io', 'lever.co',
+  'workday.com', 'myworkdayjobs.com', 'icims.com', 'jobvite.com', 'smartrecruiters.com',
+  'recruitingbypaycor.com', 'jazz.co', 'breezy.hr', 'workable.com', 'rippling.com',
+  'ashbyhq.com', 'wellfound.com', 'ziprecruiter.com', 'monster.com', 'careerbuilder.com',
+]
+const OUT_OF_DOMAIN_HOST_SIGNALS = ['porn', 'sex', 'xxx', 'xvideos', 'xhamster', 'onlyfans', 'redtube', 'youporn']
+
+type IntakeClassification = 'job_listing' | 'dreamjob_action' | 'ambiguous' | 'out_of_domain'
+
+function classifyIntakeInput(rawInput: string): {
+  intake_classification: IntakeClassification
+  reason: string
+  cheeky_message?: string
+} {
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(rawInput)
+  } catch {
+    return {
+      intake_classification: 'out_of_domain',
+      reason: 'not_a_valid_url',
+      cheeky_message: 'That doesn’t look like a job opportunity. Bring me a real listing and I’ll help you chase it.',
+    }
+  }
+
+  const host = parsedUrl.hostname.replace(/^www\./, '').toLowerCase()
+  const path = parsedUrl.pathname.toLowerCase()
+  const full = `${host}${path}`
+  const isLikelyJobBoard = JOB_BOARD_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))
+  const hasJobPathSignal = /(\/jobs?\/|\/job\/|\/career|\/careers|\/openings|\/positions|\/vacanc)/i.test(path)
+  const hasOutOfDomainSignal = OUT_OF_DOMAIN_HOST_SIGNALS.some((signal) => full.includes(signal))
+
+  if (hasOutOfDomainSignal) {
+    return {
+      intake_classification: 'out_of_domain',
+      reason: 'host_or_path_matches_out_of_domain_signal',
+      cheeky_message: 'Naughty naughty… nice try, but let’s stay focused on getting you hired.',
+    }
+  }
+
+  if (/(dreamjob|localhost|127\.0\.0\.1)/i.test(host) || path.includes('/jobs/')) {
+    return {
+      intake_classification: 'dreamjob_action',
+      reason: 'looks_like_internal_or_workflow_link',
+    }
+  }
+
+  if (isLikelyJobBoard || hasJobPathSignal) {
+    return {
+      intake_classification: 'job_listing',
+      reason: isLikelyJobBoard ? 'known_job_board_domain' : 'job_path_signal',
+    }
+  }
+
+  if (/(about|blog|docs|privacy|terms|help|support|news)/i.test(path)) {
+    return {
+      intake_classification: 'ambiguous',
+      reason: 'non_listing_page_path',
+    }
+  }
+
+  return {
+    intake_classification: 'ambiguous',
+    reason: 'unknown_domain_or_path',
+  }
+}
+
+function detectNumericSignal(text: string): string | null {
+  const match = text.match(/\b(\d{1,3}(?:\+|-\d{1,3})?\s*(?:years?|yrs?|%|percent|people|person|team|direct reports?|accounts?|customers?|acv|quota|travel)|\$\s?\d[\d,.]*(?:\s?[kKmM])?(?:\s*(?:-|to|–)\s*\$\s?\d[\d,.]*(?:\s?[kKmM])?)?)\b/i)
+  return match ? match[0].replace(/\s+/g, ' ').trim() : null
+}
+
+function inferRequirementType(text: string): ParsedListingRequirement['requirement_type'] {
+  const normalized = text.toLowerCase()
+  if (/\b(english|spanish|french|german|mandarin|bilingual|fluency)\b/.test(normalized)) return 'language'
+  if (/\b(aws|azure|gcp|python|typescript|react|next\.js|salesforce|sql|tableau|snowflake|excel)\b/.test(normalized)) return 'tool'
+  if (/\b(lead|manage|mentor|team|direct reports?|cross-functional|stakeholder)\b/.test(normalized)) return 'leadership'
+  if (/\b(years?|experience|quota|acv|pipeline|close|track record)\b/.test(normalized)) return 'experience'
+  if (/\b(senior|staff|principal|director|manager|vp|head of)\b/.test(normalized)) return 'seniority'
+  if (/\b(fintech|healthcare|saas|enterprise|b2b|b2c|public sector)\b/.test(normalized)) return 'domain'
+  if (/\b(responsible|build|own|deliver|collaborate|execute)\b/.test(normalized)) return 'responsibility'
+  if (/\b(culture|attitude|self-starter|fast-paced|communication)\b/.test(normalized)) return 'culture'
+  if (/\b(degree|certification|license|clearance)\b/.test(normalized)) return 'qualification'
+  return 'other'
+}
+
+function classifyPriority(text: string, kind: ParsedListingRequirement['kind']): {
+  priority: ParsedListingRequirement['priority']
+  priority_weight: number
+} {
+  const normalized = text.toLowerCase()
+  if (/\b(must|required|minimum|non-negotiable)\b/.test(normalized) || /\b\d+\+?\s*(years?|yrs?)\b/.test(normalized)) {
+    return { priority: 'essential', priority_weight: 0.95 }
+  }
+  if (kind === 'nice_to_have' || /\b(preferred|bonus|nice to have|plus)\b/.test(normalized)) {
+    return { priority: 'secondary', priority_weight: 0.45 }
+  }
+  if (/\b(strong|proven|demonstrated|track record|ownership|quota|acv)\b/.test(normalized)) {
+    return { priority: 'important', priority_weight: 0.8 }
+  }
+  if (/\b(team player|fast-paced|communication skills|detail-oriented|positive attitude)\b/.test(normalized)) {
+    return { priority: 'suppressible', priority_weight: 0.2 }
+  }
+  return { priority: 'important', priority_weight: 0.7 }
+}
+
+function inferSuppression(text: string): { user_facing_relevance: ParsedListingRequirement['user_facing_relevance']; suppression_reason: string | null } {
+  const normalized = text.toLowerCase()
+  if (/\b(english|english fluency|fluent in english)\b/.test(normalized)) {
+    return { user_facing_relevance: 'suppress', suppression_reason: 'already_evident_english_fluency' }
+  }
+  if (/\b(team player|culture fit|fast-paced|strong communication skills|self-starter|positive attitude)\b/.test(normalized)) {
+    return { user_facing_relevance: 'suppress', suppression_reason: 'low_signal_generic_phrase' }
+  }
+  return { user_facing_relevance: 'show', suppression_reason: null }
+}
+
+function inferEvidenceNeeded(text: string, requirementType: ParsedListingRequirement['requirement_type']): string | null {
+  if (requirementType === 'experience') return 'Quantified outcomes from prior roles with matching scope'
+  if (requirementType === 'tool') return 'Specific tool/platform usage in shipped work'
+  if (requirementType === 'leadership') return 'Examples of team leadership, cross-functional delivery, and measurable impact'
+  if (requirementType === 'language') return 'Only surface if role context truly requires multilingual capability'
+  if (requirementType === 'qualification') return 'Credential details and practical proof of application'
+  if (/\b(quota|acv|pipeline|revenue|close)\b/i.test(text)) return 'Revenue metrics and attainment evidence'
+  return 'Concrete, role-relevant evidence from resume or work history'
+}
+
+function applyRequirementIntelligence(requirements: ParsedListingRequirement[]): ParsedListingRequirement[] {
+  return requirements.map((requirement) => {
+    const requirementType = requirement.requirement_type ?? inferRequirementType(requirement.text)
+    const priority = classifyPriority(requirement.text, requirement.kind)
+    const suppression = inferSuppression(requirement.text)
+    const numericSignal = requirement.numeric_signal ?? detectNumericSignal(requirement.text)
+    const defaultShowDecision = priority.priority === 'suppressible' ? 'suppress' : 'show'
+
+    return {
+      ...requirement,
+      requirement_type: requirementType,
+      priority: requirement.priority ?? priority.priority,
+      priority_weight:
+        typeof requirement.priority_weight === 'number' && Number.isFinite(requirement.priority_weight)
+          ? requirement.priority_weight
+          : priority.priority_weight,
+      evidence_needed: requirement.evidence_needed ?? inferEvidenceNeeded(requirement.text, requirementType),
+      user_facing_relevance: requirement.user_facing_relevance ?? suppression.user_facing_relevance ?? defaultShowDecision,
+      suppression_reason: requirement.suppression_reason ?? suppression.suppression_reason,
+      numeric_signal: numericSignal,
+    }
+  })
+}
+
+function extractCompensationDetails(sourceText: string): {
+  compensation: string | null
+  details: {
+    pay_type: 'annual' | 'hourly' | 'unknown'
+    has_bonus: boolean
+    has_equity: boolean
+    has_variable_pay: boolean
+    transparency_note: string | null
+    location_qualifier: string | null
+  }
+} {
+  const snippets = sourceText.match(/([^\n]{0,90}(?:salary|compensation|pay range|base pay|hourly|ote|on-target earnings|commission|bonus|equity|total compensation)[^\n]{0,160})/gi) ?? []
+  const normalizedSnippets = [...new Set(snippets.map((item) => item.replace(/\s+/g, ' ').trim()))].slice(0, 3)
+  const combined = normalizedSnippets.join(' | ').slice(0, 320) || null
+  const payType: 'annual' | 'hourly' | 'unknown' =
+    /\b(hour|hourly|hr)\b/i.test(sourceText) ? 'hourly' : /\b(year|annual|annually|per year)\b/i.test(sourceText) ? 'annual' : 'unknown'
+  const transparencyNote = /\b(pay transparency|salary may vary|depending on location|based on location|depending on experience)\b/i.test(sourceText)
+    ? 'Listing includes pay-transparency or variability qualifiers.'
+    : null
+  const locationQualifierMatch = sourceText.match(/\b(?:for|in)\s+(?:new york|san francisco|los angeles|seattle|austin|remote|us|usa|california|nyc)[^.\n]{0,60}\b/gi)
+
+  return {
+    compensation: combined,
+    details: {
+      pay_type: payType,
+      has_bonus: /\bbonus\b/i.test(sourceText),
+      has_equity: /\bequity|stock|rsu|options?\b/i.test(sourceText),
+      has_variable_pay: /\bcommission|variable compensation|ote|on-target earnings\b/i.test(sourceText),
+      transparency_note: transparencyNote,
+      location_qualifier: locationQualifierMatch?.[0]?.trim() ?? null,
+    },
+  }
+}
 
 function normalizeEmploymentType(existing: unknown, sourceText: string): string | null {
   const existingValue = typeof existing === 'string' ? existing.trim() : ''
@@ -189,6 +374,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL or manual data required' }, { status: 400 })
     }
 
+    const intake = classifyIntakeInput(String(body.url))
+    if (intake.intake_classification === 'out_of_domain') {
+      return NextResponse.json(
+        {
+          error: intake.cheeky_message ?? 'Wrong mission for this app. DreamJob is here to help you win the right opportunity.',
+          intake_classification: intake.intake_classification,
+          intake_reason: intake.reason,
+        },
+        { status: 422 }
+      )
+    }
+
+    if (intake.intake_classification === 'dreamjob_action') {
+      return NextResponse.json(
+        {
+          error: 'That link looks like a DreamJob workflow action, not a job listing. Paste the actual listing URL.',
+          intake_classification: intake.intake_classification,
+          intake_reason: intake.reason,
+        },
+        { status: 400 }
+      )
+    }
+
     const providerName = body.provider as ProviderName | undefined
     const provider = getProvider(providerName)
     if (!provider.isConfigured()) {
@@ -198,21 +406,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Known job board domains — listing URL on these is NOT the company website
-    const JOB_BOARDS = [
-      'linkedin.com', 'indeed.com', 'glassdoor.com', 'greenhouse.io', 'lever.co',
-      'workday.com', 'myworkdayjobs.com', 'icims.com', 'jobvite.com', 'smartrecruiters.com',
-      'recruitingbypaycor.com', 'jazz.co', 'breezy.hr', 'workable.com', 'rippling.com',
-      'ashbyhq.com', 'wellfound.com', 'ziprecruiter.com', 'monster.com', 'careerbuilder.com',
-    ]
-
     // Derive company website from listing URL if it's on the company's own domain
     let listingDomainUrl: string | null = null
     let listingHost: string | null = null
     let listingIsJobBoard = false
     try {
       listingHost = new URL(body.url).hostname.replace(/^www\./, '')
-      listingIsJobBoard = JOB_BOARDS.some((b) => listingHost === b || listingHost?.endsWith('.' + b))
+      listingIsJobBoard = JOB_BOARD_DOMAINS.some((b) => listingHost === b || listingHost?.endsWith('.' + b))
       if (!listingIsJobBoard) {
         listingDomainUrl = `https://${new URL(body.url).hostname}`
       }
@@ -419,16 +619,24 @@ export async function POST(request: NextRequest) {
       evidence_map: parsed.evidence_map,
     })
 
-    const parsedRequirementsCount = normalizedPassOne.requirements.length
+    const compensationHeuristic = extractCompensationDetails(signalText)
+    const enrichedRequirements = applyRequirementIntelligence(normalizedPassOne.requirements)
+    const enrichedPassOne = normalizeParsedListing({
+      ...normalizedPassOne,
+      compensation: normalizedPassOne.compensation ?? compensationHeuristic.compensation,
+      requirements: enrichedRequirements,
+    })
+
+    const parsedRequirementsCount = enrichedPassOne.requirements.length
     const parseQuality: 'complete' | 'partial' =
-      Boolean(normalizedPassOne.title) && Boolean(normalizedPassOne.company_name) && (Boolean(normalizedPassOne.summary) || parsedRequirementsCount > 0)
+      Boolean(enrichedPassOne.title) && Boolean(enrichedPassOne.company_name) && (Boolean(enrichedPassOne.summary) || parsedRequirementsCount > 0)
         ? 'complete'
         : 'partial'
 
     // Pass 2: map requirements to listing-grounded evidence strings (fallback: deterministic cleanup)
-    let evidenceMap = buildDeterministicEvidenceMap(normalizedPassOne.requirements, signalText)
+    let evidenceMap = buildDeterministicEvidenceMap(enrichedPassOne.requirements, signalText)
     let evidenceAttemptCount = 0
-    if (normalizedPassOne.requirements.length > 0) {
+    if (enrichedPassOne.requirements.length > 0) {
       for (let evidenceAttempt = 1; evidenceAttempt <= 2; evidenceAttempt += 1) {
         evidenceAttemptCount = evidenceAttempt
         const evidenceRaw = await provider.generate({
@@ -438,7 +646,7 @@ export async function POST(request: NextRequest) {
               role: 'user',
               content: JSON.stringify({
                 listing_excerpt: pageContent.slice(0, 12000),
-                requirements: normalizedPassOne.requirements.map((item) => ({
+                requirements: enrichedPassOne.requirements.map((item) => ({
                   id: item.id,
                   text: item.text,
                   kind: item.kind,
@@ -453,7 +661,7 @@ export async function POST(request: NextRequest) {
         try {
           const parsedEvidence = JSON.parse(evidenceJson[0]) as { evidence_map?: unknown[] }
           const merged = normalizeParsedListing({
-            ...normalizedPassOne,
+            ...enrichedPassOne,
             parse_quality: parseQuality,
             evidence_map: parsedEvidence.evidence_map,
           })
@@ -468,18 +676,18 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedParse = normalizeParsedListing({
-      title: normalizedPassOne.title,
-      company_name: normalizedPassOne.company_name,
+      title: enrichedPassOne.title,
+      company_name: enrichedPassOne.company_name,
       company_website_url: parsed.company_website_url,
       company_linkedin_url: parsed.company_linkedin_url,
-      location: normalizedPassOne.location,
-      compensation: normalizedPassOne.compensation,
-      employment_type: normalizedPassOne.employment_type,
-      experience_level: normalizedPassOne.experience_level,
+      location: enrichedPassOne.location,
+      compensation: enrichedPassOne.compensation,
+      employment_type: enrichedPassOne.employment_type,
+      experience_level: enrichedPassOne.experience_level,
       work_mode: workMode,
-      summary: normalizedPassOne.summary,
-      requirements: normalizedPassOne.requirements,
-      responsibilities: normalizedPassOne.responsibilities,
+      summary: enrichedPassOne.summary,
+      requirements: enrichedPassOne.requirements,
+      responsibilities: enrichedPassOne.responsibilities,
       uncertainties: [],
       parse_quality: parseQuality,
       evidence_map: evidenceMap,
@@ -504,6 +712,8 @@ export async function POST(request: NextRequest) {
         source_inputs: {
           listing_url: body.url,
           listing_host: listingHost,
+          intake_classification: intake.intake_classification,
+          intake_reason: intake.reason,
           fetched_html: true,
           scraped_html_linkedin: Boolean(scrapedLinkedIn),
           listing_domain_heuristic: Boolean(listingDomainUrl),
@@ -517,6 +727,7 @@ export async function POST(request: NextRequest) {
           company_name: 'llm_extraction',
           location: 'llm_extraction',
           salary_range: 'llm_extraction',
+          compensation_details: compensationHeuristic.compensation ? 'heuristic_or_llm' : 'missing',
           requirements: 'llm_extraction',
           responsibilities: 'llm_extraction',
           benefits: 'llm_extraction',
@@ -546,6 +757,8 @@ export async function POST(request: NextRequest) {
         },
         evidence_mapping_retry_count: Math.max(0, evidenceAttemptCount - 1),
       },
+      intake_classification: intake.intake_classification,
+      compensation_details: compensationHeuristic.details,
     }
 
     parsed.canonical_listing = toCanonicalListingFromParse(normalizedParse)

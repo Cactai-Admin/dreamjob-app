@@ -111,12 +111,12 @@ export default function WorkHistoryPage({ params }: Props) {
   );
 
   const requirementItems = useMemo(
-    () => canonicalListing.exact_requirements,
+    () => canonicalListing.exact_requirements.filter((item) => item.user_facing_relevance !== "suppress"),
     [canonicalListing.exact_requirements],
   );
 
   const niceToHaveItems = useMemo(
-    () => canonicalListing.nice_to_haves,
+    () => canonicalListing.nice_to_haves.filter((item) => item.user_facing_relevance !== "suppress"),
     [canonicalListing.nice_to_haves],
   );
 
