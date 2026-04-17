@@ -31,6 +31,8 @@ export default function InterviewGuidePage({ params }: Props) {
   const [loading, setLoading] = useState(true);
   const [appStatus, setAppStatus] = useState("draft");
   const [confirmDel, setConfirmDel] = useState(false);
+  const [confirmDeleteGuide, setConfirmDeleteGuide] = useState(false);
+  const [deletingGuide, setDeletingGuide] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialContent = useRef(true);
@@ -136,6 +138,18 @@ export default function InterviewGuidePage({ params }: Props) {
     router.push("/jobs");
   }, [id, router]);
 
+  const handleDeleteGuide = useCallback(async () => {
+    setDeletingGuide(true);
+    await fetch(`/api/workflows/${id}/outputs?type=interview_guide`, { method: "DELETE" });
+    setOutput(undefined);
+    setContent("");
+    setIsDirty(false);
+    setConfirmDeleteGuide(false);
+    setDeletingGuide(false);
+    setGenerating(true);
+    void fetchWorkflow();
+  }, [fetchWorkflow, id]);
+
   useEffect(() => {
     if (!workflow) return;
     setDocControls({
@@ -214,6 +228,25 @@ export default function InterviewGuidePage({ params }: Props) {
                 <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-200 whitespace-nowrap">
                   Interview workspace
                 </span>
+              </div>
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <p>Move application to Trash keeps a 30-day recovery window. Deleting this guide draft only removes this generated artifact and is also recoverable from Trash.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {confirmDeleteGuide ? (
+                    <>
+                      <button onClick={handleDeleteGuide} disabled={deletingGuide} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50">
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {deletingGuide ? "Moving…" : "Yes, move interview guide draft to Trash"}
+                      </button>
+                      <button onClick={() => setConfirmDeleteGuide(false)} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-900">Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDeleteGuide(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete interview guide draft
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="document-paper overflow-hidden">
                 <div className="p-8 sm:p-12">

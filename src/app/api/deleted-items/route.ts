@@ -23,6 +23,15 @@ export async function GET() {
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // Automatic purge of expired recoverable items.
+  await supabaseAdmin
+    .from('deleted_items')
+    .delete()
+    .eq('account_id', accountId)
+    .is('restored_at', null)
+    .is('final_deleted_at', null)
+    .lt('expires_at', new Date().toISOString())
+
   const { data, error } = await supabaseAdmin
     .from('deleted_items')
     .select('*')

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Link2, SearchCheck } from "lucide-react";
+import { AlertCircle, Link2, SearchCheck, Trash2 } from "lucide-react";
 import type { Workflow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { labelForState, routeForWorkflow } from "@/lib/continuity";
@@ -46,6 +46,9 @@ export default function HomePage() {
   const [url, setUrl] = useState("");
   const [sort, setSort] = useState<SortKey>("last_active");
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const loadWorkflows = () => {
     fetch("/api/workflows")
@@ -69,6 +72,8 @@ export default function HomePage() {
   }, [workflows, sort]);
 
   const hasContent = rows.length > 0;
+  const allSelected = rows.length > 0 && selectedIds.length === rows.length;
+  const selectedCount = selectedIds.length;
 
   const handleAnalyze = async () => {
     if (!url.trim() || submitting) return;
@@ -97,6 +102,27 @@ export default function HomePage() {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => (prev.length === rows.length ? [] : rows.map((workflow) => workflow.id)));
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]));
+  };
+
+  const handleBulkSoftDelete = async () => {
+    if (selectedIds.length === 0 || bulkDeleting) return;
+    setBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => fetch(`/api/workflows/${id}`, { method: "DELETE" })));
+      setWorkflows((prev) => prev.filter((workflow) => !selectedIds.includes(workflow.id)));
+      setSelectedIds([]);
+      setConfirmBulkDelete(false);
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -170,8 +196,51 @@ export default function HomePage() {
               </select>
             </div>
           </div>
+          {selectedCount > 0 && (
+            <div className="px-4 py-3 border-b border-slate-100 bg-amber-50 text-xs text-amber-900 space-y-2">
+              <p>
+                <span className="font-semibold">{selectedCount}</span> selected. “Move to Trash” is a soft delete with 30-day recovery.
+                Permanent removal only happens from Trash.
+              </p>
+              {confirmBulkDelete ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleBulkSoftDelete}
+                    disabled={bulkDeleting}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {bulkDeleting ? "Moving…" : "Yes, move to Trash"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmBulkDelete(false)}
+                    className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-900 hover:bg-amber-100"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmBulkDelete(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Move selected to Trash
+                </button>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-12 gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-100">
-            <div className="col-span-3">Company</div>
+            <div className="col-span-1">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                aria-label="Select all workflows"
+                className="h-4 w-4 rounded border-slate-300"
+              />
+            </div>
+            <div className="col-span-2">Company</div>
             <div className="col-span-3">Role</div>
             <div className="col-span-2">State</div>
             <div className="col-span-2">Last Active</div>
@@ -183,17 +252,30 @@ export default function HomePage() {
             <div className="p-6 text-sm text-slate-500">No workflows yet.</div>
           ) : (
             rows.map((workflow) => (
-              <button
+              <div
                 key={workflow.id}
-                onClick={() => router.push(routeForWorkflow(workflow))}
-                className={cn("grid grid-cols-12 gap-3 px-4 py-3 text-left border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors w-full")}
+                className={cn("grid grid-cols-12 gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors")}
               >
-                <div className="col-span-3 text-sm text-slate-900 truncate">{workflow.listing?.company_name ?? "—"}</div>
-                <div className="col-span-3 text-sm text-slate-700 truncate">{workflow.listing?.title ?? workflow.title}</div>
-                <div className="col-span-2 text-xs text-slate-600">{labelForState(workflow.state)}</div>
-                <div className="col-span-2 text-xs text-slate-500">{new Date(workflow.updated_at).toLocaleDateString()}</div>
-                <div className="col-span-2 text-xs text-slate-500">{new Date(workflow.created_at).toLocaleDateString()}</div>
-              </button>
+                <div className="col-span-1 flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(workflow.id)}
+                    onChange={() => toggleSelection(workflow.id)}
+                    aria-label={`Select ${workflow.listing?.company_name ?? workflow.title}`}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                </div>
+                <button
+                  onClick={() => router.push(routeForWorkflow(workflow))}
+                  className="col-span-11 grid grid-cols-11 gap-3 text-left"
+                >
+                  <div className="col-span-2 text-sm text-slate-900 truncate">{workflow.listing?.company_name ?? "—"}</div>
+                  <div className="col-span-3 text-sm text-slate-700 truncate">{workflow.listing?.title ?? workflow.title}</div>
+                  <div className="col-span-2 text-xs text-slate-600">{labelForState(workflow.state)}</div>
+                  <div className="col-span-2 text-xs text-slate-500">{new Date(workflow.updated_at).toLocaleDateString()}</div>
+                  <div className="col-span-2 text-xs text-slate-500">{new Date(workflow.created_at).toLocaleDateString()}</div>
+                </button>
+              </div>
             ))
           )}
         </div>

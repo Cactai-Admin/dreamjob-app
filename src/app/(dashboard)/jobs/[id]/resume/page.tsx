@@ -4,7 +4,7 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Trash2 } from "lucide-react";
 import { AiChatPanel } from "@/components/documents/ai-chat-panel";
 import { ReferenceSidebar } from "@/components/workflow/reference-sidebar";
 import { EvidenceAlignmentReferenceView, ListingReferenceView, type EvidenceReferenceItem } from "@/components/workflow/reference-views";
@@ -38,6 +38,10 @@ export default function ResumeWorkspacePage({ params }: Props) {
   const [resumeSections, setResumeSections] = useState<DocumentSection[]>([]);
   const [resumeDirty, setResumeDirty] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [confirmDeleteApplication, setConfirmDeleteApplication] = useState(false);
+  const [confirmDeleteResume, setConfirmDeleteResume] = useState(false);
+  const [deletingApplication, setDeletingApplication] = useState(false);
+  const [deletingResume, setDeletingResume] = useState(false);
 
   const loadWorkflow = async () => {
     const wf: Workflow = await fetch(`/api/workflows/${id}`).then((r) => r.json());
@@ -124,6 +128,23 @@ export default function ResumeWorkspacePage({ params }: Props) {
     router.push(`/jobs/${id}/cover-letter`);
   };
 
+  const moveApplicationToTrash = async () => {
+    setDeletingApplication(true);
+    await fetch(`/api/workflows/${id}`, { method: "DELETE" });
+    router.push("/jobs");
+  };
+
+  const deleteResumeDraft = async () => {
+    setDeletingResume(true);
+    await fetch(`/api/workflows/${id}/outputs?type=resume`, { method: "DELETE" });
+    setResumeSections([]);
+    setResumeDirty(false);
+    setSaveState("idle");
+    await loadWorkflow();
+    setDeletingResume(false);
+    setConfirmDeleteResume(false);
+  };
+
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
@@ -156,6 +177,39 @@ export default function ResumeWorkspacePage({ params }: Props) {
           <p className="text-sm text-slate-600 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2">
             This draft inherits listing priorities plus your Work History evidence alignment from the previous milestone.
           </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-2">
+            <p>Delete actions are explicit: “Move application to Trash” is recoverable for 30 days. “Delete resume draft” only removes this generated resume and is also recoverable from Trash.</p>
+            <div className="flex flex-wrap gap-2">
+              {confirmDeleteResume ? (
+                <>
+                  <button onClick={deleteResumeDraft} disabled={deletingResume} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50">
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {deletingResume ? "Moving…" : "Yes, move resume draft to Trash"}
+                  </button>
+                  <button onClick={() => setConfirmDeleteResume(false)} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-900">Cancel</button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmDeleteResume(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete resume draft
+                </button>
+              )}
+              {confirmDeleteApplication ? (
+                <>
+                  <button onClick={moveApplicationToTrash} disabled={deletingApplication} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 text-white font-semibold disabled:opacity-50">
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {deletingApplication ? "Moving…" : "Yes, move application to Trash"}
+                  </button>
+                  <button onClick={() => setConfirmDeleteApplication(false)} className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-900">Cancel</button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmDeleteApplication(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Move application to Trash
+                </button>
+              )}
+            </div>
+          </div>
 
           {generating && (
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-center">

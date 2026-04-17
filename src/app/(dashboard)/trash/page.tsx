@@ -30,6 +30,17 @@ function getItemLabel(item: DeletedItem): { title: string; subtitle: string } {
     const [company, position] = title.includes(" - ") ? title.split(" - ") : [title, ""];
     return { title: position || title, subtitle: company };
   }
+  if (item.item_type === "output") {
+    const type = (data.type as string) ?? "output";
+    const mapped = type === "cover_letter"
+      ? "Cover Letter Draft"
+      : type === "interview_guide"
+        ? "Interview Guide Draft"
+        : type === "negotiation_guide"
+          ? "Negotiation Guide Draft"
+          : "Resume Draft";
+    return { title: mapped, subtitle: "Generated content" };
+  }
   return { title: `${item.item_type} (${item.item_id.slice(0, 8)})`, subtitle: item.item_type };
 }
 
@@ -65,23 +76,27 @@ export default function TrashPage() {
   };
 
   const handleDeletePermanently = async (id: string) => {
+    const confirmed = window.confirm("Permanently delete this item now? This cannot be undone.");
+    if (!confirmed) return;
     await fetch(`/api/deleted-items/${id}`, { method: "DELETE" });
     setItems(prev => prev.filter(i => i.id !== id));
   };
 
   const emptyTrash = async () => {
+    const confirmed = window.confirm("Permanently delete all items in Trash now? This cannot be undone.");
+    if (!confirmed) return;
     await Promise.all(items.map(i => fetch(`/api/deleted-items/${i.id}`, { method: "DELETE" })));
     setItems([]);
   };
 
   return (
     <div className="page-wrapper max-w-800px">
-      <PageHeader title="Trash" subtitle="Items are permanently deleted after 30 days" />
+      <PageHeader title="Trash" subtitle="Soft-deleted items are recoverable for 30 days before automatic permanent purge" />
 
       <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl mb-5">
         <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-amber-800">
-          Deleted items are kept for <strong>30 days</strong> before permanent deletion. Restore them anytime before they expire.
+          <strong>Move to Trash</strong> means recoverable soft delete for <strong>30 days</strong>. <strong>Delete permanently</strong> means immediate irreversible purge.
         </p>
       </div>
 
@@ -149,7 +164,7 @@ export default function TrashPage() {
                     className="flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors"
                   >
                     <X className="w-3 h-3" />
-                    Delete permanently
+                    Permanently delete now
                   </button>
                 </div>
               </div>

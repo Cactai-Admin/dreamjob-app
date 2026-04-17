@@ -86,3 +86,55 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json(data, { status: 201 })
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const accountId = await getAccountId()
+  if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const type = request.nextUrl.searchParams.get('type')
+  if (!type) return NextResponse.json({ error: 'Output type is required' }, { status: 400 })
+
+  const { data: outputs, error: outputsError } = await supabaseAdmin
+    .from('outputs')
+    .select('*')
+    .eq('workflow_id', id)
+    .eq('account_id', accountId)
+    .eq('type', type)
+
+  if (outputsError) return NextResponse.json({ error: outputsError.message }, { status: 500 })
+  if (!outputs || outputs.length === 0) {
+    return NextResponse.json({ error: 'Output not found' }, { status: 404 })
+  }
+
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 30)
+
+  const softDeleted = outputs.map((output) => ({
+    account_id: accountId,
+    item_type: 'output',
+    item_id: output.id,
+    item_data: output,
+    expires_at: expiresAt.toISOString(),
+  }))
+
+  const { error: insertError } = await supabaseAdmin
+    .from('deleted_items')
+    .insert(softDeleted)
+
+  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('outputs')
+    .delete()
+    .eq('workflow_id', id)
+    .eq('account_id', accountId)
+    .eq('type', type)
+
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+
+  return NextResponse.json({ success: true, deleted_count: outputs.length })
+}
