@@ -1,53 +1,17 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import { Suspense, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { createBrowserClient } from '@supabase/ssr'
-import { Loading } from '@/components/shared/loading'
-
-function CallbackHandler() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/'
-
-  useEffect(() => {
-    const handleCallback = async () => {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
-
-      const { error } = await supabase.auth.getSession()
-
-      if (error) {
-        router.push(`/login?error=${encodeURIComponent(error.message)}`)
-        return
-      }
-
-      // Ensure account record exists
-      const callbackRes = await fetch('/api/auth/callback', { method: 'POST' })
-
-      if (!callbackRes.ok) {
-        const callbackData = await callbackRes.json().catch(() => null)
-        const callbackError = callbackData?.error || 'Unable to complete sign-in.'
-        router.push(`/login?error=${encodeURIComponent(callbackError)}`)
-        return
-      }
-
-      router.push(redirect)
-      router.refresh()
-    }
-
-    handleCallback()
-  }, [router, redirect])
-
-  return <Loading fullPage />
+type CallbackPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
 }
 
-export default function CallbackPage() {
-  return (
-    <Suspense fallback={<Loading fullPage />}>
-      <CallbackHandler />
-    </Suspense>
-  )
+function getFirst(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+export default async function LegacyCallbackPage({ searchParams }: CallbackPageProps) {
+  const resolved = (await searchParams) ?? {}
+  const next = getFirst(resolved.redirect) || getFirst(resolved.next) || '/home'
+
+  const redirectUrl = `/auth/callback?next=${encodeURIComponent(next)}`
+  redirect(redirectUrl)
 }

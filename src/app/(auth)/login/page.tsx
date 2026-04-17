@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Zap, AlertCircle, ArrowRight, Loader2, ChevronLeft } from 'lucide-react'
 import { LoginBg } from '@/components/auth/login-bg'
 import { createClient } from '@/lib/supabase/client'
+import { buildOAuthRedirectUrl } from '@/lib/auth/oauth'
 
 type LoginMode = 'google' | 'internal'
 
 function LoginForm() {
   const router = useRouter()
   const params = useSearchParams()
-  const redirectTo = params.get('redirect') || '/'
+  const redirectTo = params.get('redirect') || '/home'
 
   const [mode, setMode] = useState<LoginMode>('google')
   const [identifier, setIdentifier] = useState('')
@@ -64,7 +65,7 @@ function LoginForm() {
 
     try {
       const supabase = createClient()
-      const callbackUrl = `${window.location.origin}/callback?redirect=${encodeURIComponent(redirectTo)}`
+      const callbackUrl = buildOAuthRedirectUrl('/auth/callback', { next: redirectTo })
 
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
