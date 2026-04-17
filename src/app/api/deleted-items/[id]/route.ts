@@ -27,6 +27,14 @@ export async function POST(
   const accountId = await getAccountId()
   if (!accountId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  await supabaseAdmin
+    .from('deleted_items')
+    .delete()
+    .eq('account_id', accountId)
+    .is('restored_at', null)
+    .is('final_deleted_at', null)
+    .lt('expires_at', new Date().toISOString())
+
   const { id } = await params
 
   const { data: item } = await supabaseAdmin
@@ -92,7 +100,7 @@ export async function DELETE(
 
   await supabaseAdmin
     .from('deleted_items')
-    .update({ final_deleted_at: new Date().toISOString() })
+    .delete()
     .eq('id', id)
     .eq('account_id', accountId)
 
